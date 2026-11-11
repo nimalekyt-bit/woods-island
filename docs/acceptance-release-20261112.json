@@ -1,7 +1,7 @@
 {
   "directory": "<isolated-profile>",
   "testedExe": "src-tauri/target/release/woods-island.exe",
-  "sha256": "09ade8f024513d0140efbb153e352923fa5a9033cfad5117c69244178845d35e",
+  "sha256": "9fb67ec9db7926bdec7a47b44600e6323416bc2450a8cf5b99438ef221722d9b",
   "passiveQa": true,
   "results": [
     {
@@ -13,10 +13,10 @@
       "ok": true,
       "details": {
         "bounds": [
-          243,
+          206,
           0,
-          517,
-          38
+          554,
+          52
         ],
         "captureAffinity": 17,
         "dpi": 96,
@@ -132,7 +132,7 @@
       "name": "Media source and playback contracts",
       "ok": true,
       "details": {
-        "sources": 2,
+        "sources": 1,
         "mediaPresent": true
       }
     },
@@ -152,13 +152,27 @@
     {
       "name": "Live Yandex connector reaches the rendered pill with cover and advancing time",
       "ok": true,
+      "skipped": true,
       "details": {
-        "live": true,
-        "title": "<redacted>",
-        "artist": "<redacted>",
-        "position": 139037,
-        "nextPosition": 140510,
-        "cover": false
+        "skipped": true,
+        "live": false,
+        "reason": "No live Yandex connector on this machine"
+      }
+    },
+    {
+      "name": "LRCLIB milliseconds highlight, advance, pause and seek the rendered lyrics",
+      "ok": true,
+      "details": {
+        "milliseconds": true,
+        "highlight": true,
+        "advance": true,
+        "pause": true,
+        "seekBothDirections": true,
+        "foldedLyrics": true,
+        "homeLyrics": true,
+        "missing404": true,
+        "retryable503": true,
+        "isolatedBridge": true
       }
     },
     {
@@ -177,13 +191,13 @@
           "samples": 5830,
           "changed": 0,
           "fixturePixels": 5498,
-          "pillChanges": 1062
+          "pillChanges": 1043
         },
         "expanded": {
           "samples": 106,
           "changed": 0,
           "fixturePixels": 5498,
-          "pillChanges": 30798
+          "pillChanges": 30986
         }
       }
     },
@@ -226,7 +240,7 @@
       "name": "Native screen capture produces real PNG and dimensions",
       "ok": true,
       "details": {
-        "path": "<isolated-profile>/woods-1794434590098.png",
+        "path": "<redacted>",
         "width": 160,
         "height": 90
       }
@@ -242,7 +256,7 @@
       "name": "MP4 screen recording contains video and WASAPI system audio",
       "ok": true,
       "details": {
-        "path": "<isolated-profile>/woods-1794434590727.mp4",
+        "path": "<redacted>",
         "streams": [
           {
             "type": "video",
@@ -253,7 +267,7 @@
             "codec": "aac"
           }
         ],
-        "duration": "1.812823"
+        "duration": "1.799427"
       }
     },
     {
@@ -284,7 +298,7 @@
       "name": "Notes button exports Markdown to Obsidian without overwriting files",
       "ok": true,
       "details": {
-        "folder": "<redacted>"
+        "folder": "<isolated-profile>"
       }
     },
     {
@@ -319,6 +333,5 @@
       "ok": true
     }
   ],
-  "frontendErrors": [],
-  "metadataRedacted": true
+  "frontendErrors": []
 }

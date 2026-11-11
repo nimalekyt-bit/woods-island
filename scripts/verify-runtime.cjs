@@ -12,6 +12,7 @@ const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const root = path.resolve(__dirname, '..');
 const suppliedExe = process.argv[2] || path.join(root, 'src-tauri', 'target', 'release', 'woods-island.exe');
 const port = Number(process.env.WOODS_TEST_CDP_PORT || 9334);
+const musicPort = port + 1; // Isolated bridge: never send fixtures to the user's player.
 const results = [];
 const errors = [];
 let proc;
@@ -112,10 +113,19 @@ async function quit(client) {
   await fs.copyFile(suppliedExe, exe);
   const dataDir = path.join(directory, 'data');
   await fs.mkdir(dataDir);
-  let weatherRequests=0;
+  let weatherRequests=0, lyricsRequests=0;
   const weatherStart=Math.floor(Date.now()/3600000)*3600;
   const weatherFixture={properties:{timeseries:Array.from({length:168},(_,i)=>({time:new Date((weatherStart+i*3600)*1000).toISOString(),data:{instant:{details:{air_temperature:2+i%4,wind_speed:3,relative_humidity:80,air_pressure_at_sea_level:1012,wind_from_direction:180}},next_1_hours:{summary:{symbol_code:i%2?'cloudy_day':'lightrain_night'},details:{precipitation_amount:0.4}}}}))}};
-  weatherServer=http.createServer((req,res)=>{weatherRequests++;res.setHeader('Content-Type','application/json');res.end(JSON.stringify(req.url.startsWith('/sun')?{properties:{sunrise:{time:new Date((weatherStart-8*3600)*1000).toISOString()},sunset:{time:new Date((weatherStart-2*3600)*1000).toISOString()}}}:weatherFixture));});
+  weatherServer=http.createServer((req,res)=>{
+    res.setHeader('Content-Type','application/json');
+    if(req.url.startsWith('/lyrics')){
+      lyricsRequests++;const query=new URL(req.url,'http://localhost').searchParams;
+      if(query.get('track_name')==='Missing'){res.statusCode=404;res.end('{}');return;}
+      if(query.get('track_name')==='Unavailable'){res.statusCode=503;res.end('{}');return;}
+      res.end(JSON.stringify({id:42,plainLyrics:'Первая строка\nВторая строка\nТретья строка',syncedLyrics:'[00:00.00]Первая строка\n[00:04.00]Вторая строка\n[00:08.00]Третья строка',instrumental:false}));return;
+    }
+    weatherRequests++;res.end(JSON.stringify(req.url.startsWith('/sun')?{properties:{sunrise:{time:new Date((weatherStart-8*3600)*1000).toISOString()},sunset:{time:new Date((weatherStart-2*3600)*1000).toISOString()}}}:weatherFixture));
+  });
   await new Promise(resolve=>weatherServer.listen(0,'127.0.0.1',resolve));
   const weatherUrl=`http://127.0.0.1:${weatherServer.address().port}/forecast`;
   await fs.writeFile(path.join(dataDir,'weather.json'),JSON.stringify({lat:53.2424,lon:34.3668,fetchedAt:Date.now(),now:{temp:2,code:'cloudy'},hours:[{time:weatherStart*1000}]}));
@@ -123,7 +133,7 @@ async function quit(client) {
   const agentConfigs=[['.claude/settings.json',JSON.stringify({permissions:{allow:['Read']},hooks:{Stop:[{hooks:[{type:'command',command:'fixture-notify.exe'}]}]}})],['.codex/config.toml','# untouched fixture\nnotify = ["fixture-notify.exe"]\nmodel = "fixture"\n'],['.config/opencode/opencode.json','{}']];
   for(const [name,content]of agentConfigs){const file=path.join(agentHome,name);await fs.mkdir(path.dirname(file),{recursive:true});await fs.writeFile(file,content);}
   async function launch(){
-    proc = spawn(exe, [], { cwd: directory, windowsHide: true, stdio: ['ignore','pipe','pipe'], env: { ...process.env, APPDATA: path.join(directory, 'appdata'), WOODS_ISLAND_DATA_DIR: dataDir, WOODS_ISLAND_AGENT_HOME:agentHome, WOODS_ISLAND_STEAM_PATH:path.join(directory,'steam'), WOODS_ISLAND_WEATHER_URL:weatherUrl, WOODS_ISLAND_PASSIVE_QA:'1', WEBVIEW2_USER_DATA_FOLDER:path.join(directory,'webview'), WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}` } });
+    proc = spawn(exe, [], { cwd: directory, windowsHide: true, stdio: ['ignore','pipe','pipe'], env: { ...process.env, APPDATA: path.join(directory, 'appdata'), WOODS_ISLAND_DATA_DIR: dataDir, WOODS_ISLAND_AGENT_HOME:agentHome, WOODS_ISLAND_STEAM_PATH:path.join(directory,'steam'), WOODS_ISLAND_MUSIC_PORT:String(musicPort), WOODS_ISLAND_WEATHER_URL:weatherUrl, WOODS_ISLAND_LYRICS_URL:weatherUrl.replace('/forecast','/lyrics'), WOODS_ISLAND_PASSIVE_QA:'1', WEBVIEW2_USER_DATA_FOLDER:path.join(directory,'webview'), WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}` } });
     proc.stdout.on('data', data => process.stdout.write(data));
     proc.stderr.on('data', data => process.stderr.write(data));
     proc.on('exit', (code, signal) => console.log(`Native process exited: code=${code}, signal=${signal}`));
@@ -274,6 +284,43 @@ async function quit(client) {
     if(first.key===second?.key&&first.playing&&second.playing)assert(second.positionMs>first.positionMs,'Live position should advance');
     await main.invoke('settings_set',{settings:{mediaPill:'normal'}});
     return {live:true,title:first.title,artist:first.artist,position:first.positionMs,nextPosition:second?.positionMs,cover:!!cover};
+  });
+  await check('LRCLIB milliseconds highlight, advance, pause and seek the rendered lyrics',async()=>{
+    const prior=await main.invoke('settings_get');let progress=1000,playing=true,at=Date.now(),timer;
+    const publish=async()=>{
+      const response=await fetch(`http://127.0.0.1:${musicPort}/track`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({trackId:'lyrics-fixture',title:'Test Slowed',artist:'Fixture',duration:12000,progress:Math.min(12000,progress+(playing?Date.now()-at:0)),isPlaying:playing})});
+      assert(response.ok,'The isolated music bridge must accept the fixture');
+    };
+    const nowText=()=>main.evaluate('document.querySelector("[data-lyrics-now]")?.textContent');
+    try{
+      const lyrics=await main.invoke('lyrics_get',{artist:'Fixture',title:'Test Slowed',album:'Fixture album',durationMs:12000});
+      assert.equal(lyrics.synced[1].ms,4000);assert(!('time' in lyrics.synced[1]));
+      assert.equal((await main.invoke('lyrics_get',{artist:'Fixture',title:'Missing'})).found,false);
+      await assert.rejects(main.invoke('lyrics_get',{artist:'Fixture',title:'Unavailable'}),/503/);
+      await main.invoke('settings_set',{settings:{lyrics:true,lyricsInPlayer:true,lyricsInHome:true,mediaPill:'player'}});
+      at=Date.now();await publish();await main.invoke('media_pick',{id:'ru.yandex.desktop.music.mod.connector'});
+      timer=setInterval(()=>publish().catch(error=>errors.push({description:error.message})),120);
+      await waitFor(main,'document.querySelector("[data-lyrics-now]")?.textContent === "Первая строка"','First active lyrics line');
+      progress=3500;playing=true;at=Date.now();await publish();
+      await waitFor(main,'document.querySelector("[data-lyrics-now]")?.textContent === "Вторая строка"','Lyrics progress while playing');
+      progress=6000;playing=false;at=Date.now();await publish();await pause(450);
+      assert.equal(await nowText(),'Вторая строка');await pause(1000);assert.equal(await nowText(),'Вторая строка');
+      progress=0;at=Date.now();await publish();
+      await waitFor(main,'document.querySelector("[data-lyrics-now]")?.textContent === "Первая строка"','Lyrics seek backwards');
+      progress=9000;at=Date.now();await publish();
+      await waitFor(main,'document.querySelector("[data-lyrics-now]")?.textContent === "Третья строка"','Lyrics seek forwards');
+      await waitFor(main,'Number(getComputedStyle(document.querySelector("[data-lyrics-now]")).opacity) >= 0.99','Lyrics highlight animation');
+      const active=await main.evaluate('(()=>{const e=document.querySelector("[data-lyrics-now]");return {color:getComputedStyle(e).color,weight:getComputedStyle(e).fontWeight,opacity:getComputedStyle(e).opacity};})()');
+      assert(Number(active.weight)>=600);assert(Number(active.opacity)>=0.99);
+      await main.invoke('settings_set',{settings:{mediaPill:'lyrics'}});
+      await waitFor(main,'document.querySelector("[data-media-pill=lyrics] [data-lyrics-line]")?.textContent.includes("Третья строка")','Folded lyrics mode');
+      await main.evaluate('(async()=>{const m=await import("/assets/Liquid-BbsJJY6K.js");m.ot.setState({expanded:true,tab:"home"});})()');
+      await waitFor(main,'document.querySelector("[data-home] [data-lyrics-now]")?.textContent === "Третья строка"','Home lyrics mode');
+      assert(lyricsRequests>=4);return {milliseconds:true,highlight:true,advance:true,pause:true,seekBothDirections:true,foldedLyrics:true,homeLyrics:true,missing404:true,retryable503:true,isolatedBridge:true};
+    }finally{
+      clearInterval(timer);await main.invoke('media_pick',{id:null});await main.evaluate('(async()=>{const m=await import("/assets/Liquid-BbsJJY6K.js");m.ot.setState({expanded:false,tab:"home"});})()');
+      await main.invoke('settings_set',{settings:{lyrics:prior.lyrics,lyricsInPlayer:prior.lyricsInPlayer,lyricsInHome:prior.lyricsInHome,mediaPill:prior.mediaPill}});await pause(3400);
+    }
   });
   await check('Repeated hover keeps the folded pill visible and native styles unchanged',async()=>{
     await main.evaluate('window.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",code:"Escape",bubbles:true}))');
