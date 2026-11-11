@@ -568,14 +568,17 @@ async function quit(client) {
   await check('Steam progress and completion use actual manifest changes',async()=>{
     const apps=path.join(directory,'steam','steamapps');await fs.mkdir(apps,{recursive:true});
     const manifest=path.join(apps,'appmanifest_42.acf');
-    const write=bytes=>fs.writeFile(manifest,`"AppState" { "appid" "42" "name" "Проверка Steam" "installdir" "fixture" "BytesToDownload" "500" "BytesDownloaded" "${bytes}" }`);
+    const write=bytes=>fs.writeFile(manifest,`"AppState" { "appid" "42" "name" "Проверка Steam" "installdir" "fixture" "StateFlags" "${bytes<500?1024:4}" "BytesToDownload" "500" "BytesDownloaded" "${bytes}" }`);
     await listen(main,'downloads:update');await listen(main,'downloads:done');await write(100);
-    await waitFor(main,`window.__woodsEvents['downloads:update'].some(a=>a.some(d=>d.id==='steam:42'&&d.size===100&&d.total===500))`,'Steam in-progress manifest');
+    await pause(1300);assert(!(await main.evaluate(`window.__woodsEvents['downloads:update'].at(-1)`)).some(d=>d.id==='steam:42'),'Stale counters must not appear as an active download');
+    await write(200);
+    await waitFor(main,`window.__woodsEvents['downloads:update'].some(a=>a.some(d=>d.id==='steam:42'&&d.size===200&&d.total===500))`,'Steam in-progress manifest');
     await write(300);
     await waitFor(main,`window.__woodsEvents['downloads:update'].some(a=>a.some(d=>d.id==='steam:42'&&d.size===300&&d.speed>0))`,'Steam measured speed');
     await main.invoke('settings_set',{settings:{steamDownloads:false}});await pause(1200);
     assert(!(await main.evaluate(`window.__woodsEvents['downloads:update'].at(-1)`)).some(d=>d.id==='steam:42'));
     await main.invoke('settings_set',{settings:{steamDownloads:true}});await pause(1200);
+    await write(350);await waitFor(main,`window.__woodsEvents['downloads:update'].some(a=>a.some(d=>d.id==='steam:42'&&d.size===350))`,'Steam resumed transfer');
     await write(500);await waitFor(main,`window.__woodsEvents['downloads:done'].some(d=>d.id==='steam:42')`,'Steam completion');
     return {progress:true,speed:true,completion:true,setting:true};
   });

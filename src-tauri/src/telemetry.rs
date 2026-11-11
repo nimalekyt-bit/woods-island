@@ -1,6 +1,6 @@
 //! Read-only Windows privacy, battery, keyboard and Downloads telemetry.
 use serde_json::{json,Value};
-use std::{collections::{HashMap,HashSet},path::{Path,PathBuf},sync::Arc,time::{Instant,SystemTime}};
+use std::{collections::{HashMap,HashSet},path::{Path,PathBuf},sync::Arc,time::{Duration,Instant,SystemTime}};
 use tauri::Emitter;
 use windows::{core::{PCWSTR,PWSTR},Win32::{
     Foundation::{CloseHandle,ERROR_SUCCESS},
@@ -46,7 +46,7 @@ fn timestamp(key:HKEY,name:&str)->Option<u64>{
     let status=unsafe{RegGetValueW(key,None,PCWSTR(name.as_ptr()),RRF_RT_REG_QWORD,None,Some((&mut number as *mut u64).cast()),Some(&mut size))};
     if status==ERROR_SUCCESS&&size==8{Some(number)}else{None}
 }
-fn running_processes()->HashSet<String>{
+pub(crate) fn running_processes()->HashSet<String>{
     unsafe{
         let Ok(snapshot)=CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS,0)else{return HashSet::new();};
         let mut item=PROCESSENTRY32W::default();item.dwSize=std::mem::size_of::<PROCESSENTRY32W>() as u32;
@@ -125,14 +125,17 @@ fn partial_name(name:&str)->Option<String>{
     let lower=name.to_lowercase();for suffix in [".crdownload",".part",".partial",".download"]{if lower.ends_with(suffix){return Some(name[..name.len()-suffix.len()].to_owned());}}None
 }
 #[derive(Clone)]
-struct FileState{size:u64,modified:Option<SystemTime>,stable:u8,done:bool}
+struct FileState{size:u64,modified:Option<SystemTime>,stable:u8,done:bool,moved_at:Option<Instant>}
 struct Downloads{folder:Option<PathBuf>,rules:Value,files:HashMap<PathBuf,FileState>,last:Instant}
 impl Downloads{
     fn new()->Self{Self{folder:None,rules:Value::Null,files:HashMap::new(),last:Instant::now()}}
     fn poll(&mut self,settings:&Value)->(Vec<Value>,Vec<Value>){
+        self.poll_at(settings,Instant::now())
+    }
+    fn poll_at(&mut self,settings:&Value,now:Instant)->(Vec<Value>,Vec<Value>){
         let folder=downloads_folder(settings);let first=folder!=self.folder||self.rules!=settings["downloadsIgnore"];
         if first{self.files.clear();self.folder=folder.clone();self.rules=settings["downloadsIgnore"].clone();}
-        let elapsed=self.last.elapsed().as_secs_f64().max(0.001);self.last=Instant::now();
+        let elapsed=now.saturating_duration_since(self.last).as_secs_f64().max(0.001);self.last=now;
         let Some(folder)=folder else{return(vec![],vec![]);};let Ok(entries)=std::fs::read_dir(&folder)else{return(vec![],vec![]);};
         let mut observed=HashMap::new();let mut active=Vec::new();let mut completed=Vec::new();
         for entry in entries.flatten().take(20000){
@@ -143,13 +146,16 @@ impl Downloads{
             let changed=previous.map(|p|p.size!=size||p.modified!=modified).unwrap_or(true);
             let stable=if changed{0}else{previous.map(|p|p.stable.saturating_add(1)).unwrap_or(0)};
             let mut done=previous.map(|p|p.done).unwrap_or(first&&partial.is_none());
+            let moved_at=if previous.is_some_and(|p|size>p.size){Some(now)}else{previous.filter(|p|size>=p.size).and_then(|p|p.moved_at)};
             if let Some(real_name)=partial {
                 let speed=previous.map(|p|size.saturating_sub(p.size) as f64/elapsed).unwrap_or(0.);
-                active.push(json!({"id":path.to_string_lossy(),"path":path.to_string_lossy(),"name":real_name,"size":size,"total":null,"speed":speed,"icon":null}));
+                if moved_at.is_some_and(|at|now.saturating_duration_since(at)<Duration::from_secs(15)){
+                    active.push(json!({"id":path.to_string_lossy(),"path":path.to_string_lossy(),"name":real_name,"size":size,"total":null,"speed":speed,"icon":null}));
+                }
             }else if !done&&stable>=2 {
                 done=true;completed.push(json!({"id":path.to_string_lossy(),"path":path.to_string_lossy(),"name":name,"size":size,"title":null,"icon":null}));
             }
-            observed.insert(path,FileState{size,modified,stable,done});
+            observed.insert(path,FileState{size,modified,stable,done,moved_at});
         }
         self.files=observed;active.sort_by(|a,b|a["name"].as_str().cmp(&b["name"].as_str()));(active,completed)
     }
@@ -186,6 +192,7 @@ pub fn start(app:tauri::AppHandle,state:Arc<crate::AppState>){
 
 #[cfg(test)]mod tests{
     use super::*;
+    #[test]fn old_partial_files_are_not_active_and_stalled_transfers_expire(){let folder=std::env::temp_dir().join("woodscorp_obs/fixtures").join(format!("partial-{}-{}",std::process::id(),crate::media::now_ms()));std::fs::create_dir_all(&folder).unwrap();let file=folder.join("archive.zip.crdownload");std::fs::write(&file,b"old").unwrap();let settings=json!({"downloadsDir":folder.to_string_lossy()});let mut d=Downloads::new();let now=Instant::now();assert!(d.poll_at(&settings,now).0.is_empty());assert!(d.poll_at(&settings,now+Duration::from_secs(1)).0.is_empty());std::fs::write(&file,b"old plus incoming bytes").unwrap();let active=d.poll_at(&settings,now+Duration::from_secs(2)).0;assert_eq!(active.len(),1);assert!(active[0]["speed"].as_f64().unwrap()>0.);assert!(d.poll_at(&settings,now+Duration::from_secs(18)).0.is_empty());std::fs::remove_file(file).unwrap();std::fs::remove_dir(folder).unwrap();}
     #[test]fn unknown_or_absent_battery_is_not_fabricated(){assert!(power_payload(SYSTEM_POWER_STATUS{BatteryFlag:128,BatteryLifePercent:255,..Default::default()}).is_none());let status=power_payload(SYSTEM_POWER_STATUS{BatteryFlag:8,BatteryLifePercent:68,ACLineStatus:1,SystemStatusFlag:0,..Default::default()}).unwrap();assert_eq!(status["percent"],68);assert_eq!(status["plugged"],true);}
     #[test]fn download_name_masks_are_case_insensitive_and_unicode_safe(){assert!(glob("setup-*.exe","SETUP-1.EXE"));assert!(glob("*.txt","заметка.txt"));assert!(!glob("a?c","ac"));assert_eq!(partial_name("Архив.zip.crdownload"),Some("Архив.zip".into()));}
     #[test]fn existing_downloads_do_not_generate_old_notifications(){let folder=std::env::temp_dir().join("woodscorp_obs/fixtures").join(format!("woods-download-test-{}",crate::media::now_ms()));std::fs::create_dir_all(&folder).unwrap();std::fs::write(folder.join("old.txt"),b"old").unwrap();let settings=json!({"downloadsDir":folder.to_string_lossy()});let mut d=Downloads::new();assert!(d.poll(&settings).1.is_empty());std::fs::write(folder.join("new.txt"),b"new").unwrap();assert!(d.poll(&settings).1.is_empty());assert!(d.poll(&settings).1.is_empty());assert_eq!(d.poll(&settings).1.len(),1);assert!(d.poll(&settings).1.is_empty());for name in ["old.txt","new.txt"]{let _=std::fs::remove_file(folder.join(name));}let _=std::fs::remove_dir(folder);}

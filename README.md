@@ -134,7 +134,7 @@ MET Norway не требует ключа. Старый кэш и некорре
 Неизвестные города используют UTC или ручной часовой пояс.
 Подписанного автоматического установщика пока нет.
 
-**Проверено 12.11.2026:** 43 Rust-теста, 3 hook-теста и 34 нативных сценария,
+**Проверено 12.11.2026:** 47 Rust-тестов, 3 hook-теста и 34 нативных сценария,
 0 ошибок frontend; живая Яндекс Музыка проверена в этом же release-прогоне.
 Полный аппаратный и облачный паритет не заявляется.
 [Матрица приёмки →](docs/FUNCTIONAL_ACCEPTANCE.md)
@@ -209,7 +209,7 @@ Settings/SQLite stay in `%APPDATA%\woods-island`, keys use Windows DPAPI,
 and Obsidian export is explicit. The Yandex connector needs separate installation
 on other PCs and v3 has no seek support. Unknown cities use UTC or a manual offset.
 
-**Verified 12 November 2026:** 43 Rust tests, 3 hook tests, 34 native scenarios,
+**Verified 12 November 2026:** 47 Rust tests, 3 hook tests, 34 native scenarios,
 zero frontend exceptions, including live Yandex Music. Every cloud provider and
 hardware action has not been verified. [Acceptance matrix →](docs/FUNCTIONAL_ACCEPTANCE.md)
 
