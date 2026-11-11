@@ -1,0 +1,324 @@
+{
+  "directory": "<isolated-profile>",
+  "testedExe": "src-tauri/target/release/woods-island.exe",
+  "sha256": "34a26494ca411d16ea749c6b3fa6e9cd511a0fb7be510555e00360668a97e671",
+  "passiveQa": true,
+  "results": [
+    {
+      "name": "Main UI mounts",
+      "ok": true
+    },
+    {
+      "name": "No Windows caption; DPI bounds match canvas",
+      "ok": true,
+      "details": {
+        "bounds": [
+          206,
+          0,
+          554,
+          52
+        ],
+        "captureAffinity": 17,
+        "dpi": 96,
+        "exStyle": 136577048,
+        "height": 480,
+        "inputTransparent": false,
+        "left": 580,
+        "pageFactor": 1,
+        "scale": 1,
+        "style": 2483552256,
+        "through": false,
+        "top": 0,
+        "width": 760,
+        "zoom": 1
+      }
+    },
+    {
+      "name": "Bootstrap uses real audio device",
+      "ok": true,
+      "details": {
+        "devices": 10,
+        "version": "1.0.0"
+      }
+    },
+    {
+      "name": "Chosen audio endpoint changes monitoring without rerouting sound",
+      "ok": true,
+      "details": {
+        "selected": "<redacted>",
+        "defaultUnchanged": true
+      }
+    },
+    {
+      "name": "Capture visibility setting changes native display protection",
+      "ok": true
+    },
+    {
+      "name": "Chosen microphone remains readable without recording or mute changes",
+      "ok": true,
+      "details": {
+        "selected": "<redacted>",
+        "readable": true,
+        "defaultUnchanged": true
+      }
+    },
+    {
+      "name": "Native notification and network reads return usable contracts",
+      "ok": true,
+      "details": {
+        "notifications": "allowed",
+        "vpnProfiles": 1
+      }
+    },
+    {
+      "name": "Settings merge + persist, toggles do not crash",
+      "ok": true
+    },
+    {
+      "name": "Island scale changes physical size, viewport and clip bounds together",
+      "ok": true,
+      "details": [
+        {
+          "value": 150,
+          "width": 1140,
+          "pillWidth": 402,
+          "bounds": [
+            363,
+            0,
+            777,
+            57
+          ]
+        },
+        {
+          "value": 200,
+          "width": 1520,
+          "pillWidth": 536,
+          "bounds": [
+            484,
+            0,
+            1036,
+            76
+          ]
+        },
+        {
+          "value": 80,
+          "width": 608,
+          "pillWidth": 214,
+          "bounds": [
+            193,
+            0,
+            415,
+            31
+          ]
+        },
+        {
+          "value": 100,
+          "width": 760,
+          "pillWidth": 268,
+          "bounds": [
+            242,
+            0,
+            518,
+            38
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Weather search works offline for Брянск",
+      "ok": true
+    },
+    {
+      "name": "Media source and playback contracts",
+      "ok": true,
+      "details": {
+        "sources": 2,
+        "mediaPresent": true
+      }
+    },
+    {
+      "name": "Weather opens, switches hours/week and units, and rejects legacy data",
+      "ok": true,
+      "details": {
+        "days": 7,
+        "hours": 24,
+        "utcOffset": 10800,
+        "legacyCacheReplaced": true,
+        "imperial": true,
+        "invalidRecovery": true,
+        "protocolFixture": true
+      }
+    },
+    {
+      "name": "Live Yandex connector reaches the rendered pill with cover and advancing time",
+      "ok": true,
+      "details": {
+        "live": true,
+        "title": "<redacted>",
+        "artist": "<redacted>",
+        "position": 62852,
+        "nextPosition": 63802,
+        "cover": false
+      }
+    },
+    {
+      "name": "Repeated hover keeps the folded pill visible and native styles unchanged",
+      "ok": true
+    },
+    {
+      "name": "Click expands, Escape collapses",
+      "ok": true
+    },
+    {
+      "name": "Native desktop pixels outside collapsed and expanded island have no glass tint",
+      "ok": true,
+      "details": {
+        "collapsed": {
+          "samples": 5830,
+          "changed": 0,
+          "fixturePixels": 5498,
+          "pillChanges": 1043
+        },
+        "expanded": {
+          "samples": 106,
+          "changed": 0,
+          "fixturePixels": 5498,
+          "pillChanges": 30802
+        }
+      }
+    },
+    {
+      "name": "Notes/chat/timer/launcher groups round-trip",
+      "ok": true
+    },
+    {
+      "name": "Launcher link and shelf persist",
+      "ok": true
+    },
+    {
+      "name": "Agents state and config ownership are read without changing fixtures",
+      "ok": true
+    },
+    {
+      "name": "Web AI read contract and invalid service rejection",
+      "ok": true
+    },
+    {
+      "name": "Attachments return document/image contracts and missing-file errors",
+      "ok": true
+    },
+    {
+      "name": "AI models, UTF-8 streaming, attachment resolution and HTTP error events",
+      "ok": true
+    },
+    {
+      "name": "OBS v5 handshake authenticates, reads state and rejects bad password",
+      "ok": true,
+      "details": {
+        "authenticated": 1,
+        "requests": [
+          "GetStreamStatus",
+          "GetRecordStatus"
+        ]
+      }
+    },
+    {
+      "name": "Native screen capture produces real PNG and dimensions",
+      "ok": true,
+      "details": {
+        "path": "<isolated-profile>/woods-1794432813929.png",
+        "width": 160,
+        "height": 90
+      }
+    },
+    {
+      "name": "Windows OCR recognizes actual rendered text from a PNG",
+      "ok": true,
+      "details": {
+        "text": "Woods Island 2048"
+      }
+    },
+    {
+      "name": "MP4 screen recording contains video and WASAPI system audio",
+      "ok": true,
+      "details": {
+        "path": "<isolated-profile>/woods-1794432814574.mp4",
+        "streams": [
+          {
+            "type": "video",
+            "codec": "h264"
+          },
+          {
+            "type": "audio",
+            "codec": "aac"
+          }
+        ],
+        "duration": "1.768990"
+      }
+    },
+    {
+      "name": "Image editor loads and saves its isolated fixture without clipboard writes",
+      "ok": true
+    },
+    {
+      "name": "Settings UI renders after repeated harmless toggles",
+      "ok": true,
+      "details": {
+        "sections": [
+          "pro",
+          "character",
+          "general",
+          "hotkeys",
+          "ai",
+          "voice",
+          "weather",
+          "sound",
+          "events",
+          "clipboard",
+          "modules",
+          "updates"
+        ]
+      }
+    },
+    {
+      "name": "Notes button exports Markdown to Obsidian without overwriting files",
+      "ok": true,
+      "details": {
+        "folder": "<redacted>"
+      }
+    },
+    {
+      "name": "Steam progress and completion use actual manifest changes",
+      "ok": true,
+      "details": {
+        "progress": true,
+        "speed": true,
+        "completion": true,
+        "setting": true
+      }
+    },
+    {
+      "name": "Virtual desktop telemetry reaches the real frontend store",
+      "ok": true,
+      "details": {
+        "count": 1,
+        "index": 1,
+        "name": ""
+      }
+    },
+    {
+      "name": "Restart restores settings, notes, chat, timer, launcher and shelf",
+      "ok": true
+    },
+    {
+      "name": "No unhandled frontend exceptions",
+      "ok": true
+    },
+    {
+      "name": "Explicit quit exits the application",
+      "ok": true
+    }
+  ],
+  "frontendErrors": [],
+  "metadataRedacted": true
+}

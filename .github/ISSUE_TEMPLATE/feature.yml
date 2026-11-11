@@ -1,0 +1,11 @@
+name: Доработка
+description: Изменение функций Woods Island
+labels: [enhancement]
+body:
+  - type: textarea
+    id: request
+    attributes:
+      label: Задача и результат
+      description: Что нужно сделать и как проверить готовность. Свяжи с задачей HQ.
+    validations:
+      required: true

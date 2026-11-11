@@ -1,0 +1,16 @@
+name: Ошибка
+description: Воспроизводимая ошибка Woods Island
+labels: [bug]
+body:
+  - type: textarea
+    id: steps
+    attributes:
+      label: Как воспроизвести
+      description: Версия EXE, Windows, действия, ожидаемый и фактический результат.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Диагностика
+      description: Минимальный лог или скриншот без ключей и личных данных.
