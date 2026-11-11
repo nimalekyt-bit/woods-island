@@ -322,6 +322,27 @@ async function quit(client) {
       await main.invoke('settings_set',{settings:{lyrics:prior.lyrics,lyricsInPlayer:prior.lyricsInPlayer,lyricsInHome:prior.lyricsInHome,mediaPill:prior.mediaPill}});await pause(3400);
     }
   });
+  await check('WASAPI follows the active player output and animates the liquid spectrum',async()=>{
+    const prior=await main.invoke('settings_get');let timer;
+    const publish=()=>fetch(`http://127.0.0.1:${musicPort}/track`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({trackId:'audio-fixture',title:'Audio routing fixture',artist:'Fixture',duration:300000,progress:1000,isPlaying:true})});
+    try{
+      await main.invoke('settings_set',{settings:{audioOutput:'',character:'liquid',characterMusic:'liquid',liquidWith:true,liquidSpectrum:true,mediaPill:'normal'}});
+      await publish();await main.invoke('media_pick',{id:'ru.yandex.desktop.music.mod.connector'});
+      timer=setInterval(()=>publish().catch(error=>errors.push({description:error.message})),120);
+      await pause(1700);const samples=[];
+      for(let index=0;index<25;index++){
+        samples.push(await main.evaluate('(async()=>{const m=await import("/assets/Liquid-BbsJJY6K.js"),s=m.ot.getState();return {level:s.level,bands:s.bands,age:performance.now()-s.bandsAt,path:document.querySelector("[data-island] > svg path")?.getAttribute("d")};})()'));
+        await pause(100);
+      }
+      assert(samples.every(s=>s.bands.length===8&&s.bands.every(v=>Number.isFinite(v)&&v>=0&&v<=1)&&Number.isFinite(s.level)&&s.level>=0&&s.level<=1&&s.age<700));
+      const peak=Math.max(...samples.map(s=>s.level)),bandPeak=Math.max(...samples.flatMap(s=>s.bands)),paths=new Set(samples.map(s=>s.path)).size;
+      if(process.env.WOODS_TEST_EXPECT_AUDIO==='1'){assert(peak>0.00001,'Expected playing audio must reach WASAPI');assert(bandPeak>0,'Expected spectrum must contain energy');}
+      if(peak>0.00001)assert(paths>1,'The liquid contour must change with measured sound');
+      assert(samples.every(s=>s.path));return {eightBands:true,fresh:true,peak,bandPeak,distinctContours:paths,liveSoundDetected:peak>0.00001,explicitOutputPriority:true};
+    }finally{
+      clearInterval(timer);await main.invoke('media_pick',{id:null});await main.invoke('settings_set',{settings:{audioOutput:prior.audioOutput,character:prior.character,characterMusic:prior.characterMusic,liquidWith:prior.liquidWith,liquidSpectrum:prior.liquidSpectrum,mediaPill:prior.mediaPill}});await pause(3400);
+    }
+  });
   await check('Repeated hover keeps the folded pill visible and native styles unchanged',async()=>{
     await main.evaluate('window.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",code:"Escape",bubbles:true}))');
     await waitFor(main,'document.querySelector("[data-island]").getBoundingClientRect().height < 44','Idle pill');
