@@ -14,6 +14,7 @@ pub mod capture;
 pub mod system;
 pub mod clipboard;
 pub mod media;
+pub mod lyrics;
 pub mod music_bridge;
 pub mod obs;
 pub mod storage;
@@ -594,71 +595,8 @@ fn media_rename(app_id:Option<String>,name:Option<String>)->Result<bool,String>{
 async fn media_seek(ms:Option<u64>)->Result<bool,String>{tauri::async_runtime::spawn_blocking(move||{if media::media_seek(ms.ok_or("Playback position is required")?){Ok(true)}else{Err("The active player does not allow seeking".into())}}).await.map_err(|e|e.to_string())?}
 
 #[tauri::command]
-async fn lyrics_get(
-    artist: Option<String>,
-    title: Option<String>,
-    _album: Option<String>,
-    duration_ms: Option<u64>,
-) -> Value {
-    let artist = artist.unwrap_or_default();
-    let title = title.unwrap_or_default();
-    if artist.is_empty() || title.is_empty() {
-        return json!({ "found": false, "synced": [], "plain": "", "instrumental": false });
-    }
-
-    let dur_sec = duration_ms.map(|d| d / 1000).unwrap_or(0);
-    let url = format!(
-        "https://lrclib.net/api/get?artist_name={}&track_name={}&duration={}",
-        urlencoding::encode(&artist),
-        urlencoding::encode(&title),
-        dur_sec
-    );
-
-    let client = reqwest::Client::builder()
-        .user_agent("WoodsIsland/1.0 (https://github.com/nimalekyt-bit/woods-island)")
-        .timeout(std::time::Duration::from_millis(2500))
-        .build();
-
-    if let Ok(c) = client {
-        if let Ok(resp) = c.get(&url).send().await {
-            if let Ok(data) = resp.json::<Value>().await {
-                let plain = data.get("plainLyrics").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                let synced_str = data.get("syncedLyrics").and_then(|v| v.as_str()).unwrap_or("");
-                let instrumental = data.get("instrumental").and_then(|v| v.as_bool()).unwrap_or(false);
-
-                let mut synced = Vec::new();
-                for line in synced_str.lines() {
-                    let line = line.trim();
-                    if line.starts_with('[') {
-                        if let Some(close_idx) = line.find(']') {
-                            let tag = &line[1..close_idx];
-                            let text = line[close_idx + 1..].trim();
-                            let parts: Vec<&str> = tag.split(':').collect();
-                            if parts.len() == 2 {
-                                if let (Ok(m), Ok(s)) = (parts[0].parse::<f64>(), parts[1].parse::<f64>()) {
-                                    let time_ms = ((m * 60.0 + s) * 1000.0) as u64;
-                                    synced.push(json!({
-                                        "time": time_ms,
-                                        "text": text
-                                    }));
-                                }
-                            }
-                        }
-                    }
-                }
-
-                let found = !plain.is_empty() || !synced.is_empty() || instrumental;
-                return json!({
-                    "found": found,
-                    "synced": synced,
-                    "plain": plain,
-                    "instrumental": instrumental
-                });
-            }
-        }
-    }
-
-    json!({ "found": false, "synced": [], "plain": "", "instrumental": false })
+async fn lyrics_get(artist: Option<String>, title: Option<String>, album: Option<String>, duration_ms: Option<u64>) -> Result<Value, String> {
+    lyrics::get(artist.unwrap_or_default(), title.unwrap_or_default(), album.unwrap_or_default(), duration_ms).await
 }
 
 #[tauri::command]
