@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: transparent !important;
+  user-select: none;
+  -webkit-user-select: none;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Glassmorphism & Liquid Styles */
+.liquid-pill {
+  background: #000000;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.liquid-glow {
+  box-shadow: 0 0 20px -2px var(--accent-glow, rgba(142, 162, 255, 0.4)), 0 8px 32px 0 rgba(0, 0, 0, 0.8);
+}

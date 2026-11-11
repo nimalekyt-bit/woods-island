@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Woods Island — Obsidian Companion, refined</title>
+  <desc id="desc">An original smooth obsidian companion with twin rounded crests, ivory eyes and a pearl ceramic tile.</desc>
+  <defs>
+    <linearGradient id="pearl" gradientUnits="userSpaceOnUse" x1="100" y1="30" x2="392" y2="486">
+      <stop stop-color="#fff"/><stop offset=".36" stop-color="#fdfdfd"/><stop offset=".7" stop-color="#f0f1f6"/><stop offset="1" stop-color="#dcdfe9"/>
+    </linearGradient>
+    <radialGradient id="pearl-light" gradientUnits="userSpaceOnUse" cx="105" cy="82" r="370">
+      <stop stop-color="#fffdfa" stop-opacity=".8"/><stop offset=".48" stop-color="#fff" stop-opacity=".26"/><stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="tile-rim" gradientUnits="userSpaceOnUse" x1="154" y1="26" x2="355" y2="487">
+      <stop stop-color="#fff"/><stop offset=".56" stop-color="#fff" stop-opacity=".72"/><stop offset="1" stop-color="#bdc2d0" stop-opacity=".4"/>
+    </linearGradient>
+    <linearGradient id="obsidian" gradientUnits="userSpaceOnUse" x1="187" y1="146" x2="313" y2="357">
+      <stop stop-color="#30323b"/><stop offset=".3" stop-color="#181a22"/><stop offset=".54" stop-color="#08090d"/><stop offset=".8" stop-color="#08090d"/><stop offset="1" stop-color="#171820"/>
+    </linearGradient>
+    <radialGradient id="softbox" gradientUnits="userSpaceOnUse" cx="165" cy="159" r="192">
+      <stop stop-color="#e0e4f1" stop-opacity=".16"/><stop offset=".3" stop-color="#d1d8e9" stop-opacity=".065"/><stop offset=".78" stop-color="#b8bfd4" stop-opacity=".014"/><stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="face-light" gradientUnits="userSpaceOnUse" cx="243" cy="236" r="125">
+      <stop stop-color="#d2d7e7" stop-opacity=".03"/><stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="specular" gradientUnits="userSpaceOnUse" x1="177" y1="151" x2="183" y2="191">
+      <stop stop-color="#fff" stop-opacity=".49"/><stop offset=".48" stop-color="#e8ebf6" stop-opacity=".18"/><stop offset="1" stop-color="#d0d5e3" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="side-light" gradientUnits="userSpaceOnUse" x1="344" y1="260" x2="393" y2="282">
+      <stop stop-color="#b5bed5" stop-opacity="0"/><stop offset=".58" stop-color="#b5bed5" stop-opacity=".045"/><stop offset="1" stop-color="#d5dbea" stop-opacity=".17"/>
+    </linearGradient>
+    <linearGradient id="lower-light" gradientUnits="userSpaceOnUse" x1="256" y1="323" x2="256" y2="353">
+      <stop stop-color="#c3cadc" stop-opacity="0"/><stop offset="1" stop-color="#c3cadc" stop-opacity=".13"/>
+    </linearGradient>
+    <linearGradient id="ivory" gradientUnits="userSpaceOnUse" x1="220" y1="240" x2="292" y2="287">
+      <stop stop-color="#fffef9"/><stop offset=".6" stop-color="#f5f4ed"/><stop offset="1" stop-color="#dfdfda"/>
+    </linearGradient>
+    <filter id="shadow" x="-.4" y="-2" width="1.8" height="5"><feGaussianBlur stdDeviation="10"/></filter>
+    <filter id="contact" x="-.4" y="-2" width="1.8" height="5"><feGaussianBlur stdDeviation="4"/></filter>
+    <filter id="polish" x="-.3" y="-.4" width="1.6" height="1.8"><feGaussianBlur stdDeviation=".7"/></filter>
+    <path id="mark" d="M149 201C141 178 145 156 166 150C184 144 201 156 219 178C231 194 243 205 256 205C269 205 281 194 293 178C311 156 328 144 346 150C367 156 371 178 363 201C360 210 368 218 381 229C400 246 405 268 399 286C394 301 383 310 369 318C359 324 352 336 340 343C323 355 308 350 291 335C277 321 268 315 256 315C244 315 235 321 221 335C204 350 189 355 172 343C160 336 153 324 143 318C129 310 118 301 113 286C107 268 112 246 131 229C144 218 152 210 149 201Z"/>
+    <clipPath id="mark-clip"><use href="#mark"/></clipPath>
+  </defs>
+  <rect x="24" y="24" width="464" height="464" rx="109" fill="url(#pearl)"/>
+  <rect x="25" y="25" width="462" height="462" rx="108" fill="url(#pearl-light)"/>
+  <rect x="25" y="25" width="462" height="462" rx="108" fill="none" stroke="url(#tile-rim)" stroke-width="2"/>
+  <ellipse cx="256" cy="367" rx="113" ry="15" fill="#2b3040" opacity=".12" filter="url(#shadow)"/>
+  <g fill="#232736" opacity=".14" filter="url(#contact)">
+    <ellipse cx="191" cy="356" rx="34" ry="4"/><ellipse cx="321" cy="356" rx="34" ry="4"/>
+  </g>
+  <use href="#mark" fill="url(#obsidian)"/>
+  <g clip-path="url(#mark-clip)">
+    <ellipse cx="173" cy="181" rx="197" ry="199" fill="url(#softbox)"/>
+    <ellipse cx="244" cy="238" rx="127" ry="126" fill="url(#face-light)"/>
+    <path d="M154 184C151 169 157 155 169 154C183 153 197 166 207 182C193 167 181 160 172 160C162 159 157 169 157 184Z" fill="url(#specular)" filter="url(#polish)"/>
+    <path d="M306 181C317 165 329 155 340 156C348 157 353 161 355 169C350 163 345 161 339 162C328 162 316 171 307 183Z" fill="url(#specular)" opacity=".26" filter="url(#polish)"/>
+    <path d="M382 244C393 256 397 269 392 283C386 298 374 305 362 312C375 299 381 287 382 275C383 263 378 253 370 243Z" fill="url(#side-light)"/>
+    <path d="M177 337C188 348 199 349 212 340C203 353 184 351 177 341ZM300 340C313 349 324 348 335 337C328 351 309 353 300 344Z" fill="url(#lower-light)"/>
+  </g>
+  <rect x="205" y="240" width="30" height="46" rx="15" fill="url(#ivory)"/>
+  <rect x="277" y="240" width="30" height="46" rx="15" fill="url(#ivory)"/>
+  <ellipse cx="212" cy="249" rx="2.4" ry="5" fill="#fff" opacity=".56"/>
+  <ellipse cx="284" cy="249" rx="2.4" ry="5" fill="#fff" opacity=".56"/>
+</svg>

@@ -1,0 +1,43 @@
+{
+  "name": "woods-island",
+  "version": "1.0.0",
+  "description": "Dynamic Island HUD for Windows 10 & 11 (Woods Corp)",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "pnpm": { "onlyBuiltDependencies": ["esbuild"] },
+  "type": "module",
+  "scripts": {
+    "dev": "vite frontend --port 1420 --strictPort",
+    "build": "node scripts/build-runtime.mjs",
+    "check:runtime": "node scripts/build-runtime.mjs --check",
+    "test:hooks": "node --test scripts/island-notify.test.cjs",
+    "check:authors": "node scripts/check-commit-owners.mjs",
+    "test:native": "node scripts/verify-runtime.cjs",
+    "package:portable": "node scripts/package-portable.mjs",
+    "dev:prototype": "vite",
+    "build:prototype": "tsc && vite build --outDir dist-prototype",
+    "preview": "vite preview",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.2.0",
+    "@tauri-apps/plugin-global-shortcut": "^2.2.0",
+    "clsx": "^2.1.1",
+    "framer-motion": "^11.15.0",
+    "lucide-react": "^0.469.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwind-merge": "^2.6.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@tauri-apps/cli": "^2.2.0",
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3"
+  }
+}
