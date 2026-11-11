@@ -1,7 +1,7 @@
 {
   "directory": "<isolated-profile>",
   "testedExe": "src-tauri/target/release/woods-island.exe",
-  "sha256": "34a26494ca411d16ea749c6b3fa6e9cd511a0fb7be510555e00360668a97e671",
+  "sha256": "09ade8f024513d0140efbb153e352923fa5a9033cfad5117c69244178845d35e",
   "passiveQa": true,
   "results": [
     {
@@ -13,10 +13,10 @@
       "ok": true,
       "details": {
         "bounds": [
-          206,
+          243,
           0,
-          554,
-          52
+          517,
+          38
         ],
         "captureAffinity": 17,
         "dpi": 96,
@@ -156,8 +156,8 @@
         "live": true,
         "title": "<redacted>",
         "artist": "<redacted>",
-        "position": 62852,
-        "nextPosition": 63802,
+        "position": 139037,
+        "nextPosition": 140510,
         "cover": false
       }
     },
@@ -177,13 +177,13 @@
           "samples": 5830,
           "changed": 0,
           "fixturePixels": 5498,
-          "pillChanges": 1043
+          "pillChanges": 1062
         },
         "expanded": {
           "samples": 106,
           "changed": 0,
           "fixturePixels": 5498,
-          "pillChanges": 30802
+          "pillChanges": 30798
         }
       }
     },
@@ -226,7 +226,7 @@
       "name": "Native screen capture produces real PNG and dimensions",
       "ok": true,
       "details": {
-        "path": "<isolated-profile>/woods-1794432813929.png",
+        "path": "<isolated-profile>/woods-1794434590098.png",
         "width": 160,
         "height": 90
       }
@@ -242,7 +242,7 @@
       "name": "MP4 screen recording contains video and WASAPI system audio",
       "ok": true,
       "details": {
-        "path": "<isolated-profile>/woods-1794432814574.mp4",
+        "path": "<isolated-profile>/woods-1794434590727.mp4",
         "streams": [
           {
             "type": "video",
@@ -253,7 +253,7 @@
             "codec": "aac"
           }
         ],
-        "duration": "1.768990"
+        "duration": "1.812823"
       }
     },
     {
