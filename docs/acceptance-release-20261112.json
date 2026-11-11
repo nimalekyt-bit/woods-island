@@ -1,7 +1,7 @@
 {
   "directory": "<isolated-profile>",
   "testedExe": "src-tauri/target/release/woods-island.exe",
-  "sha256": "9fb67ec9db7926bdec7a47b44600e6323416bc2450a8cf5b99438ef221722d9b",
+  "sha256": "c2ec1214c04c9491189026022b72983e5d4841324568ed70f53675aac9864fbc",
   "passiveQa": true,
   "results": [
     {
@@ -13,9 +13,9 @@
       "ok": true,
       "details": {
         "bounds": [
-          206,
+          207,
           0,
-          554,
+          553,
           52
         ],
         "captureAffinity": 17,
@@ -81,45 +81,45 @@
         {
           "value": 150,
           "width": 1140,
-          "pillWidth": 402,
+          "pillWidth": 262,
           "bounds": [
-            363,
+            432,
             0,
-            777,
-            57
+            707,
+            54
           ]
         },
         {
           "value": 200,
           "width": 1520,
-          "pillWidth": 536,
+          "pillWidth": 348,
           "bounds": [
-            484,
+            578,
             0,
-            1036,
-            76
+            942,
+            72
           ]
         },
         {
           "value": 80,
           "width": 608,
-          "pillWidth": 214,
+          "pillWidth": 140,
           "bounds": [
-            193,
+            230,
             0,
-            415,
-            31
+            377,
+            29
           ]
         },
         {
           "value": 100,
           "width": 760,
-          "pillWidth": 268,
+          "pillWidth": 174,
           "bounds": [
-            242,
+            289,
             0,
-            518,
-            38
+            471,
+            36
           ]
         }
       ]
@@ -132,8 +132,8 @@
       "name": "Media source and playback contracts",
       "ok": true,
       "details": {
-        "sources": 1,
-        "mediaPresent": true
+        "sources": 0,
+        "mediaPresent": false
       }
     },
     {
@@ -176,6 +176,19 @@
       }
     },
     {
+      "name": "WASAPI follows the active player output and animates the liquid spectrum",
+      "ok": true,
+      "details": {
+        "eightBands": true,
+        "fresh": true,
+        "peak": 0.004987501,
+        "bandPeak": 0.33246094,
+        "distinctContours": 25,
+        "liveSoundDetected": true,
+        "explicitOutputPriority": true
+      }
+    },
+    {
       "name": "Repeated hover keeps the folded pill visible and native styles unchanged",
       "ok": true
     },
@@ -191,13 +204,13 @@
           "samples": 5830,
           "changed": 0,
           "fixturePixels": 5498,
-          "pillChanges": 1043
+          "pillChanges": 602
         },
         "expanded": {
-          "samples": 106,
+          "samples": 1166,
           "changed": 0,
           "fixturePixels": 5498,
-          "pillChanges": 30986
+          "pillChanges": 25289
         }
       }
     },
@@ -267,7 +280,7 @@
             "codec": "aac"
           }
         ],
-        "duration": "1.799427"
+        "duration": "1.803208"
       }
     },
     {

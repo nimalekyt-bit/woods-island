@@ -189,17 +189,18 @@ pub fn set_default(id: &str) -> Result<(), String> {
     Ok(())
 }
 
-unsafe fn active_player_volume() -> Result<ISimpleAudioVolume, String> {
+unsafe fn player_audio_session(active_only: bool) -> Result<(IMMDevice, IAudioSessionControl), String> {
     let app = crate::media::get_current_media().and_then(|m|m["app"].as_str().map(str::to_owned)).ok_or("Нет активного плеера")?.to_lowercase();
     let aliases = ["yandex","spotify","chrome","msedge","firefox","opera","telegram","ayugram","vlc","aimp","foobar"];
     let alias = aliases.iter().find(|alias|app.contains(**alias)).copied();
     let all = enumerator().map_err(|e|e.to_string())?.EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE).map_err(|e|e.to_string())?;
     for index in 0..all.GetCount().map_err(|e|e.to_string())? {
         let device = all.Item(index).map_err(|e|e.to_string())?;
-        let sessions: IAudioSessionManager2 = device.Activate(CLSCTX_ALL,None).map_err(|e|e.to_string())?;
-        let list = sessions.GetSessionEnumerator().map_err(|e|e.to_string())?;
+        let Ok(sessions): Result<IAudioSessionManager2,_> = device.Activate(CLSCTX_ALL,None) else {continue;};
+        let Ok(list) = sessions.GetSessionEnumerator() else {continue;};
         for item in 0..list.GetCount().map_err(|e|e.to_string())? {
             let control = list.GetSession(item).map_err(|e|e.to_string())?;
+            if active_only && control.GetState().map_err(|e|e.to_string())? != AudioSessionStateActive {continue;}
             let extended: IAudioSessionControl2 = control.cast().map_err(|e|e.to_string())?;
             let identifier = owned_string(extended.GetSessionIdentifier().map_err(|e|e.to_string())?).to_lowercase();
             let matching=alias.map(|a|identifier.contains(a)).unwrap_or_else(||identifier.contains(&app));
@@ -207,11 +208,24 @@ unsafe fn active_player_volume() -> Result<ISimpleAudioVolume, String> {
             // player's slider must not silently change the browser's volume.
             let matching=matching && !(app.contains("yandex")&&app.contains("music")&&!identifier.contains("music"));
             if matching {
-                return control.cast().map_err(|e|e.to_string());
+                return Ok((device, control));
             }
         }
     }
     Err("Аудиосессия выбранного плеера не найдена".into())
+}
+unsafe fn active_player_volume() -> Result<ISimpleAudioVolume, String> {
+    player_audio_session(false)?.1.cast().map_err(|e|e.to_string())
+}
+
+/// A player can be routed by Windows to an endpoint other than the system
+/// default. Follow its active session for visualization, while an explicit
+/// audioOutput selection keeps priority. This never changes Windows routing.
+unsafe fn loopback_device() -> windows::core::Result<IMMDevice> {
+    if SELECTED_OUTPUT.lock().unwrap().is_none() {
+        if let Ok((device, _)) = player_audio_session(true) {return Ok(device);}
+    }
+    selected_device(eRender)
 }
 pub fn player_volume() -> Result<Value, String> {
     let _com = ComApartment::new()?;
@@ -301,7 +315,7 @@ fn decode_sample(data:&[u8],float:bool)->f32 {
     }
 }
 unsafe fn capture_session(app:&tauri::AppHandle)->Result<(),String> {
-    let device=selected_device(eRender).map_err(|e|e.to_string())?;
+    let device=loopback_device().map_err(|e|e.to_string())?;
     let initial_id=device_id(&device).map_err(|e|e.to_string())?;
     let client:IAudioClient=device.Activate(CLSCTX_ALL,None).map_err(|e|e.to_string())?;
     let format=client.GetMixFormat().map_err(|e|e.to_string())?;
@@ -343,7 +357,7 @@ unsafe fn capture_session(app:&tauri::AppHandle)->Result<(),String> {
                 emitted=Instant::now();
             }
             if checked.elapsed()>=Duration::from_secs(1) {
-                let current=selected_device(eRender).map_err(|e|e.to_string())?;
+                let current=loopback_device().map_err(|e|e.to_string())?;
                 if device_id(&current).map_err(|e|e.to_string())?!=initial_id {break;}
                 checked=Instant::now();
             }
