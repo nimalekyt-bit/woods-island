@@ -20,6 +20,7 @@ pub mod obs;
 pub mod storage;
 pub mod weather;
 pub mod win;
+pub mod pets;
 
 use clipboard::ClipboardStore;
 use serde_json::{json, Value};
@@ -319,6 +320,13 @@ fn start_cursor_loop(app: AppHandle, state: Arc<AppState>) {
 /// Called on app startup to initialize the entire frontend Zustand store
 #[tauri::command]
 async fn bootstrap(state:tauri::State<'_, Arc<AppState>>)->Result<Value,String>{let state=state.inner().clone();tauri::async_runtime::spawn_blocking(move||{app_log("bootstrap worker entered");let result={let telemetry=telemetry::snapshot();json!({"settings":state.settings.lock().unwrap().clone(),"shelf":shelf_snapshot(&state),"launcher":state.launcher_items.lock().unwrap().clone(),"media":media::get_current_media(),"cover":media::get_current_cover(),"hotkeyErrors":state.hotkey_errors.lock().unwrap().clone(),"audio":audio::state().ok(),"privacy":telemetry["privacy"],"downloads":telemetry::downloads_snapshot(),"vpn":null,"update":null,"version":env!("CARGO_PKG_VERSION"),"capsLock":telemetry["capsLock"],"layout":telemetry["layout"],"license":license_status(),"trialOver":false,"news":news_get(),"battery":telemetry["battery"],"vdesk":telemetry["vdesk"]})};app_log("bootstrap worker completed");result}).await.map_err(|e|e.to_string())}
+
+#[tauri::command]
+async fn pets_catalog()->Result<Value,String>{tauri::async_runtime::spawn_blocking(||pets::import_profile(&storage::get_storage_dir(),false)).await.map_err(|e|e.to_string())}
+#[tauri::command]
+async fn pets_import_codex(app:AppHandle)->Result<Value,String>{let result=tauri::async_runtime::spawn_blocking(||pets::import_profile(&storage::get_storage_dir(),true)).await.map_err(|e|e.to_string())?;let _=app.emit("pets:changed",&result);Ok(result)}
+#[tauri::command]
+async fn pets_asset(id:String)->Result<String,String>{tauri::async_runtime::spawn_blocking(move||pets::load_asset(&storage::get_storage_dir(),&id)).await.map_err(|e|e.to_string())?}
 
 #[tauri::command]
 fn report_page_scale(width: Option<f64>, state: tauri::State<'_, Arc<AppState>>) {
@@ -1292,6 +1300,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             window_diagnostics,
             bootstrap,
+            pets_catalog, pets_import_codex, pets_asset,
             report_page_scale,
             report_island_rect,
             web_ai_popped,

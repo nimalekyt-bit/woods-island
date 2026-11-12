@@ -9,6 +9,7 @@ import { LiquidIsland } from '../characters/LiquidIsland';
 import { measureLiquidIslands as pr } from '../characters/liquid';
 import { PixelCharacter } from '../characters/PixelCharacter';
 import { createCharacterCatalog } from "../characters/catalog";
+import { approvedDefinitions } from '../characters/approved';
 import {
   isFreeCharacter as y,
   resolveCharacter as b,
@@ -136,7 +137,7 @@ function ne(e) {
   }
 }
 var re = () => [
-  n(`Все 25 персонажей`, `All 25 characters`),
+  n(`Все 36 встроенных персонажей`, `All 36 built-in characters`),
   n(
     `Погода: прогноз, температура на острове, предупреждения`,
     `Weather: the forecast, the temperature on the island, warnings`,
@@ -795,7 +796,7 @@ function it(e) {
   return e.replace(/^https?:\/\//i, ``);
 }
 const { catalog: Et, describe: Ot, find: At } = createCharacterCatalog({
-  creatures, things, renderers: genericDrawings, language: e,
+  creatures, things, renderers: genericDrawings, language: e, additions: approvedDefinitions,
 });
 
 const Yt = PixelCharacter;

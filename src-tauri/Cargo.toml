@@ -1,6 +1,7 @@
 [package]
 name = "woods-island"
-version = "1.0.0"
+version = "1.1.0"
+default-run = "woods-island"
 description = "Dynamic Island HUD for Windows (Woods Personal Corp)"
 authors = ["Nikita Kuznetsov (Woods)"]
 edition = "2021"
@@ -84,7 +85,7 @@ rustfft = "6.2"
 tokio-tungstenite = { version = "0.26", features = ["connect"] }
 futures-util = "0.3"
 sha2 = "0.10"
-image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
 rqrr = "0.10"
 toml_edit = "0.22"
 zip = { version = "2", default-features = false, features = ["deflate"] }

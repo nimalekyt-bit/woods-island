@@ -1,7 +1,8 @@
 // Metadata is maintained here; the recovered drawing implementations are injected.
 import type { Drawing, DrawnCharacter } from './types';
+import type { BitmapDefinition } from './bitmap';
 export type CharacterKind = "liquid" | "none" | "attach" | "slot";
-export type CharacterGroup = "island" | "characters" | "creatures" | "things";
+export type CharacterGroup = "island" | "characters" | "creatures" | "things" | "codex";
 export type CharacterBox = [number, number, number, number];
 export interface CharacterDefinition {
   id: string;
@@ -13,17 +14,21 @@ export interface CharacterDefinition {
   generic?: boolean;
   box?: CharacterBox;
   face?: boolean;
+  bitmap?: BitmapDefinition;
+  translations?: Record<string, { name: string; desc: string }>;
 }
 export function createCharacterCatalog({
   creatures,
   things,
   renderers,
   language,
+  additions = [],
 }: {
   creatures: DrawnCharacter[];
   things: DrawnCharacter[];
   renderers: Record<string, Drawing>;
   language: () => string;
+  additions?: CharacterDefinition[];
 }) {
   const boxes: Record<string, CharacterBox> = {
     hamster: [-36, -47, 72, 89],
@@ -182,6 +187,7 @@ export function createCharacterCatalog({
     },
     ...creatures.filter((e) => !e.outside).map(describeCharacter(`creatures`)),
     ...things.map(describeCharacter(`things`)),
+    ...additions,
   ];
   const english: Record<string, [string, string]> = {
     liquid: [
@@ -259,6 +265,8 @@ export function createCharacterCatalog({
     find: (id?: string | null): CharacterDefinition =>
       catalog.find((character) => character.id === id) ?? fallback,
     describe: (character: CharacterDefinition) => {
+      const additional = character.translations?.[language()];
+      if (additional) return additional;
       const translated = language() === "en" ? english[character.id] : undefined;
       return translated
         ? { name: translated[0], desc: translated[1] }

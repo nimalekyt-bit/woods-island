@@ -10,7 +10,7 @@ function loadTypeScript(relative) {
   const file = path.resolve(__dirname, '..', relative);
   if (cache.has(file)) return cache.get(file).exports;
   const compiled = ts.transpileModule(fs.readFileSync(file, 'utf8'), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }, fileName: file,
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true }, fileName: file,
   }).outputText;
   const loaded = new Module(file);
   loaded.filename = file;

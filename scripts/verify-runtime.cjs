@@ -23,6 +23,7 @@ assert(Number.isInteger(port)&&port>=1024&&port<65535,'Invalid QA CDP port');
 assert(port!==3003&&musicPort!==3003,'QA ports must never use the owner music bridge on 3003');
 const results = [];
 const errors = [];
+const approvedBitmapIds=['artifact-foldling','artifact-knotling','noct-manta','null-star-thief','paradox-fold','iskorka-cat','kryazhik','nokt','latunchik','shursh','skol'];
 const testFilter=process.env.WOODS_TEST_FILTER?new RegExp(process.env.WOODS_TEST_FILTER):null;
 let matchedChecks=0;
 let proc;
@@ -113,19 +114,23 @@ function assertAttachedContainment(sample,native,label) {
 function rgbaPng(bytes) {
   assert.equal(bytes.subarray(0,8).toString('hex'),'89504e470d0a1a0a');
   const width=bytes.readUInt32BE(16),height=bytes.readUInt32BE(20);
-  assert.equal(bytes[24],8);assert.equal(bytes[25],6);assert.equal(bytes[28],0);
+  assert.equal(bytes[24],8);assert([2,6].includes(bytes[25]));assert.equal(bytes[28],0);
+  const channels=bytes[25]===6?4:3;
   const chunks=[];
   for(let p=8;p<bytes.length;){const size=bytes.readUInt32BE(p);if(bytes.toString('ascii',p+4,p+8)==='IDAT')chunks.push(bytes.subarray(p+8,p+8+size));p+=size+12;}
-  const raw=inflateSync(Buffer.concat(chunks)),stride=width*4,pixels=Buffer.alloc(stride*height);
+  const raw=inflateSync(Buffer.concat(chunks)),stride=width*channels,decoded=Buffer.alloc(stride*height);
   const paeth=(a,b,c)=>{const p=a+b-c,pa=Math.abs(p-a),pb=Math.abs(p-b),pc=Math.abs(p-c);return pa<=pb&&pa<=pc?a:pb<=pc?b:c;};
   for(let y=0;y<height;y++){
     const filter=raw[y*(stride+1)];assert(filter<=4);
     for(let x=0;x<stride;x++){
-      const index=y*stride+x,a=x>=4?pixels[index-4]:0,b=y?pixels[index-stride]:0,c=y&&x>=4?pixels[index-stride-4]:0;
+      const index=y*stride+x,a=x>=channels?decoded[index-channels]:0,b=y?decoded[index-stride]:0,c=y&&x>=channels?decoded[index-stride-channels]:0;
       const prediction=[0,a,b,Math.floor((a+b)/2),paeth(a,b,c)][filter];
-      pixels[index]=(raw[y*(stride+1)+1+x]+prediction)&255;
+      decoded[index]=(raw[y*(stride+1)+1+x]+prediction)&255;
     }
   }
+  if(channels===4)return {width,height,pixels:decoded};
+  const pixels=Buffer.alloc(width*height*4);
+  for(let p=0;p<width*height;p++){decoded.copy(pixels,p*4,p*channels,p*channels+3);pixels[p*4+3]=channels===4?decoded[p*channels+3]:255;}
   return {width,height,pixels};
 }
 
@@ -279,7 +284,7 @@ async function quit(client) {
     assert(boot.audio && Number.isFinite(boot.audio.level));
     assert(boot.audio.level >= 0 && boot.audio.level <= 1);
     if(devices.length) assert(devices.some(d => d.name === boot.audio.device || d.id === boot.audio.device));
-    assert.equal(boot.version, '1.0.0');
+    assert.equal(boot.version,JSON.parse(await fs.readFile(path.join(root,'package.json'),'utf8')).version);
     return { devices: devices.length, version: boot.version };
   });
   await check('Chosen audio endpoint changes monitoring without rerouting sound',async()=>{
@@ -447,9 +452,20 @@ async function quit(client) {
     }finally{clearInterval(timer);await main.invoke('media_pick',{id:null});await main.invoke('settings_set',{settings:prior});await pause(3400);}
   });
   await check('LRCLIB milliseconds highlight, advance, pause and seek the rendered lyrics',async()=>{
-    const prior=await main.invoke('settings_get');let progress=1000,playing=true,at=Date.now(),timer;
+    const prior=await main.invoke('settings_get');let progress=1000,playing=true,at=Date.now(),timer,phase='bootstrap';
+    const publishEvents=[];
+    await main.evaluate(`(async()=>{const {ot}=await import('/assets/runtime-debug.js');const trace={started:performance.now(),samples:[]};window.__woodsLyricsQaTrace=trace;trace.timer=setInterval(()=>{const state=ot.getState(),pill=document.querySelector('[data-media-pill]');trace.samples.push({at:performance.now()-trace.started,media:state.media,mediaLive:state.mediaLive,expanded:state.expanded,hovered:state.hovered,holdOpen:state.holdOpen,pinned:state.pinned,tab:state.tab,peek:state.peek?.kind,settings:{mediaPill:state.settings?.mediaPill,lyrics:state.settings?.lyrics,lyricsInHome:state.settings?.lyricsInHome,lyricsInPlayer:state.settings?.lyricsInPlayer},dom:{mode:pill?.dataset.mediaPill,now:Array.from(document.querySelectorAll('[data-lyrics-now]')).map(e=>e.textContent),folded:Array.from(document.querySelectorAll('[data-lyrics-line]')).map(e=>e.textContent),paused:!!document.querySelector('[data-media-paused]')}});if(trace.samples.length>1000)trace.samples.shift();},50);})()`);
+    const saveTrace=async outcome=>{
+      const browser=await main.evaluate(`(()=>{const trace=window.__woodsLyricsQaTrace;return {started:trace.started,samples:trace.samples};})()`);
+      const tracePath=path.join(directory,'lyrics-timing-proof.json');
+      await fs.writeFile(tracePath,JSON.stringify({outcome,phase,publishEvents,browser},null,2));
+      return tracePath;
+    };
     const publish=async()=>{
-      const response=await fetch(`http://127.0.0.1:${musicPort}/track`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({trackId:'lyrics-fixture',title:'Test Slowed',artist:'Fixture',duration:12000,progress:Math.min(12000,progress+(playing?Date.now()-at:0)),isPlaying:playing})});
+      const frame={trackId:'lyrics-fixture',title:'Test Slowed',artist:'Fixture',duration:12000,progress:Math.min(12000,progress+(playing?Date.now()-at:0)),isPlaying:playing};
+      const event={phase,sentAt:Date.now(),frame};publishEvents.push(event);
+      const response=await fetch(`http://127.0.0.1:${musicPort}/track`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(frame)});
+      event.receivedAt=Date.now();event.status=response.status;
       assert(response.ok,'The isolated music bridge must accept the fixture');
     };
     const nowText=()=>main.evaluate('document.querySelector("[data-lyrics-now]")?.textContent');
@@ -461,25 +477,37 @@ async function quit(client) {
       await main.invoke('settings_set',{settings:{lyrics:true,lyricsInPlayer:true,lyricsInHome:true,mediaPill:'player'}});
       at=Date.now();await publish();await main.invoke('media_pick',{id:'ru.yandex.desktop.music.mod.connector'});
       timer=setInterval(()=>publish().catch(error=>errors.push({description:error.message})),120);
+      phase='first line';
       await waitFor(main,'document.querySelector("[data-lyrics-now]")?.textContent === "Первая строка"','First active lyrics line');
+      phase='advance';
       progress=3500;playing=true;at=Date.now();await publish();
       await waitFor(main,'document.querySelector("[data-lyrics-now]")?.textContent === "Вторая строка"','Lyrics progress while playing');
+      phase='pause450';
       progress=6000;playing=false;at=Date.now();await publish();await pause(450);
-      assert.equal(await nowText(),'Вторая строка');await pause(1000);assert.equal(await nowText(),'Вторая строка');
+      assert.equal(await nowText(),'Вторая строка');phase='pause1450';await pause(1000);assert.equal(await nowText(),'Вторая строка');
+      phase='seek backwards';
       progress=0;at=Date.now();await publish();
       await waitFor(main,'document.querySelector("[data-lyrics-now]")?.textContent === "Первая строка"','Lyrics seek backwards');
+      phase='seek forwards';
       progress=9000;at=Date.now();await publish();
       await waitFor(main,'document.querySelector("[data-lyrics-now]")?.textContent === "Третья строка"','Lyrics seek forwards');
       await waitFor(main,'Number(getComputedStyle(document.querySelector("[data-lyrics-now]")).opacity) >= 0.99','Lyrics highlight animation');
       const active=await main.evaluate('(()=>{const e=document.querySelector("[data-lyrics-now]");return {color:getComputedStyle(e).color,weight:getComputedStyle(e).fontWeight,opacity:getComputedStyle(e).opacity};})()');
       assert(Number(active.weight)>=600);assert(Number(active.opacity)>=0.99);
       playing=true;at=Date.now();await publish();
+      phase='folded lyrics';
       await main.invoke('settings_set',{settings:{mediaPill:'lyrics'}});
       await waitFor(main,'document.querySelector("[data-media-pill=lyrics] [data-lyrics-line]")?.textContent.includes("Третья строка")','Folded lyrics mode');
       await main.evaluate('(async()=>{const m=await import("/assets/runtime-debug.js");m.ot.setState({expanded:true,tab:"home"});})()');
+      phase='home lyrics';
       await waitFor(main,'document.querySelector("[data-home] [data-lyrics-now]")?.textContent === "Третья строка"','Home lyrics mode');
-      assert(lyricsRequests>=4);return {milliseconds:true,highlight:true,advance:true,pause:true,seekBothDirections:true,foldedLyrics:true,homeLyrics:true,missing404:true,retryable503:true,isolatedBridge:true};
+      assert(lyricsRequests>=4);const timingProof=await saveTrace('passed');return {milliseconds:true,highlight:true,advance:true,pause:true,seekBothDirections:true,foldedLyrics:true,homeLyrics:true,missing404:true,retryable503:true,isolatedBridge:true,timingProof};
+    }catch(error){
+      const timingProof=await saveTrace('failed');
+      const screenshot=await main.command('Page.captureScreenshot',{format:'png'});await fs.writeFile(path.join(directory,'lyrics-failure.png'),Buffer.from(screenshot.data,'base64'));
+      console.log(`Lyrics diagnostic phase ${phase}: ${timingProof}`);throw error;
     }finally{
+      await main.evaluate('clearInterval(window.__woodsLyricsQaTrace?.timer);delete window.__woodsLyricsQaTrace');
       clearInterval(timer);await main.invoke('media_pick',{id:null});await main.evaluate('(async()=>{const m=await import("/assets/runtime-debug.js");m.ot.setState({expanded:false,tab:"home"});})()');
       await main.invoke('settings_set',{settings:{lyrics:prior.lyrics,lyricsInPlayer:prior.lyricsInPlayer,lyricsInHome:prior.lyricsInHome,mediaPill:prior.mediaPill}});await pause(3400);
     }
@@ -585,7 +613,7 @@ async function quit(client) {
       return {measurements,insideCover:true,insidePill:true,twoBarsVisible:true,highContrast:true,scales:[80,100,150,200],modes:['title','normal','lyrics']};
     }finally{clearInterval(timer);await main.invoke('media_pick',{id:null});await main.invoke('settings_set',{settings:prior});await pause(3400);}
   });
-  await check('Typed character engine renders all 25 characters, pause, sleep and cursor at every scale',async()=>{
+  await check('Typed character engine renders 36 builtin and 9 optional characters, pause, sleep and cursor at every scale',async()=>{
     const prior=await main.invoke('settings_get');
     const measured=[];let playing=false,timer;
     const send=()=>fetch(`http://127.0.0.1:${musicPort}/track`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({trackId:'character-engine-fixture',title:'Character fixture',artist:'Fixture',duration:20000,progress:1000,isPlaying:playing})});
@@ -593,7 +621,12 @@ async function quit(client) {
       await main.invoke('settings_set',{settings:{liquidWith:false,showClock:false,showBattery:false,showWeather:false,showCaps:false,layoutInPill:false,desktopInPill:false,agentsStatus:false,obsStatus:false,showPrivacy:false,downloadsInPill:'off',moduleShelf:false,openOnHover:false,lyrics:false,mediaPill:'normal',moduleMedia:true}});
       await send();await main.invoke('media_pick',{id:'ru.yandex.desktop.music.mod.connector'});
       timer=setInterval(()=>void send().catch(()=>{}),80);
-      const catalog=await main.evaluate('(async()=>{const {characterCatalog}=await import("/assets/runtime-debug.js");return characterCatalog.map(({id,kind})=>({id,kind}));})()');
+      const catalog=await main.evaluate('(async()=>{const {characterCatalog}=await import("/assets/runtime-debug.js");return characterCatalog.map(({id,kind,bitmap})=>({id,kind,source:bitmap?.source}));})()');
+      assert.equal(catalog.length,46);assert.equal(catalog.filter(c=>c.source==='codex').length,9);
+      assert.deepEqual(catalog.filter(c=>c.source==='woods').map(c=>c.id).sort(),approvedBitmapIds.slice().sort(),'The approved eleven bitmap pets are the production authored catalog');
+      assert(!catalog.some(c=>c.id==='stardust-beetle'),'Rejected beetle draft must not remain in the production catalog');
+      const library=await main.invoke('pets_catalog');
+      const optionalReady=new Map(library.pets.map(pet=>['codex-pet-'+pet.id,pet.available]));
       for(const scale of [80,100,150,200]) {
         await main.invoke('settings_set',{settings:{scale}});
         const rows=[];
@@ -610,29 +643,35 @@ async function quit(client) {
             const roots=Array.from(pill.querySelectorAll('[data-character="${definition.id}"]'));
             const root=roots.findLast(element=>element.dataset.characterMood===expectedMood)??roots.at(-1);
             const svg=root?.tagName==='svg'?root:root?.querySelector('svg');
+            const bitmap=root?.querySelector('[data-bitmap-art]');
             let artwork=null;
             if(svg){const box=svg.getBBox(),matrix=svg.getScreenCTM();
               const points=[[box.x,box.y],[box.x+box.width,box.y+box.height]].map(([x,y])=>new DOMPoint(x,y).matrixTransform(matrix));
               artwork={left:points[0].x,top:points[0].y,right:points[1].x,bottom:points[1].y,width:box.width,height:box.height};}
+            if(bitmap){const rect=bitmap.getBoundingClientRect();artwork={left:rect.left,top:rect.top,right:rect.right,bottom:rect.bottom,width:rect.width,height:rect.height};}
             const bounds=pill.getBoundingClientRect();
             return {mood:root?.dataset.characterMood,
-              nodes:svg?.querySelectorAll('*').length??0,artwork,viewport:[innerWidth,innerHeight],
+              nodes:svg?.querySelectorAll('*').length??(bitmap?1:0),artwork,viewport:[innerWidth,innerHeight],
+              availability:root?.dataset.petAvailability,frame:root?.dataset.petFrame,
               pill:{width:bounds.width,height:bounds.height},clip:getComputedStyle(pill.querySelector('[data-liquid-clip]')).overflow};
             })()`);
             let sample=await sampleCurrent();
             // Transport updates and AnimatePresence exits are asynchronous. Wait for the
             // requested painted state, rather than accepting an outgoing slot's element.
-            for(let attempt=0;definition.id!=='none'&&(sample.nodes===0||sample.mood!==expectedMood)&&attempt<30;attempt++){
+            const unavailable=definition.source==='codex'&&!optionalReady.get(definition.id);
+            for(let attempt=0;definition.id!=='none'&&!unavailable&&(sample.nodes===0||sample.mood!==expectedMood)&&attempt<30;attempt++){
               await send();await pause(100);sample=await sampleCurrent();
             }
             rows.push({...definition,state,...sample});
           }
         }
-        assert.equal(rows.length,104);
+        assert.equal(rows.length,catalog.length*4);
         for(const row of rows){
           assert(row.pill.width>0&&row.pill.height>0,JSON.stringify(row));
           assert.equal(row.clip,'hidden');
           if(row.id==='none'){assert.equal(row.nodes,0);continue;}
+          if(row.source==='codex'&&!optionalReady.get(row.id)){assert(['unavailable','error'].includes(row.availability),JSON.stringify(row));assert.equal(row.nodes,0);continue;}
+          if(row.source){assert.equal(row.availability,'ready',JSON.stringify(row));assert.match(row.frame,/^\d+:\d+$/);}
           assert(row.nodes>0,'Drawing missing: '+JSON.stringify(row));
           assert.equal(row.mood,row.state==='music'?'music':row.state==='sleep'?'sleep':'idle',JSON.stringify(row));
           assert(row.artwork.width>0&&row.artwork.height>0,JSON.stringify(row));
@@ -644,7 +683,7 @@ async function quit(client) {
       const focusCheck=await assertPassiveForeground(main);
       const screenshot=await main.command('Page.captureScreenshot',{format:'png'});
       await fs.writeFile(path.join(directory,'typed-character-engine.png'),Buffer.from(screenshot.data,'base64'));
-      return {characters:25,plainOption:true,scales:[80,100,150,200],states:['idle','music','pause','sleep'],
+      return {builtinCharacters:36,optionalCodex:9,optionalStatus:library.status,plainOption:true,scales:[80,100,150,200],states:['idle','music','pause','sleep'],
         cursor:'Synthetic native coordinates; physical pointer untouched',measured,noFocus:true,...focusCheck};
     }finally{
       clearInterval(timer);await main.invoke('media_pick',{id:null});
@@ -652,6 +691,96 @@ async function quit(client) {
       await main.evaluate('(async()=>{const {ot,setCharacterCursor}=await import("/assets/runtime-debug.js");setCharacterCursor(null);ot.setState({mediaLive:false,asleep:false,media:null,expanded:false,palette:false,peek:null,queue:[]});})()');
       await pause(400);
     }
+  });
+  await check('Approved bitmap pets paint real pixels, track gaze, blink, sleep and freeze in WebView2',async()=>{
+    const prior=await main.invoke('settings_get'),measurements=[];
+    const ids=approvedBitmapIds;
+    const debug="/assets/runtime-debug.js";
+    const freeze=enabled=>main.evaluate(`(async()=>{const m=await import(${JSON.stringify(debug)});m.suspendCharacterAnimations('bitmap-native-qa',${enabled});})()`);
+    const reset=asleep=>main.evaluate(`(async()=>{const m=await import(${JSON.stringify(debug)});m.ot.setState({mediaLive:false,asleep:${asleep},media:null,expanded:false,palette:false,peek:null,queue:[],hovered:false,holdOpen:false,pinned:false,tall:false,dragOver:null});})()`);
+    const sample=id=>main.evaluate(`(()=>{const roots=Array.from(document.querySelector('[data-island]').querySelectorAll('[data-character="${id}"]'));const e=roots.at(-1),a=e?.querySelector('[data-bitmap-art]'),f=e?.querySelector('[data-bitmap-face]');return {mood:e?.dataset.characterMood,state:e?.dataset.petState,animation:e?.dataset.petAnimation,frame:e?.dataset.petFrame,availability:e?.dataset.petAvailability,look:e?.dataset.petLook,face:f&&!f.hidden?getComputedStyle(f).backgroundPosition:null,body:a?getComputedStyle(a).backgroundPosition:null};})()`);
+    const screenshot=async()=>Buffer.from((await main.command('Page.captureScreenshot',{format:'png'})).data,'base64');
+    // WebView zoom changes CSS coordinates and screenshot surface pixels by
+    // different factors. Calibrate full captures, instead of sending CSS crops
+    // directly to CDP (80% zoom otherwise samples the black beside the pet).
+    const differences=(a,b,rect)=>{const first=rgbaPng(a),second=rgbaPng(b);assert.equal(first.width,second.width);assert.equal(first.height,second.height);const sx=first.width/rect.viewportWidth,sy=first.height/rect.viewportHeight;
+      const bounds=[Math.max(0,Math.floor(rect.x*sx)),Math.max(0,Math.floor(rect.y*sy)),Math.min(first.width,Math.ceil((rect.x+rect.width)*sx)),Math.min(first.height,Math.ceil((rect.y+rect.height)*sy))];let changed=0;
+      for(let y=bounds[1];y<bounds[3];y++)for(let x=bounds[0];x<bounds[2];x++){const p=(y*first.width+x)*4;if(first.pixels.subarray(p,p+4).some((value,index)=>Math.abs(value-second.pixels[p+index])>3))changed++;}
+      return {changed,physicalBounds:bounds,surface:[first.width,first.height],cssToSurface:[sx,sy]};};
+    try{
+      await main.invoke('media_pick',{id:null});
+      await main.invoke('settings_set',{settings:{moduleMedia:false,characterMusic:'',liquidWith:false,showClock:false,showBattery:false,showWeather:false,showCaps:false,layoutInPill:false,desktopInPill:false,agentsStatus:false,obsStatus:false,showPrivacy:false,downloadsInPill:'off',moduleShelf:false,openOnHover:false}});
+      await reset(false);
+      for(const scale of [80,100,150,200])for(const id of ids){
+        await freeze(false);await main.invoke('settings_set',{settings:{scale,character:id}});await reset(false);
+        await waitFor(main,`(()=>{const e=document.querySelector('[data-island] [data-character="${id}"]'),a=e?.querySelector('[data-bitmap-art]');return e?.dataset.petAvailability==='ready'&&e.dataset.petFrame&&a&&getComputedStyle(a).backgroundImage!=='none';})()`,id+' painted atlas');await pause(400);await freeze(true);
+        const clip=await main.evaluate(`(()=>{const a=document.querySelector('[data-island] [data-character="${id}"] [data-bitmap-art]'),r=a.getBoundingClientRect();return {x:Math.max(0,Math.floor(r.left)),y:Math.max(0,Math.floor(r.top)),width:Math.ceil(r.width)+2,height:Math.ceil(r.height)+2,viewportWidth:innerWidth,viewportHeight:innerHeight};})()`);
+        const visible=await screenshot();
+        await main.evaluate(`document.querySelector('[data-island] [data-character="${id}"] [data-bitmap-art]').style.visibility='hidden'`);await pause(60);
+        const hidden=await screenshot();
+        await main.evaluate(`document.querySelector('[data-island] [data-character="${id}"] [data-bitmap-art]').style.visibility=''`);await pause(60);
+        const comparison=differences(visible,hidden,clip),painted=comparison.changed;
+        if(painted<=12){await fs.writeFile(path.join(directory,`bitmap-${id}-${scale}-visible.png`),visible);await fs.writeFile(path.join(directory,`bitmap-${id}-${scale}-hidden.png`),hidden);const debug=await main.evaluate(`(()=>{const e=document.querySelector('[data-island] [data-character="${id}"]'),a=e?.querySelector('[data-bitmap-art]');return {clip:${JSON.stringify(clip)},sample:${JSON.stringify(await sample(id))},ratio:devicePixelRatio,viewport:{width:innerWidth,height:innerHeight,scale:visualViewport.scale},art:a?{background:getComputedStyle(a).backgroundImage.slice(0,80),position:getComputedStyle(a).backgroundPosition,size:getComputedStyle(a).backgroundSize}:null,ancestors:Array.from((function*(n){while(n){yield n;n=n.parentElement;}})(a)).map(n=>{const s=getComputedStyle(n),r=n.getBoundingClientRect();return {tag:n.tagName,class:n.className,display:s.display,visibility:s.visibility,opacity:s.opacity,rect:[r.left,r.top,r.width,r.height]};})};})()`);await fs.writeFile(path.join(directory,`bitmap-${id}-${scale}-debug.json`),JSON.stringify(debug,null,2));}
+        assert(painted>12,`No bitmap paint at ${id}/${scale}: ${painted}`);
+        measurements.push({id,scale,paintedPixels:painted,clip,...comparison});
+        console.log(`Bitmap paint ${id}/${scale}: ${painted} pixels`);
+        if(scale===100)await fs.writeFile(path.join(directory,`bitmap-${id}.png`),visible);
+      }
+      const reactions=[];
+      await main.invoke('settings_set',{settings:{scale:100}});
+      for(const id of ids){
+        await freeze(false);await main.invoke('settings_set',{settings:{character:id}});await reset(false);
+        await waitFor(main,`document.querySelector('[data-island] [data-character="${id}"]')?.dataset.petAvailability==='ready'`,id+' reaction atlas');
+        const looks=[];
+        for(const direction of [-1,1]){
+          await freeze(false);
+          await main.evaluate(`(async()=>{const e=document.querySelector('[data-island] [data-character="${id}"]'),r=e.getBoundingClientRect();for(let n=0;n<5;n++){window.dispatchEvent(new MouseEvent('mousemove',{clientX:r.left+r.width/2+${direction}*250,clientY:r.top+r.height/2}));await new Promise(resolve=>setTimeout(resolve,70));}})()`);
+          await freeze(true);const gaze=await sample(id);assert(gaze.face,'Awake face overlay missing: '+id);looks.push(gaze);
+        }
+        assert.notEqual(looks[0].face,looks[1].face,'Bitmap face must move independently: '+id);
+        await freeze(false);
+        const timeline=await main.evaluate(`(async()=>{const snapshots=[];for(let n=0;n<230;n++){const e=Array.from(document.querySelector('[data-island]').querySelectorAll('[data-character="${id}"]')).at(-1);snapshots.push({animation:e?.dataset.petAnimation,frame:e?.dataset.petFrame,faceHidden:e?.querySelector('[data-bitmap-face]')?.hidden});await new Promise(resolve=>setTimeout(resolve,35));}return snapshots;})()`);
+        assert(new Set(timeline.map(frame=>frame.frame)).size>2,'Bitmap timeline did not animate: '+id);
+        assert(timeline.some(frame=>frame.animation==='blink'&&frame.faceHidden),'Automatic bitmap blink missing: '+id);
+        await freeze(true);const stillBefore=await sample(id);await pause(350);assert.deepEqual(await sample(id),stillBefore,'Suspended bitmap keeps changing: '+id);
+        await freeze(false);await reset(true);await waitFor(main,`document.querySelector('[data-island] [data-character="${id}"]')?.dataset.characterMood==='sleep'`,id+' sleep');await pause(150);
+        const sleeping=await sample(id);assert.equal(sleeping.state,'sleep');assert.equal(sleeping.look,'off');assert.equal(sleeping.face,null);
+        await reset(false);await waitFor(main,`document.querySelector('[data-island] [data-character="${id}"]')?.dataset.characterMood==='idle'`,id+' wake');
+        reactions.push({id,looks,animatedFrames:new Set(timeline.map(frame=>frame.frame)).size,automaticBlink:true,sleeping,frozen:true});
+        console.log(`Bitmap reactions ${id}: gaze/blink/sleep/freeze passed`);
+      }
+      return {paintMeasurements:measurements,reactions,physicalInput:false,...await assertPassiveForeground(main)};
+    }finally{await freeze(false);await reset(false);await main.invoke('settings_set',{settings:prior});await pause(300);}
+  });
+  await check('Local Codex import reads installed atlases, validates checksums and keeps optional settings honest',async()=>{
+    const expectedVersion=JSON.parse(await fs.readFile(path.join(root,'package.json'),'utf8')).version;
+    assert.equal((await main.invoke('bootstrap')).version,expectedVersion,'Native executable version differs from the frontend package');
+    const imported=await main.invoke('pets_import_codex');
+    assert.equal(imported.pets.length,9);const ready=imported.pets.filter(p=>p.available);
+    if(process.env.WOODS_TEST_EXPECT_CODEX==='1')assert.equal(ready.length,9,JSON.stringify(imported));
+    for(const pet of ready){
+      const image=await main.invoke('pets_asset',{id:pet.id});assert.match(image,/^data:image\/webp;base64,/);
+      const bytes=Buffer.from(image.split(',')[1],'base64');assert.equal(createHash('sha256').update(bytes).digest('hex'),pet.sha256);
+      assert.equal(bytes.length,pet.bytes);assert.equal(bytes.toString('ascii',0,4),'RIFF');assert.equal(bytes.toString('ascii',8,12),'WEBP');
+    }
+    const badId=await main.evaluate(`(async()=>{try{await window.__TAURI_INTERNALS__.invoke('pets_asset',{id:'../secret'});return null;}catch(error){return String(error);}})()`);assert(badId,'Unsafe asset ID must be rejected');
+    if(ready.length){const file=path.join(dataDir,'pets','codex',ready[0].id,'sheet.webp'),bytes=await fs.readFile(file),changed=Buffer.from(bytes);changed[changed.length-1]^=1;try{await fs.writeFile(file,changed);const rejected=await main.evaluate(`(async()=>{try{await window.__TAURI_INTERNALS__.invoke('pets_asset',{id:${JSON.stringify(ready[0].id)}});return null;}catch(error){return String(error);}})()`);assert.match(rejected,/checksum/i);}finally{await fs.writeFile(file,bytes);}}
+    await main.invoke('open_settings',{section:'character'});const pages=await pagesReady(p=>p.url.endsWith('/settings.html')),settings=await attach(pages.find(p=>p.url.endsWith('/settings.html')));
+    await waitFor(settings,'!!document.querySelector("[data-pet-import]")','Local pet import control');
+    await waitFor(settings,'!!document.querySelector("[data-pet-library-status]")&&document.querySelector("[data-pet-library-status]").dataset.petLibraryStatus!=="loading"','Local pet settings availability');
+    const indexPath=path.join(dataDir,'pets','codex','index.json'),priorIndex=await fs.stat(indexPath).catch(()=>null);
+    const importButton=await settings.evaluate(`(async()=>{const button=document.querySelector('[data-pet-import]');button.click();await new Promise(resolve=>setTimeout(resolve,200));for(let n=0;n<200;n++){if(!button.disabled)break;await new Promise(resolve=>setTimeout(resolve,50));}return {disabled:button.disabled,status:document.querySelector('[data-pet-library-status]').dataset.petLibraryStatus,invokeWritable:Object.getOwnPropertyDescriptor(window.__TAURI_INTERNALS__,'invoke')?.writable};})()`);
+    assert.equal(importButton.disabled,false,'Import button must become available after completion');
+    if(priorIndex){const nextIndex=await fs.stat(indexPath);assert(nextIndex.mtimeMs>priorIndex.mtimeMs,'Import button must rewrite the native profile index');importButton.indexRewritten=true;}
+    const options=await settings.evaluate(`Array.from(document.querySelectorAll('[data-character-music] option')).filter(e=>e.value).map(e=>({id:e.value,disabled:e.disabled}))`);
+    assert.equal(options.length,45);assert.equal(options.filter(p=>!p.id.startsWith('codex-pet-')).length,36);
+    for(const id of approvedBitmapIds)assert(options.some(option=>option.id===id&&!option.disabled),'Approved bitmap is selectable in music settings: '+id);
+    assert(!options.some(option=>option.id==='stardust-beetle'),'Rejected beetle draft must not remain selectable');
+    for(const option of options.filter(p=>p.id.startsWith('codex-pet-'))){const pet=imported.pets.find(p=>'codex-pet-'+p.id===option.id);assert.equal(option.disabled,!pet.available,option.id);}
+    const status=await settings.evaluate('document.querySelector("[data-pet-library-status]")?.dataset.petLibraryStatus');assert(status&&status!=='loading');
+    assert(await settings.evaluate('!!document.querySelector("[data-character-option=codex-pet-codex]")'),'Codex group is visible');
+    await main.invoke('plugin:window|close',{label:'settings'});await waitForWindowClosed('/settings.html');
+    return {status:imported.status,available:ready.length,checksums:ready.map(p=>({id:p.id,bytes:p.bytes,sha256:p.sha256})),badId,tamperRejected:ready.length>0,importButton,settingsOptions:options,localProfileOnly:true,...await assertPassiveForeground(main)};
   });
   await check('Attached tail and legs remain painted inside native bounds through pause, move and scale',async()=>{
     const prior=await main.invoke('settings_get');
@@ -1175,7 +1304,7 @@ async function quit(client) {
     }
     await settings.evaluate('document.querySelector("[data-nav=character]").click()');await pause(100);
     const characters=await settings.evaluate('Array.from(document.querySelectorAll("[data-character-music] option")).map(e=>e.value).filter(Boolean)');
-    assert.equal(characters.length,25);
+    assert.equal(characters.length,45);
     const previousCharacter=(await main.invoke('settings_get')).character;
     for(const character of characters){await main.invoke('settings_set',{settings:{character}});await pause(70);assert(await main.evaluate('!!document.querySelector("[data-island]")'));}
     await main.invoke('settings_set',{settings:{character:previousCharacter}});

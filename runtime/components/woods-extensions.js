@@ -62,7 +62,7 @@ export function woodsAbout(jsx, t) {
       jsx.jsx("ul", {
         className: "grid grid-cols-2 gap-x-4 gap-y-1 text-[12px] text-white/70",
         children: [
-          t("Все 25 персонажей", "All 25 characters"),
+          t("Все 36 встроенных персонажей", "All 36 built-in characters"),
           t("Заметки и экспорт в Obsidian", "Notes and Obsidian export"),
           t("OBS и статусы ИИ-агентов", "OBS and AI agent status"),
           t("Локальные модели и свои API-ключи", "Local models and your API keys"),

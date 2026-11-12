@@ -1,4 +1,6 @@
 import { ObsidianVaultSettings } from '../components/ObsidianVaultSettings';
+import { PetLibrarySettings } from '../components/PetLibrarySettings';
+import { usePetLibrary } from '../characters/pet-library';
 // Compatibility application source; migrate components incrementally.
 import { woodsAbout, woodsContact, woodsInfoIcon } from "./../components/woods-extensions.js";
 
@@ -153,19 +155,33 @@ function Ne(e, t) {
       ? n(`сверху`, `above`)
       : n(`снизу`, `below`);
 }
-var L = `Woods Island 1.0.0`,
-  Pe = `Woods Island 1.0.0`,
-  Fe = `Woods Island 1.0.0`,
-  Ie = `Woods Island 1.0.0`,
-  R = `Woods Island 1.0.0`,
-  Le = `Woods Island 1.0.0`,
-  Re = `Woods Island 1.0.0`,
-  ze = `Woods Island 1.0.0`,
-  Be = `Woods Island 1.0.0`,
-  Ve = `Woods Island 1.0.0`,
-  z = `Woods Island 1.0.0`,
+var L = `Woods Island 1.1.0`,
+  Pe = `Woods Island 1.1.0`,
+  Fe = `Woods Island 1.1.0`,
+  Ie = `Woods Island 1.1.0`,
+  R = `Woods Island 1.1.0`,
+  Le = `Woods Island 1.1.0`,
+  Re = `Woods Island 1.1.0`,
+  ze = `Woods Island 1.1.0`,
+  Be = `Woods Island 1.1.0`,
+  Ve = `Woods Island 1.1.0`,
+  z = `Woods Island 1.1.0`,
   He = `https://github.com/nimalekyt-bit`,
   Ue = {
+    "../../release-notes/1.1.0.md": `Woods Island 1.1.0
+
+- 11 одобренных авторских bitmap-питомцев, включая рыжего котёнка Искорку.
+- Слежение за курсором, анимации настроений и автоматическое моргание.
+- Девять питомцев Codex доступны через локальный импорт установленного приложения.
+- Настройки доступности, музыка и сон; версия и заметки о выпуске обновлены.
+
+---
+
+- 11 approved original bitmap pets, including Iskorka the ginger kitten.
+- Cursor gaze, mood animations and automatic blinking.
+- Nine Codex pets are available through a local import from the installed app.
+- Availability controls, music and sleep; updated version and release notes.
+`,
     "../../release-notes/1.0.0.md": `Woods Island 1.0.0
 
 - Бесплатные функции без ключа и подписки.
@@ -375,6 +391,7 @@ var U = o(),
     { id: `characters`, label: n(`Персонажи`, `Characters`) },
     { id: `creatures`, label: n(`Существа`, `Creatures`) },
     { id: `things`, label: n(`Вещи`, `Things`) },
+    { id: `codex`, label: n(`Локальные питомцы Codex`, `Local Codex pets`) },
   ];
 function tt({ c: e, mood: t }) {
   return e.kind === `slot`
@@ -394,6 +411,7 @@ function tt({ c: e, mood: t }) {
       });
 }
 function nt({ value: e, onChange: t, pro: r, onLocked: i }) {
+  const petLibrary = usePetLibrary();
   let [a, o] = (0, F.useState)(`idle`);
   return (0, U.jsxs)(`div`, {
     className: `flex flex-col gap-4 rounded-2xl bg-white/[0.045] p-3`,
@@ -435,14 +453,17 @@ function nt({ value: e, onChange: t, pro: r, onLocked: i }) {
                   .map((n) => {
                     let o = e === n.id,
                       s = !r && !Ce(n.id),
+                      unavailable = n.bitmap?.source === 'codex' && !petLibrary.pets.some(pet => pet.id === n.bitmap.file && pet.available),
                       { name: c, desc: l } = re(n);
                     return (0, U.jsxs)(
                       `button`,
                       {
+                        "data-character-option": n.id,
+                        disabled: unavailable,
                         onClick: () => (s ? i() : t(n.id)),
-                        title: l,
+                        title: unavailable ? l + ' · ' + n.id : l,
                         "aria-pressed": o,
-                        className: `flex flex-col gap-1.5 rounded-xl p-1.5 text-left transition-colors ${o ? `bg-[#8ea2ff]/15 ring-1 ring-[#8ea2ff]` : `hover:bg-white/[0.05]`}`,
+                        className: `flex flex-col gap-1.5 rounded-xl p-1.5 text-left transition-colors disabled:opacity-40 ${o ? `bg-[#8ea2ff]/15 ring-1 ring-[#8ea2ff]` : `hover:bg-white/[0.05]`}`,
                         children: [
                           (0, U.jsxs)(`div`, {
                             className: `relative h-[78px] overflow-hidden rounded-lg bg-[#1d1d20]`,
@@ -1972,6 +1993,7 @@ function Rt() {
   return woodsAbout(U, n);
 }
 function zt() {
+  const petLibrary = usePetLibrary();
   let [e, t] = (0, F.useState)(null),
     i = (0, F.useRef)(null),
     a = (0, F.useRef)(0);
@@ -2228,8 +2250,8 @@ function zt() {
                               preview: `music`,
                               title: n(`Пока играет музыка`, `While music plays`),
                               hint: n(
-                                `Другой персонаж на время музыки: например, кот в покое, а танцует медуза. Персонаж из Pro без Pro не меняет обычного`,
-                                `Another character while music plays: a cat at rest and a dancing jellyfish, say. One of Pro, without Pro, leaves the usual one`,
+                                `Другой персонаж на время музыки: например, кот в покое, а танцует медуза. Локальный питомец Codex доступен после импорта`,
+                                `Another character while music plays: a cat at rest and a dancing jellyfish, say. Local Codex pets are available after import`,
                               ),
                               children: (0, U.jsxs)(`select`, {
                                 "data-character-music": !0,
@@ -2248,6 +2270,7 @@ function zt() {
                                         `option`,
                                         {
                                           value: e.id,
+                                          disabled: e.bitmap?.source === 'codex' && !petLibrary.pets.some(pet => pet.id === e.bitmap.file && pet.available),
                                           children: [re(e).name, !l.pro && !Ce(e.id) ? ` · Pro` : ``],
                                         },
                                         e.id,
@@ -2289,6 +2312,7 @@ function zt() {
                             }),
                           ],
                         }),
+                        (0, U.jsx)(PetLibrarySettings, { language: n('ru', 'en') }),
                         (0, U.jsx)(nt, {
                           value: e.character || `liquid`,
                           onChange: (e) => H({ character: e }),

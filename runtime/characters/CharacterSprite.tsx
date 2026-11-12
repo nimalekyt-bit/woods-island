@@ -2,6 +2,7 @@ import { React } from '../react';
 import type { CharacterDefinition, CharacterBox } from './catalog';
 import type { CharacterMood } from './types';
 import { PixelCharacter } from './PixelCharacter';
+import { BitmapSprite } from './BitmapSprite';
 import { createCharacterPose, genericMotion, GENERIC_BOUNCE_LIMIT } from './pose';
 import { subscribeAnimationFrames, refreshCharacterScheduler, animationInterval } from './scheduler';
 import { createSvg, createThinkingDots, createSleepSymbol, createAttentionBadge,
@@ -49,6 +50,8 @@ export function CharacterSprite({ definition, mood = 'idle', width, height, look
     return () => { stop(); element.replaceChildren(); };
   }, [definition, box]);
   React.useEffect(() => { refreshCharacterScheduler(); }, [mood, still]);
+
+  if (definition.bitmap) return <BitmapSprite definition={definition} mood={mood} width={width} height={height} look={look} accent={accent} level={level} still={still} className={className}/>;
 
   if (definition.id === 'pixel') {
     const px = Math.max(1, Math.min(6, Math.floor(height * 0.86 / 8), Math.floor(width * 0.92 / 11)));

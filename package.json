@@ -1,6 +1,6 @@
 {
   "name": "woods-island",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Dynamic Island HUD for Windows 10 & 11 (Woods Corp)",
   "private": true,
   "packageManager": "pnpm@10.33.0",
@@ -17,7 +17,7 @@
     "test:hooks": "node --test scripts/island-notify.test.cjs",
     "test:runtime-state": "node --test scripts/runtime-state.test.cjs scripts/island-events.test.cjs scripts/island-geometry.test.cjs",
     "test:ipc": "node --test scripts/ipc-generation.test.cjs",
-    "test:characters": "node --test scripts/character-engine.test.cjs scripts/character-pixel.test.cjs scripts/character-state.test.cjs scripts/liquid-engine.test.cjs scripts/character-attached.test.cjs",
+    "test:characters": "node --test scripts/character-engine.test.cjs scripts/character-pixel.test.cjs scripts/character-state.test.cjs scripts/liquid-engine.test.cjs scripts/character-attached.test.cjs scripts/bitmap-character.test.cjs scripts/pet-library.test.cjs",
     "check:authors": "node scripts/check-commit-owners.mjs",
     "test:native": "node scripts/verify-runtime.cjs",
     "test:controls": "node scripts/verify-controls.cjs",

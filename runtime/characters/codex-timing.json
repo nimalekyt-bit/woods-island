@@ -1,0 +1,332 @@
+{
+  "idle": {
+    "frames": [
+      {
+        "rowIndex": 0,
+        "columnIndex": 0,
+        "durationMs": 1680
+      },
+      {
+        "rowIndex": 0,
+        "columnIndex": 1,
+        "durationMs": 660
+      },
+      {
+        "rowIndex": 0,
+        "columnIndex": 2,
+        "durationMs": 660
+      },
+      {
+        "rowIndex": 0,
+        "columnIndex": 3,
+        "durationMs": 840
+      },
+      {
+        "rowIndex": 0,
+        "columnIndex": 4,
+        "durationMs": 840
+      },
+      {
+        "rowIndex": 0,
+        "columnIndex": 5,
+        "durationMs": 1920
+      }
+    ],
+    "loop": true
+  },
+  "running-right": {
+    "frames": [
+      {
+        "rowIndex": 1,
+        "columnIndex": 0,
+        "durationMs": 120
+      },
+      {
+        "rowIndex": 1,
+        "columnIndex": 1,
+        "durationMs": 120
+      },
+      {
+        "rowIndex": 1,
+        "columnIndex": 2,
+        "durationMs": 120
+      },
+      {
+        "rowIndex": 1,
+        "columnIndex": 3,
+        "durationMs": 120
+      },
+      {
+        "rowIndex": 1,
+        "columnIndex": 4,
+        "durationMs": 120
+      },
+      {
+        "rowIndex": 1,
+        "columnIndex": 5,
+        "durationMs": 120
+      },
+      {
+        "rowIndex": 1,
+        "columnIndex": 6,
+        "durationMs": 120
+      },
+      {
+        "rowIndex": 1,
+        "columnIndex": 7,
+        "durationMs": 220
+      }
+    ],
+    "loop": true
+  },
+  "running-left": {
+    "frames": [
+      {
+        "rowIndex": 2,
+        "columnIndex": 0,
+        "durationMs": 120
+      },
+      {
+        "rowIndex": 2,
+        "columnIndex": 1,
+        "durationMs": 120
+      },
+      {
+        "rowIndex": 2,
+        "columnIndex": 2,
+        "durationMs": 120
+      },
+      {
+        "rowIndex": 2,
+        "columnIndex": 3,
+        "durationMs": 120
+      },
+      {
+        "rowIndex": 2,
+        "columnIndex": 4,
+        "durationMs": 120
+      },
+      {
+        "rowIndex": 2,
+        "columnIndex": 5,
+        "durationMs": 120
+      },
+      {
+        "rowIndex": 2,
+        "columnIndex": 6,
+        "durationMs": 120
+      },
+      {
+        "rowIndex": 2,
+        "columnIndex": 7,
+        "durationMs": 220
+      }
+    ],
+    "loop": true
+  },
+  "waving": {
+    "frames": [
+      {
+        "rowIndex": 3,
+        "columnIndex": 0,
+        "durationMs": 140
+      },
+      {
+        "rowIndex": 3,
+        "columnIndex": 1,
+        "durationMs": 140
+      },
+      {
+        "rowIndex": 3,
+        "columnIndex": 2,
+        "durationMs": 140
+      },
+      {
+        "rowIndex": 3,
+        "columnIndex": 3,
+        "durationMs": 280
+      }
+    ],
+    "loop": true
+  },
+  "jumping": {
+    "frames": [
+      {
+        "rowIndex": 4,
+        "columnIndex": 0,
+        "durationMs": 140
+      },
+      {
+        "rowIndex": 4,
+        "columnIndex": 1,
+        "durationMs": 140
+      },
+      {
+        "rowIndex": 4,
+        "columnIndex": 2,
+        "durationMs": 140
+      },
+      {
+        "rowIndex": 4,
+        "columnIndex": 3,
+        "durationMs": 140
+      },
+      {
+        "rowIndex": 4,
+        "columnIndex": 4,
+        "durationMs": 280
+      }
+    ],
+    "loop": true
+  },
+  "failed": {
+    "frames": [
+      {
+        "rowIndex": 5,
+        "columnIndex": 0,
+        "durationMs": 140
+      },
+      {
+        "rowIndex": 5,
+        "columnIndex": 1,
+        "durationMs": 140
+      },
+      {
+        "rowIndex": 5,
+        "columnIndex": 2,
+        "durationMs": 140
+      },
+      {
+        "rowIndex": 5,
+        "columnIndex": 3,
+        "durationMs": 140
+      },
+      {
+        "rowIndex": 5,
+        "columnIndex": 4,
+        "durationMs": 140
+      },
+      {
+        "rowIndex": 5,
+        "columnIndex": 5,
+        "durationMs": 140
+      },
+      {
+        "rowIndex": 5,
+        "columnIndex": 6,
+        "durationMs": 140
+      },
+      {
+        "rowIndex": 5,
+        "columnIndex": 7,
+        "durationMs": 240
+      }
+    ],
+    "loop": true
+  },
+  "waiting": {
+    "frames": [
+      {
+        "rowIndex": 6,
+        "columnIndex": 0,
+        "durationMs": 150
+      },
+      {
+        "rowIndex": 6,
+        "columnIndex": 1,
+        "durationMs": 150
+      },
+      {
+        "rowIndex": 6,
+        "columnIndex": 2,
+        "durationMs": 150
+      },
+      {
+        "rowIndex": 6,
+        "columnIndex": 3,
+        "durationMs": 150
+      },
+      {
+        "rowIndex": 6,
+        "columnIndex": 4,
+        "durationMs": 150
+      },
+      {
+        "rowIndex": 6,
+        "columnIndex": 5,
+        "durationMs": 260
+      }
+    ],
+    "loop": true
+  },
+  "running": {
+    "frames": [
+      {
+        "rowIndex": 7,
+        "columnIndex": 0,
+        "durationMs": 120
+      },
+      {
+        "rowIndex": 7,
+        "columnIndex": 1,
+        "durationMs": 120
+      },
+      {
+        "rowIndex": 7,
+        "columnIndex": 2,
+        "durationMs": 120
+      },
+      {
+        "rowIndex": 7,
+        "columnIndex": 3,
+        "durationMs": 120
+      },
+      {
+        "rowIndex": 7,
+        "columnIndex": 4,
+        "durationMs": 120
+      },
+      {
+        "rowIndex": 7,
+        "columnIndex": 5,
+        "durationMs": 220
+      }
+    ],
+    "loop": true
+  },
+  "review": {
+    "frames": [
+      {
+        "rowIndex": 8,
+        "columnIndex": 0,
+        "durationMs": 150
+      },
+      {
+        "rowIndex": 8,
+        "columnIndex": 1,
+        "durationMs": 150
+      },
+      {
+        "rowIndex": 8,
+        "columnIndex": 2,
+        "durationMs": 150
+      },
+      {
+        "rowIndex": 8,
+        "columnIndex": 3,
+        "durationMs": 150
+      },
+      {
+        "rowIndex": 8,
+        "columnIndex": 4,
+        "durationMs": 150
+      },
+      {
+        "rowIndex": 8,
+        "columnIndex": 5,
+        "durationMs": 280
+      }
+    ],
+    "loop": true
+  }
+}
