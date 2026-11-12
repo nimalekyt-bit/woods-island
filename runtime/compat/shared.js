@@ -1,3 +1,9 @@
+import {
+  characterRestWidth as Ne, characterSlotWidth as Pe, distributeFaceWidgets as We,
+  timerTextWidth as et, idleSize as rt, snapWidth as it, normalMediaSize as ct,
+  resolveMediaPill as lt, titleMediaSize as pt, lyricsNeedWrap as _t,
+  playerMediaSize as bt, lyricsMediaSize as gt,
+} from '../island/sizing';
 // Compatibility application source; migrate components incrementally.
 import { v, _, o, u, g, m, c } from "../vendor/react-foundation.js";
 function y() {
@@ -304,138 +310,7 @@ function O() {
     }
   );
 }
-var Ae = [150, 30],
-  je = [168, 34],
-  Me = 34,
-  Ne = (e) => (e ? 2 * Math.round(6600 / Me / 2) : 150);
-function Pe(e, t = Me) {
-  let n = 2 * Math.round((60 * t) / Me / 2);
-  return !e || !(e[2] > 0) || !(e[3] > 0)
-    ? n
-    : Math.min(Ne(t > Me), Math.max(n, 2 * Math.ceil((e[2] * t) / e[3] / 2)));
-}
-var Fe = 38,
-  Ie = 58,
-  Le = (e) => (e.clock ? (e.seconds ? Ie : Fe) : 0),
-  Re = 50,
-  ze = 30,
-  Be = 26,
-  Ve = 10,
-  He = 56,
-  Ue = { clock: Fe, battery: Re, weather: He };
-function We(e) {
-  let t = [],
-    n = [];
-  return (
-    e.clock && t.push(`clock`),
-    e.weather && n.push(`weather`),
-    e.battery && (e.weather || !e.clock ? t : n).push(`battery`),
-    { left: t, right: n }
-  );
-}
-var Ge = (e, t = Fe) =>
-    e.reduce((e, n) => e + (n === `clock` ? t : Ue[n]), 0) + Math.max(0, e.length - 1) * 8,
-  Ke = 16,
-  qe = 22,
-  Je = (e) => (e > 0 ? 8 + Math.ceil(Math.min(e, 12) * 6.4) : 0);
-function Ye(e) {
-  return e.name ? e.name.slice(0, 12) : String(e.index);
-}
-var Xe = (e) => nt(nt(Je(e.desk ?? 0), e.layout ? qe : 0), e.caps ? Ke : 0),
-  Ze = (e) => (e > 0 ? e * 7 + (e - 1) * 4 : 0),
-  Qe = (e, t, n, r) => nt(nt(nt(Ze(e), t ? 34 : 0), n ? 16 : 0), r ? 16 : 0),
-  $e = (e) => (e > 9 ? 38 : e > 0 ? 31 : 0);
-function et(e) {
-  let t = e > 5 ? 2 : 1;
-  return Math.ceil((e - t) * 7.2 + t * 3.6);
-}
-var tt = (e) => (e > 0 ? 19 + et(e) : 0),
-  nt = (e, t) => (t > 0 ? e + (e > 0 ? 8 : 0) + t : e);
-function rt(e) {
-  let t = nt(Xe(e), $e(e.shelf ?? 0)),
-    n = Qe(e.dots ?? 0, e.obs, e.agent, e.download),
-    r = Le(e),
-    i = tt(e.timer ?? 0);
-  if (e.face && !e.character && (e.clock || e.battery || t > 0 || n > 0 || i > 0)) {
-    let a = We(e),
-      o = Math.max(nt(nt(Ge(a.left, r), i), t), nt(Ge(a.right, r), n));
-    return [Math.max(Ae[0], 66 + 2 * (o + Ve)), Ae[1]];
-  }
-  if (e.character) {
-    let a =
-        (r ? r + Ve - 2 : 0) +
-        (e.battery ? 58 : 0) +
-        (e.weather ? 64 : 0) +
-        (t ? t + Ve - 2 : 0) +
-        (n ? n + Ve - 2 : 0) +
-        (i ? i + Ve - 2 : 0),
-      o = e.big ? 44 : je[1],
-      s = je[0] + Ne(!!e.big) - Ne(!1);
-    return [a > 0 ? 8 + (e.slot ?? 60) + 12 + a : s, o];
-  }
-  let a = nt(nt(i, r), e.battery ? Re : 0),
-    o = Math.max(nt(e.weather ? 20 : 0, t), nt(e.weather ? ze : 0, n)),
-    s = o > 0 ? 2 * (o + (a > 0 ? Ve : 0)) : 0;
-  return [Math.max(Ae[0], Be + a + s), Ae[1]];
-}
-function it(e, t) {
-  let n = Number.isFinite(t) && t > 0 ? t : 1;
-  return (2 * Math.round((e * n) / 2)) / n;
-}
-var at = [268, 32],
-  ot = 27,
-  st = 52;
-function ct(e) {
-  let t = (e, t) => e.filter((e) => e > 0).reduce((e, n) => e + t + n, 0),
-    n = [Xe(e), Qe(e.dots, e.obs, e.agent, e.download), $e(e.shelf)],
-    r = tt(e.timer ?? 0),
-    i = e.character ? 60 : 41;
-  if (e.face && !e.character) {
-    let a = 30 + t([Le(e), e.battery ? Re : 0], 8),
-      o = i + t([e.weather ? He : 0, r, ...n], Ve);
-    return [Math.max(at[0], 40 + 2 * (Math.max(a, o) + Ve)), at[1]];
-  }
-  let a = t([r, Le(e), e.battery ? Re : 0, e.weather ? He : 0], 8) - 8,
-    o = 30 + (a > 0 ? 24 + a : Ve) + i + t(n, Ve);
-  return [Math.max(at[0], o), at[1]];
-}
-function lt(e) {
-  return e === `title` || e === `player` || e === `lyrics` ? e : `normal`;
-}
-var ut = [420, 44],
-  dt = 170,
-  ft = 10;
-function pt(e) {
-  let t = [Xe(e), Qe(e.dots, e.obs, e.agent, e.download), $e(e.shelf)],
-    n = [tt(e.timer ?? 0), Le(e), e.battery ? Re : 0, e.weather ? He : 0, ...t, e.character ? st : ot]
-      .filter((e) => e > 0)
-      .reduce((e, t) => e + ft + t, 0);
-  return [Math.max(ut[0], 218 + n + 12), ut[1]];
-}
-var mt = 22;
-function ht(e) {
-  let [t] = pt(e);
-  return e.words ? t - dt + Math.max(dt, mt + Math.ceil(e.words)) : t;
-}
-function gt(e) {
-  return [Math.min(680, ht(e)), ut[1]];
-}
-function _t(e) {
-  return ht(e) > 680;
-}
-var vt = 12,
-  yt = 32;
-function bt(e) {
-  let t = (e) => e.filter((e) => e > 0).reduce((e, t, n) => e + (n > 0 ? 8 : 0) + t, 0),
-    n = Math.max(
-      t([Xe(e), Qe(e.dots, e.obs, e.agent, e.download), $e(e.shelf), e.character ? 0 : ot]),
-      t([tt(e.timer ?? 0), Le(e)]),
-      t([e.weather ? He : 0, e.battery ? Re : 0]),
-    ),
-    r = Math.max(360, 228 + (n > 0 ? 12 + n : 0) + 14),
-    i = 74 + (e.seekable ? 22 : 0) + yt + vt;
-  return [r + (e.lyrics ? 268 : 0), i];
-}
+function Ye(e) { return e.name ? e.name.slice(0, 12) : String(e.index); }
 function xt(e, t, n = !1) {
   let r = e.getHours(),
     i = String(e.getMinutes()).padStart(2, `0`),

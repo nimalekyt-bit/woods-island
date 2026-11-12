@@ -15,7 +15,7 @@
     "build": "node scripts/generate-ipc.mjs --check && tsc -p tsconfig.runtime.json && vite build --config vite.runtime.config.ts && node scripts/build-runtime.mjs",
     "check:runtime": "node scripts/generate-ipc.mjs --check && tsc -p tsconfig.runtime.json && node scripts/build-runtime.mjs --check",
     "test:hooks": "node --test scripts/island-notify.test.cjs",
-    "test:runtime-state": "node --test scripts/runtime-state.test.cjs",
+    "test:runtime-state": "node --test scripts/runtime-state.test.cjs scripts/island-events.test.cjs scripts/island-geometry.test.cjs",
     "test:ipc": "node --test scripts/ipc-generation.test.cjs",
     "check:authors": "node scripts/check-commit-owners.mjs",
     "test:native": "node scripts/verify-runtime.cjs",
