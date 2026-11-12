@@ -7,12 +7,12 @@
 **Dynamic Island для Windows · Woods Personal Corp**
 
 [![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-18181b)](https://github.com/nimalekyt-bit/woods-island/releases)
-[![Version](https://img.shields.io/badge/version-1.0.0%20preview-18181b)](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.0.0)
+[![Version](https://img.shields.io/badge/version-1.1.0-18181b)](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.1.0)
 ![RU / EN](https://img.shields.io/badge/interface-RU%20%7C%20EN-18181b)
 ![Private](https://img.shields.io/badge/access-private-33483b)
 
 
-[**Скачать сборку**](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.0.0) · [**Сообщить об ошибке**](https://github.com/nimalekyt-bit/woods-island/issues/new/choose) · [**Woods**](https://t.me/woodskilla)
+[**Скачать сборку**](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.1.0) · [**Сообщить об ошибке**](https://github.com/nimalekyt-bit/woods-island/issues/new/choose) · [**Woods**](https://t.me/woodskilla)
 
 </div>
 
@@ -20,7 +20,7 @@
 <summary><b>Русский</b></summary>
 <br>
 
-Чёрная жидкая пилюля у верхнего края экрана. Показывает музыку и события,
+Чёрная пилюля у верхнего края экрана. Показывает музыку и события,
 а по клику раскрывает инструменты, которыми пользуешься каждый день.
 
 <div align="center">
@@ -39,15 +39,25 @@ Woods-коннектор даже когда клиент не публикуе�
 автоскрытие возвращает пилюлю от верхнего края. Область вокруг острова
 пропускает клики к окнам под ним.
 
-## 25 персонажей
+## 36 встроенных персонажей
 
 Жидкий остров, Пиксель, Искра, Глазки, медуза, костёр, хомяк и другие.
-Выбирай в **Настройки → Персонаж**. Все доступны без покупки ключа;
-реагируют на музыку, курсор и события.
+Добавлены 11 авторских пиксельных питомцев: Складень, Узелок, Лунный Нокт,
+Нуль, Парадокс, Искорка, Кряжик, Нокт, Латунчик, Шурш и Скол. У каждого
+восемь анимаций, автоматическое моргание и отдельный нарисованный взгляд на курсор.
+Выбирай в **Настройки → Персонаж**. Все встроенные доступны без покупки ключа;
+реагируют на музыку, курсор и события. Режим **Без персонажа** считается отдельно.
 
 <div align="center">
-<img src="assets/readme/characters.webp" width="812" alt="25 персонажей Woods Island">
+<img src="assets/readme/characters.webp" width="812" alt="Прежние персонажи Woods Island">
 </div>
+
+Девять дополнительных питомцев Codex подключаются из установленного на этом ПК
+приложения. Настройки показывают доступность; кнопка **Импортировать из
+установленного Codex** повторяет импорт. Рисунки сохраняются только в локальном
+профиле и не входят в релиз или сайт. Без поддерживаемого Codex или ранее
+импортированных валидных атласов эти варианты недоступны; 36 встроенных
+персонажей работают независимо от него.
 
 ## Погода
 
@@ -99,8 +109,8 @@ MET Norway не требует ключа. Старый кэш и некорре
 
 ## Установка
 
-Скачай **Woods-Island-1.0.0-windows-x64.zip** из
-[приватного релиза](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.0.0),
+Скачай **Woods-Island-1.1.0-windows-x64.zip** из
+[приватного релиза](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.1.0),
 распакуй и запусти `woods-island.exe`. Папка `bin` нужна рядом с EXE
 для MP4/GIF. Требуются **Windows 10/11 x64** и WebView2 Runtime.
 Скачивание требует доступа к репозиторию. Переносимый комплект обновляется вручную.
@@ -134,11 +144,9 @@ MET Norway не требует ключа. Старый кэш и некорре
 Неизвестные города используют UTC или ручной часовой пояс.
 Подписанного автоматического установщика пока нет.
 
-**Проверено 12.11.2026:** 50 Rust-тестов, 3 hook-теста и 35 нативных сценария,
-0 ошибок frontend; 1 проверка живой Яндекс Музыки пропущена в изолированном
-прогоне. Живой коннектор подтверждён предыдущим отчётом; синхронизация текста
-проверена через отдельный музыкальный мост.
-Полный аппаратный и облачный паритет не заявляется.
+Приёмка включает production build, Rust-регрессии, hooks, IPC, геометрию,
+персонажей и настоящее окно WebView2. Отчёты сохраняют SHA256 проверенного EXE
+и пропущенные внешние сценарии. Полный аппаратный и облачный паритет не заявляется.
 [Матрица приёмки →](docs/FUNCTIONAL_ACCEPTANCE.md)
 
 </details>
@@ -147,7 +155,7 @@ MET Norway не требует ключа. Старый кэш и некорре
 <summary><b>English</b> · click to read</summary>
 <br>
 
-A liquid black pill at the top of your screen. Music and events stay visible;
+A black pill at the top of your screen. Music and events stay visible;
 a click opens the player, clipboard, files, notes, weather and screen tools.
 
 <div align="center">
@@ -159,10 +167,19 @@ a click opens the player, clipboard, files, notes, weather and screen tools.
 The liquid edge responds to real WASAPI audio and the album colour.
 Windows players use GSMTC; Yandex Music Mod uses the Woods loopback connector.
 The pill shows artwork and advancing playback time. Resize it from **80 to 200%**,
-enable auto-hide and choose from **25 characters**, all available without activation.
+enable auto-hide and choose from **36 built-in characters**, all available without activation.
+The eleven additions are hand-drawn bitmap pets: Foldling, Knotling, Lunar Noct,
+Null, Paradox, Iskorka, Kryazhik, Noct, Latunchik, Shursh and Skol. Each has eight
+animations, automatic blinking and a separate drawn face that follows the cursor.
+The **No character** mode is counted separately.
+Nine optional Codex pets can be imported from Codex installed on this computer.
+Settings show availability and let you repeat the import. Their artwork remains
+in the local profile and is not bundled with Woods Island or its website.
+Without a supported Codex installation or previously imported valid atlases,
+those options are unavailable; all 36 built-in characters remain usable.
 
 <div align="center">
-<img src="assets/readme/characters.webp" width="812" alt="25 Woods Island characters">
+<img src="assets/readme/characters.webp" width="812" alt="The original 25 Woods Island characters">
 </div>
 
 ## Weather
@@ -201,8 +218,8 @@ The launcher, command bar, dictation and OBS/Steam/terminal-agent events are ava
 
 ## Install
 
-Download **Woods-Island-1.0.0-windows-x64.zip** from the
-[private release](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.0.0).
+Download **Woods-Island-1.1.0-windows-x64.zip** from the
+[private release](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.1.0).
 Extract and run `woods-island.exe`; keep `bin` alongside it for recording.
 Requires **Windows 10/11 x64** and WebView2. Repository access is required;
 updates are installed manually. Use your own AI key or local model.
@@ -211,11 +228,10 @@ Settings/SQLite stay in `%APPDATA%\woods-island`, keys use Windows DPAPI,
 and Obsidian export is explicit. The Yandex connector needs separate installation
 on other PCs and v3 has no seek support. Unknown cities use UTC or a manual offset.
 
-**Verified 12 November 2026:** 50 Rust tests, 3 hook tests, 35 native scenarios,
-zero frontend exceptions; one live Yandex Music check was skipped in the isolated
-run. Live playback was verified earlier; lyrics timing uses a separate bridge fixture.
-Every cloud provider and
-hardware action has not been verified. [Acceptance matrix →](docs/FUNCTIONAL_ACCEPTANCE.md)
+Acceptance covers the production build, Rust regressions, hooks, IPC, geometry,
+characters and the real WebView2 window. Reports retain the tested EXE SHA256
+and skipped external scenarios. Complete hardware and cloud-provider parity
+has not been verified. [Acceptance matrix →](docs/FUNCTIONAL_ACCEPTANCE.md)
 
 </details>
 
@@ -228,13 +244,19 @@ Windows, Node.js 22, pnpm 10.33.0, Rust 1.98.1 и Visual Studio Build Tools
 pnpm install --frozen-lockfile
 pnpm build
 pnpm test:hooks
+pnpm test:runtime-state
+pnpm test:ipc
+pnpm test:characters
 cargo test --locked --manifest-path src-tauri/Cargo.toml
-cargo build --release --locked --manifest-path src-tauri/Cargo.toml
+cargo build --release --locked --manifest-path src-tauri/Cargo.toml --bin woods-island
 powershell -NoProfile -File scripts/prepare-recording-tools.ps1
 pnpm package:portable
 ```
 
-Runtime: `frontend`, четыре окна, 20 ресурсов, 153 IPC.
+Runtime: `runtime`, четыре окна; типизированный IPC-контракт генерируется из Rust.
+Питомцы хранятся в `runtime/characters`: 11 встроенных bitmap-наборов и metadata
+для девяти локально импортируемых Codex-атласов. Количество ресурсов и IPC-команд
+проверяет `pnpm build`.
 Прототип в `src` собирается отдельно через `build:prototype`.
 `pnpm test:native` использует временный профиль и `WOODS_ISLAND_PASSIVE_QA=1`,
 без аппаратного ввода, фокуса и хоткеев. Нет живого плеера — SKIP.
@@ -251,8 +273,9 @@ Rust/hooks и авторство. Коммиты — только от
 Условия использования компонентов: [LICENSE](LICENSE) и
 [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md).
 
-Сайт находится отдельно в `02_WEB_&_COMMERCE/woods-island-web`.
-Сборка проверена; deployment и анонимное скачивание не подтверждены.
+Сайт находится отдельно в `02_WEB_&_COMMERCE/woods-island-web` и публикуется на
+[woods-island.tuz032.workers.dev](https://woods-island.tuz032.workers.dev/).
+Установочный архив остаётся в приватном GitHub-релизе; для скачивания нужен доступ.
 [Состояние сайта →](docs/WEBSITE.md)
 
 <div align="center">

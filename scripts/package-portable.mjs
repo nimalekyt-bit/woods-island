@@ -7,8 +7,17 @@ import { spawnSync } from 'node:child_process';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const output = join(root, 'dist-portable');
 const source = join(root, 'src-tauri', 'resources', 'bin');
+const version = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).version;
+const executable = join(root, 'src-tauri', 'target', 'release', 'woods-island.exe');
+const versionCheck = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+  '(Get-Item -LiteralPath $env:WOODS_PACKAGE_EXE -ErrorAction Stop).VersionInfo.ProductVersion'], {
+  windowsHide: true, encoding: 'utf8', env: { ...process.env, WOODS_PACKAGE_EXE: executable },
+});
+if (versionCheck.status !== 0 || versionCheck.stdout.trim() !== version) {
+  throw new Error(`Executable version ${versionCheck.stdout.trim() || 'unavailable'} does not match package ${version}; rebuild before packaging`);
+}
 const assets = [
-  ['woods-island.exe', join(root, 'src-tauri', 'target', 'release', 'woods-island.exe')],
+  ['woods-island.exe', executable],
   ...['ffmpeg.exe', 'ffprobe.exe', 'LICENSE', 'FFMPEG_PROVENANCE.md'].map(name => [`bin/${name}`, join(source, name)]),
   ['RUNTIME.md', join(root, 'docs', 'RUNTIME.md')],
   ['FUNCTIONAL_ACCEPTANCE.md', join(root, 'docs', 'FUNCTIONAL_ACCEPTANCE.md')],
@@ -20,6 +29,8 @@ const assets = [
   ...['ISLAND_GEOMETRY_COMPONENTS_20261112.md', 'acceptance-island-geometry-20261112.json'].map(name => [name, join(root, 'docs', name)]),
   ...['CHARACTER_ENGINE.md', 'acceptance-character-engine-20261112.json',
     'acceptance-character-engine-20261112.raw.json.gz'].map(name => [name, join(root, 'docs', name)]),
+  ...['PET_LIBRARY_20261113.md', 'acceptance-pets-20261113.json',
+    'acceptance-pets-20261113.raw.json.gz'].map(name => [name, join(root, 'docs', name)]),
   ['LICENSE', join(root, 'LICENSE')],
   ['THIRD_PARTY_NOTICES.md', join(root, 'THIRD_PARTY_NOTICES.md')],
 ];
@@ -36,12 +47,12 @@ await rm(output, { recursive: true, force: true });
 await mkdir(join(output, 'bin'), { recursive: true });
 for (const asset of verified) await copyFile(asset.file, join(output, asset.name));
 await writeFile(join(output, 'README.txt'),
-  'Woods Island — Windows x64\r\n\r\nЗапуск: woods-island.exe. Папка bin нужна для MP4/GIF записи.\r\n' +
+  `Woods Island ${version} — Windows x64\r\n\r\nЗапуск: woods-island.exe. Папка bin нужна для MP4/GIF записи.\r\n` +
   'Настройки и данные: %APPDATA%\\woods-island. Для ИИ и диктовки укажи свой ключ или локальный сервер в настройках.\r\n' +
   'Яндекс Музыка Mod с установленным Woods connector: локальный мост 127.0.0.1:3003. Подробности: FUNCTIONAL_ACCEPTANCE.md.\r\n' +
-  'Приватная тестовая сборка. Устройство runtime описано в RUNTIME.md.\r\n', 'utf8');
+  'Приватная сборка. Персонажи и проверка выпуска описаны в PET_LIBRARY_20261113.md; устройство runtime — в RUNTIME.md.\r\n', 'utf8');
 await writeFile(join(output, 'manifest.json'), JSON.stringify({
-  version: JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).version,
+  version,
   files: verified.map(({ file, ...asset }) => asset),
 }, null, 2) + '\n');
 console.log(`Portable package created: ${output} (${verified.length} verified files)`);
