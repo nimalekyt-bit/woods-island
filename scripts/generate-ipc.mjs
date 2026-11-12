@@ -56,7 +56,8 @@ const code = `// Generated from registered Rust command signatures and default_s
 const destination = resolve(root, 'runtime/ipc/generated.ts');
 await mkdir(dirname(destination), { recursive: true });
 if (process.argv.includes('--check')) {
-  if (await readFile(destination, 'utf8') !== code) throw new Error('IPC contracts drifted. Run pnpm generate:ipc.');
+  // Git's Windows checkout can convert generated LF to CRLF; types must still match.
+  if ((await readFile(destination, 'utf8')).replace(/\r\n/g, '\n') !== code) throw new Error('IPC contracts drifted. Run pnpm generate:ipc.');
 } else await writeFile(destination, code);
 export { signatures, root };
 console.log(`Rust IPC contracts: ${commands.length} commands, ${Object.keys(defaults).length} settings.`);
