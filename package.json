@@ -13,6 +13,7 @@
     "test:hooks": "node --test scripts/island-notify.test.cjs",
     "check:authors": "node scripts/check-commit-owners.mjs",
     "test:native": "node scripts/verify-runtime.cjs",
+    "test:controls": "node scripts/verify-controls.cjs",
     "package:portable": "node scripts/package-portable.mjs",
     "dev:prototype": "vite",
     "build:prototype": "tsc && vite build --outDir dist-prototype",

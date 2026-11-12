@@ -217,6 +217,9 @@ async function quit(client) {
     assert.equal(JSON.parse(await fs.readFile(path.join(dataDir,'settings.json'),'utf8')).weatherCity, 'Брянск');
   });
   await check('Island scale changes physical size, viewport and clip bounds together',async()=>{
+    // Folded audio/volume notices can expire between measurements. Use the
+    // fixed control panel so CSS geometry measures zoom rather than a notice.
+    await main.evaluate('(async()=>{const m=await import("/assets/Liquid-BbsJJY6K.js");m.ot.setState({expanded:true,tab:"controls"});})()');
     await pause(1200);
     const original=await main.invoke('window_diagnostics');
     const rect=await main.evaluate('(()=>{const r=document.querySelector("[data-island]").getBoundingClientRect();return {width:r.width,height:r.height};})()');
@@ -237,6 +240,7 @@ async function quit(client) {
       measured.push({value,width:d.width,pillWidth:Math.round(dom.width*d.pageFactor),bounds:d.bounds});
     }
     assert.equal((await main.invoke('window_diagnostics')).width,original.width);
+    await main.evaluate('(async()=>{const m=await import("/assets/Liquid-BbsJJY6K.js");m.ot.setState({expanded:false,tab:"home"});})()');
     return measured;
   });
   await check('Weather search works offline for Брянск', async () => {

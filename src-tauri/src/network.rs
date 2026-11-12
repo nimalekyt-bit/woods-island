@@ -102,10 +102,78 @@ pub fn bt_switch(id:&str,on:bool)->Result<(),String>{
     }
 }
 
-fn powershell_json(script:&str)->Result<Value,String>{
-    let output=crate::system::command("powershell.exe").args(["-NoProfile","-NonInteractive","-Command",script]).stdout(Stdio::piped()).output().map_err(|e|e.to_string())?;
-    if !output.status.success(){return Err("Windows could not query network profiles".into());}
-    serde_json::from_slice(&output.stdout).map_err(|e|e.to_string())
+fn physical_ethernet(row: &windows::Win32::NetworkManagement::IpHelper::MIB_IF_ROW2) -> bool {
+    // HardwareInterface is the first flag. VPN/TAP/Hyper-V adapters can also
+    // report Ethernet type, but must never stand in for the physical cable.
+    row.Type == windows::Win32::NetworkManagement::IpHelper::IF_TYPE_ETHERNET_CSMACD
+        && row.InterfaceAndOperStatusFlags._bitfield & 1 != 0
+}
+
+pub fn ethernet_adapter() -> Option<Value> {
+    use windows::Win32::NetworkManagement::{IpHelper::*, Ndis::IfOperStatusUp};
+    unsafe {
+        let mut table = std::ptr::null_mut();
+        if GetIfTable2(&mut table).is_err() || table.is_null() { return None; }
+        let rows = std::slice::from_raw_parts((*table).Table.as_ptr(), (*table).NumEntries as usize);
+        let adapter = rows.iter().filter(|row| physical_ethernet(row))
+            .max_by_key(|row| (row.OperStatus == IfOperStatusUp, row.TransmitLinkSpeed, std::cmp::Reverse(row.InterfaceIndex)))
+            .map(|row| json!({"index":row.InterfaceIndex,"name":string(&row.Alias),"description":string(&row.Description),"connected":row.OperStatus==IfOperStatusUp,"speed":row.TransmitLinkSpeed}));
+        FreeMibTable(table.cast());
+        adapter
+    }
+}
+
+fn ras_profiles() -> Vec<Value> {
+    use windows::Win32::NetworkManagement::Rras::*;
+    unsafe {
+        let mut connections = vec![RASCONNW::default()];
+        let mut connected_names = Vec::new();
+        for _ in 0..3 {
+            connections[0].dwSize = std::mem::size_of::<RASCONNW>() as u32;
+            let mut bytes = (connections.len() * std::mem::size_of::<RASCONNW>()) as u32;
+            let mut count = 0;
+            let status = RasEnumConnectionsW(Some(connections.as_mut_ptr()), &mut bytes, &mut count);
+            if status == 603 { connections.resize((bytes as usize).div_ceil(std::mem::size_of::<RASCONNW>()).max(1), RASCONNW::default()); continue; }
+            if status == 0 {
+                for item in connections.iter().take(count as usize) {
+                    let mut info = RASCONNSTATUSW::default();
+                    info.dwSize = std::mem::size_of::<RASCONNSTATUSW>() as u32;
+                    let status = RasGetConnectStatusW(item.hrasconn, &mut info);
+                    let connected = info.rasconnstate;
+                    if status == 0 && connected == RASCS_Connected { let name = item.szEntryName; connected_names.push(string(&name)); }
+                }
+            }
+            break;
+        }
+        let mut entries = vec![RASENTRYNAMEW::default()];
+        for _ in 0..3 {
+            entries[0].dwSize = std::mem::size_of::<RASENTRYNAMEW>() as u32;
+            let mut bytes = (entries.len() * std::mem::size_of::<RASENTRYNAMEW>()) as u32;
+            let mut count = 0;
+            let status = RasEnumEntriesW(PCWSTR::null(), PCWSTR::null(), Some(entries.as_mut_ptr()), &mut bytes, &mut count);
+            if status == 603 { entries.resize((bytes as usize).div_ceil(std::mem::size_of::<RASENTRYNAMEW>()).max(1), RASENTRYNAMEW::default()); continue; }
+            if status != 0 { return Vec::new(); }
+            return entries.iter().take(count as usize).filter_map(|item| {
+                let name = string(&item.szEntryName);
+                if name.is_empty() { return None; }
+                let name_wide = wide(&name);
+                let phonebook = if item.szPhonebookPath[0] == 0 { PCWSTR::null() } else { PCWSTR(item.szPhonebookPath.as_ptr()) };
+                let mut entry = vec![RASENTRYW::default()];
+                let mut vpn = false;
+                for _ in 0..3 {
+                    entry[0].dwSize = std::mem::size_of::<RASENTRYW>() as u32;
+                    let mut size = (entry.len() * std::mem::size_of::<RASENTRYW>()) as u32;
+                    let status = RasGetEntryPropertiesW(phonebook, PCWSTR(name_wide.as_ptr()), Some(entry.as_mut_ptr()), &mut size, None, None);
+                    if status == 603 { entry.resize((size as usize).div_ceil(std::mem::size_of::<RASENTRYW>()).max(1), RASENTRYW::default()); continue; }
+                    vpn = status == 0 && entry[0].dwType == RASET_Vpn;
+                    break;
+                }
+                if !vpn { return None; }
+                Some(json!({"id":format!("ras:{name}"),"name":name,"on":connected_names.contains(&name),"ready":true}))
+            }).collect();
+        }
+        Vec::new()
+    }
 }
 fn warp_path()->Option<PathBuf>{
     let program=std::env::var_os("ProgramFiles").map(PathBuf::from).map(|p|p.join("Cloudflare/Cloudflare WARP/warp-cli.exe"));
@@ -113,12 +181,27 @@ fn warp_path()->Option<PathBuf>{
 }
 pub fn vpn_profiles()->Vec<Value>{
     if let Some((at,profiles))=VPN_CACHE.lock().unwrap().as_ref(){if at.elapsed()<Duration::from_secs(15){return profiles.clone();}}
-    let mut profiles=Vec::new();
-    if let Ok(value)=powershell_json("$ErrorActionPreference='Stop'; @(Get-VpnConnection | Select-Object Name,ConnectionStatus) | ConvertTo-Json -Compress"){for item in value.as_array().into_iter().flatten(){if let Some(name)=item["Name"].as_str(){profiles.push(json!({"id":format!("ras:{name}"),"name":name,"on":item["ConnectionStatus"].as_str()==Some("Connected"),"ready":true}));}}}
+    let mut profiles=ras_profiles();
     if let Some(path)=warp_path(){let output=crate::system::command(path.to_string_lossy().as_ref()).arg("status").stdout(Stdio::piped()).output().ok();let on=output.filter(|o|o.status.success()).map(|o|String::from_utf8_lossy(&o.stdout).contains("Connected")).unwrap_or(false);profiles.push(json!({"id":"app:warp","name":"Cloudflare WARP","on":on,"ready":true}));}
     *VPN_CACHE.lock().unwrap()=Some((Instant::now(),profiles.clone()));profiles
 }
 pub fn vpn_refresh(){*VPN_CACHE.lock().unwrap()=None;}
+
+pub fn start_controls_monitor(app: tauri::AppHandle, state: std::sync::Arc<crate::AppState>) {
+    use tauri::Emitter;
+    std::thread::spawn(move || loop {
+        let mut current = crate::system::controls();
+        current["vpns"] = json!(vpn_profiles());
+        let changed = {
+            let mut saved = state.controls.lock().unwrap();
+            let changed = *saved != current;
+            *saved = current.clone();
+            changed
+        };
+        if changed { let _ = app.emit("controls:changed", &current); }
+        std::thread::sleep(Duration::from_secs(3));
+    });
+}
 pub fn vpn_toggle(id:&str,on:bool)->Result<(),String>{
     let status=if id=="app:warp"{let path=warp_path().ok_or("Cloudflare WARP is not installed")?;crate::system::command(path.to_string_lossy().as_ref()).arg(if on{"connect"}else{"disconnect"}).status().map_err(|e|e.to_string())?}
     else if let Some(name)=id.strip_prefix("ras:"){let mut command=crate::system::command("rasdial.exe");command.arg(name);if !on{command.arg("/disconnect");}command.status().map_err(|e|e.to_string())?}
@@ -127,4 +210,18 @@ pub fn vpn_toggle(id:&str,on:bool)->Result<(),String>{
     if status.success(){Ok(())}else{Err("VPN connection failed. Check saved credentials in Windows VPN settings.".into())}
 }
 
-#[cfg(test)]mod tests{use super::*;#[test]fn wifi_xml_encodes_literal_characters(){assert_eq!(xml_escape("a&<\"'"),"a&amp;&lt;&quot;&apos;");}#[test]fn utf16_stops_at_null(){assert_eq!(string(&[65,66,0,67]),"AB");}}
+#[cfg(test)]mod tests{
+    use super::*;
+    #[test]fn wifi_xml_encodes_literal_characters(){assert_eq!(xml_escape("a&<\"'"),"a&amp;&lt;&quot;&apos;");}
+    #[test]fn utf16_stops_at_null(){assert_eq!(string(&[65,66,0,67]),"AB");}
+    #[test]fn virtual_ethernet_and_wifi_cannot_replace_the_physical_adapter(){
+        use windows::Win32::NetworkManagement::IpHelper::*;
+        let mut row = MIB_IF_ROW2::default();
+        row.Type = IF_TYPE_ETHERNET_CSMACD;
+        assert!(!physical_ethernet(&row));
+        row.InterfaceAndOperStatusFlags._bitfield = 1;
+        assert!(physical_ethernet(&row));
+        row.Type = IF_TYPE_IEEE80211;
+        assert!(!physical_ethernet(&row));
+    }
+}
