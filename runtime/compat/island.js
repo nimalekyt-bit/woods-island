@@ -10322,12 +10322,21 @@ function Mj() {
     return (n(), () => cancelAnimationFrame(t));
   }, [e]);
 }
+function readLayoutViewportHeight() {
+  const height = Number(document.documentElement.dataset.layoutViewportHeight);
+  return Number.isFinite(height) && height > 0 ? height : window.innerHeight;
+}
 function Nj() {
-  let [e, t] = (0, ReactRuntime.useState)(() => window.innerHeight);
+  let [e, t] = (0, ReactRuntime.useState)(readLayoutViewportHeight);
   return (
     (0, ReactRuntime.useEffect)(() => {
-      let e = () => t(window.innerHeight);
-      return (window.addEventListener(`resize`, e), () => window.removeEventListener(`resize`, e));
+      let e = () => t(readLayoutViewportHeight());
+      window.addEventListener(`resize`, e);
+      window.addEventListener(`woods:layout-viewport`, e);
+      return () => {
+        window.removeEventListener(`resize`, e);
+        window.removeEventListener(`woods:layout-viewport`, e);
+      };
     }, []),
     e
   );
@@ -10489,6 +10498,7 @@ function useRuntimeEvents() {
           layoutCode: t.layout,
           license: t.license,
           battery: t.battery,
+          vdesk: t.vdesk ?? null,
         }),
           t.trialOver && e.getState().pushPeek({ kind: `pro`, feature: `trial` }),
           !t.news.told &&
@@ -10853,18 +10863,38 @@ function IslandApp() {
     }, []),
     (0, ReactRuntime.useEffect)(() => {
       let e = 0,
-        t = "";
+        t = "",
+        reportSequence = 0,
+        disposed = false;
       const n = () => {
         const r = document.querySelector("[data-island]")?.getBoundingClientRect();
         if (r) {
-          const e = [Math.floor(r.x), Math.floor(r.y), Math.ceil(r.width), Math.ceil(r.height), k, te, re],
-            n = e.join(",");
-          n !== t && ((t = n), u.reportRect(...e));
+          const attachment = document.querySelector("[data-island] > [data-attached-character]");
+          const inset = name => Math.max(0, Math.min(128, Number(attachment?.dataset[name]) || 0));
+          const args = [Math.floor(r.x), Math.floor(r.y), Math.ceil(r.width), Math.ceil(r.height), k, te, re,
+            inset('attachmentRight'), inset('attachmentBottom')];
+          const key = [...args, window.innerWidth, window.innerHeight].join(",");
+          if (key !== t) {
+            t = key;
+            const sequence = ++reportSequence;
+            void u.reportRect(...args).then(result => {
+              if (disposed || sequence !== reportSequence) return;
+              const height = result?.layoutViewportHeight;
+              if (typeof height === 'number' && Number.isFinite(height) && height > 0) {
+                const root = document.documentElement;
+                const previous = Number(root.dataset.layoutViewportHeight);
+                root.dataset.layoutViewportHeight = String(height);
+                root.dataset.canvasOverscanWidth = String(result.canvasOverscanWidth ?? 0);
+                root.dataset.canvasOverscanBottom = String(result.canvasOverscanBottom ?? 0);
+                if (previous !== height) window.dispatchEvent(new Event('woods:layout-viewport'));
+              }
+            }).catch(() => {});
+          }
         }
         e = requestAnimationFrame(n);
       };
       e = requestAnimationFrame(n);
-      return () => cancelAnimationFrame(e);
+      return () => { disposed = true; cancelAnimationFrame(e); };
     }, [s, c, D, k, te, re]));
   let A = useIslandStore(qj),
     me = useIslandStore((e) => e.settings?.lyrics === !0 && e.settings.lyricsInPlayer !== !1),

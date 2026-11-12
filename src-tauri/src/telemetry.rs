@@ -83,7 +83,7 @@ fn capability(kind:&str,processes:&HashSet<String>)->Vec<String>{
     let mut result:Vec<String>=result.into_iter().collect();result.sort();result
 }
 pub fn privacy()->Value{let processes=running_processes();json!({"mic":capability("microphone",&processes),"cam":capability("webcam",&processes)})}
-pub fn snapshot()->Value{json!({"privacy":privacy(),"battery":battery(),"layout":layout(),"capsLock":caps()})}
+pub fn snapshot()->Value{json!({"privacy":privacy(),"battery":battery(),"layout":layout(),"capsLock":caps(),"vdesk":virtual_desktop()})}
 
 pub fn virtual_desktop()->Option<Value>{
     let key=open_key(HKEY_CURRENT_USER,"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VirtualDesktops")?;

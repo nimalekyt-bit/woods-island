@@ -19,13 +19,95 @@ const root = path.resolve(__dirname, '..');
 const suppliedExe = process.argv[2] || path.join(root, 'src-tauri', 'target', 'release', 'woods-island.exe');
 const port = Number(process.env.WOODS_TEST_CDP_PORT || 9334);
 const musicPort = port + 1; // Isolated bridge: never send fixtures to the user's player.
+assert(Number.isInteger(port)&&port>=1024&&port<65535,'Invalid QA CDP port');
+assert(port!==3003&&musicPort!==3003,'QA ports must never use the owner music bridge on 3003');
 const results = [];
 const errors = [];
+const testFilter=process.env.WOODS_TEST_FILTER?new RegExp(process.env.WOODS_TEST_FILTER):null;
+let matchedChecks=0;
 let proc;
 let connections = [];
 let providerServer;
 let obsServer;
 let weatherServer;
+
+async function assertQaMusicBridge() {
+  for(let attempt=0;attempt<30;attempt++){
+    const query=spawnSync('powershell.exe',['-NoProfile','-Command',
+      `Get-NetTCPConnection -LocalPort ${musicPort} -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess`
+    ],{encoding:'utf8',windowsHide:true});
+    const owners=query.stdout.trim().split(/\s+/).filter(Boolean).map(Number);
+    assert(owners.every(owner=>Number.isInteger(owner)&&owner===proc.pid),'Fixture music port belongs to another process: '+JSON.stringify({musicPort,owners,testProcessPid:proc.pid}));
+    if(owners.length)return {musicPort,owners};
+    assert.equal(proc.exitCode,null,'QA process exited before binding its music bridge');
+    await pause(100);
+  }
+  throw new Error('Isolated QA music bridge did not bind its own fixture port');
+}
+
+async function assertPassiveForeground(client) {
+  const tauriFocused=await client.invoke('plugin:window|is_focused',{label:'main'});
+  // Win32's foreground process is authoritative; Tauri can retain a child-focus flag.
+  const focus=spawnSync('powershell.exe',['-NoProfile','-Command',
+    'Add-Type -TypeDefinition \'using System; using System.Runtime.InteropServices; public class WoodsQaForeground { [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow(); [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint process); }\'; $foregroundOwner=0; [void][WoodsQaForeground]::GetWindowThreadProcessId([WoodsQaForeground]::GetForegroundWindow(),[ref]$foregroundOwner); Write-Output $foregroundOwner'
+  ],{encoding:'utf8',windowsHide:true});
+  assert.equal(focus.status,0,focus.stderr);
+  const foregroundPid=Number(focus.stdout.trim());
+  assert(foregroundPid>0,'Foreground PID unavailable');
+  assert.notEqual(foregroundPid,proc.pid,'Native QA window became the foreground window');
+  const diagnostics=await client.invoke('window_diagnostics');
+  assert(diagnostics.exStyle&0x08000000,'WS_EX_NOACTIVATE must stay set');
+  return {tauriFocused,foregroundPid,testProcessPid:proc.pid,noActivate:true};
+}
+
+// Runs in the real WebView2 page. Leaf bounds include stroke and all four
+// transformed corners, so rotated shoes and the tail's round caps are covered.
+function readAttachedPaint() {
+  const pill=document.querySelector('[data-island]');
+  const svg=pill?.querySelector(':scope > [data-attached-character]');
+  if(!svg)return null;
+  const paint={left:Infinity,top:Infinity,right:-Infinity,bottom:-Infinity,nodes:0};
+  for(const node of svg.querySelectorAll('path,circle,ellipse,rect,line,polyline,polygon,text,image,use')){
+    let visible=true;
+    for(let ancestor=node;ancestor&&ancestor!==pill;ancestor=ancestor.parentElement){
+      const style=getComputedStyle(ancestor);
+      if(style.display==='none'||style.visibility==='hidden'||Number(style.opacity)===0){visible=false;break;}
+    }
+    if(!visible||(node.tagName==='path'&&!node.getAttribute('d')))continue;
+    const style=getComputedStyle(node),box=node.getBBox(),matrix=node.getScreenCTM();
+    const stroke=style.stroke!=='none'&&Number(style.strokeOpacity)>0?parseFloat(style.strokeWidth)/2:0;
+    if(!matrix||(!box.width&&!box.height&&!stroke))continue;
+    const points=[[box.x-stroke,box.y-stroke],[box.x+box.width+stroke,box.y-stroke],
+      [box.x-stroke,box.y+box.height+stroke],[box.x+box.width+stroke,box.y+box.height+stroke]]
+      .map(([x,y])=>new DOMPoint(x,y).matrixTransform(matrix));
+    paint.left=Math.min(paint.left,...points.map(point=>point.x));
+    paint.top=Math.min(paint.top,...points.map(point=>point.y));
+    paint.right=Math.max(paint.right,...points.map(point=>point.x));
+    paint.bottom=Math.max(paint.bottom,...points.map(point=>point.y));
+    paint.nodes++;
+  }
+  const rect=pill.getBoundingClientRect();
+  return {id:svg.dataset.character,mood:svg.dataset.characterMood,paint,viewport:[innerWidth,innerHeight],
+    pill:{left:rect.left,top:rect.top,right:rect.right,bottom:rect.bottom,width:rect.width,height:rect.height},
+    attachment:[Number(svg.dataset.attachmentRight),Number(svg.dataset.attachmentBottom)],
+    layoutViewportHeight:Number(document.documentElement.dataset.layoutViewportHeight)};
+}
+
+function assertAttachedContainment(sample,native,label) {
+  assert(sample&&sample.paint.nodes>0,'Attached drawing missing: '+label);
+  const physical=Object.fromEntries(['left','top','right','bottom'].map(key=>[key,sample.paint[key]*native.pageFactor]));
+  assert(Object.values(physical).every(Number.isFinite),'Non-finite attached paint: '+label);
+  assert(native.visualBounds&&native.bounds,'Native region diagnostics missing: '+label);
+  const contains=outer=>physical.left>=outer[0]-1&&physical.top>=outer[1]-1&&
+    physical.right<=outer[2]+1&&physical.bottom<=outer[3]+1;
+  assert(contains([0,0,native.width,native.height]),'Attached paint clipped by WebView canvas: '+JSON.stringify({label,sample,native}));
+  assert(contains(native.visualBounds),'Attached paint clipped by native region: '+JSON.stringify({label,sample,native}));
+  // The extra painted surface must not turn the character into a desktop hitbox.
+  assert(native.bounds[2]<=Math.ceil((sample.pill.right+4)*native.pageFactor)+2,'Right hitbox grew with paint: '+label);
+  assert(native.bounds[3]<=Math.ceil((sample.pill.bottom+6)*native.pageFactor)+2,'Bottom hitbox grew with paint: '+label);
+  assert(physical.bottom>native.bounds[3],'Fixture must include paint below the pill hitbox: '+label);
+  return physical;
+}
 
 // Read native desktop PNGs without a separate browser renderer or image library.
 function rgbaPng(bytes) {
@@ -67,7 +149,7 @@ async function attach(page) {
   });
   const command = (method, params = {}) => new Promise((resolve, reject) => {
     const next = ++id;
-    pending.set(next, { resolve, reject, timer: setTimeout(() => { pending.delete(next); reject(new Error(`${method} timeout`)); }, 20000) });
+    pending.set(next, { resolve, reject, timer: setTimeout(() => { pending.delete(next); reject(new Error(`${method} timeout`)); }, method === 'Runtime.evaluate' ? 60000 : 20000) });
     ws.send(JSON.stringify({ id: next, method, params }));
   });
   await command('Runtime.enable');
@@ -79,7 +161,10 @@ async function attach(page) {
 }
 
 async function check(name, task) {
-  if(process.env.WOODS_TEST_FILTER && !new RegExp(process.env.WOODS_TEST_FILTER).test(name)){
+  const matches=!testFilter||testFilter.test(name);
+  if(matches)matchedChecks++;
+  const critical=name==='No unhandled frontend exceptions'||name==='Explicit quit exits the application';
+  if(!matches&&!critical){
     results.push({name,ok:true,skipped:true,details:{skipped:true,reason:'Targeted diagnostic run'}});return;
   }
   try { const details = await task(); const skipped=details?.skipped===true; results.push({ name, ok: true, ...(skipped?{skipped:true}:{}), details }); console.log(`${skipped?'SKIP':'PASS'} ${name}`); }
@@ -124,13 +209,15 @@ async function quit(client) {
 }
 
 (async () => {
-  const tempRoot = path.join(os.tmpdir(), 'woodscorp_obs');
+  const tempRoot = path.join(root, 'src-tauri', 'target', 'qa-temp', 'woodscorp_obs');
   await fs.mkdir(tempRoot,{recursive:true});
   const directory = await fs.mkdtemp(path.join(tempRoot, 'island-acceptance-'));
   const exe = path.join(directory, 'woods-island.exe');
   await fs.copyFile(suppliedExe, exe);
   const dataDir = path.join(directory, 'data');
   await fs.mkdir(dataDir);
+  const scratchDir=path.join(directory,'tmp');
+  await fs.mkdir(scratchDir);
   let weatherRequests=0, lyricsRequests=0;
   const weatherStart=Math.floor(Date.now()/3600000)*3600;
   const weatherFixture={properties:{timeseries:Array.from({length:168},(_,i)=>({time:new Date((weatherStart+i*3600)*1000).toISOString(),data:{instant:{details:{air_temperature:2+i%4,wind_speed:3,relative_humidity:80,air_pressure_at_sea_level:1012,wind_from_direction:180}},next_1_hours:{summary:{symbol_code:i%2?'cloudy_day':'lightrain_night'},details:{precipitation_amount:0.4}}}}))}};
@@ -154,11 +241,12 @@ async function quit(client) {
   const agentConfigs=[['.claude/settings.json',JSON.stringify({permissions:{allow:['Read']},hooks:{Stop:[{hooks:[{type:'command',command:'fixture-notify.exe'}]}]}})],['.codex/config.toml','# untouched fixture\nnotify = ["fixture-notify.exe"]\nmodel = "fixture"\n'],['.config/opencode/opencode.json','{}']];
   for(const [name,content]of agentConfigs){const file=path.join(agentHome,name);await fs.mkdir(path.dirname(file),{recursive:true});await fs.writeFile(file,content);}
   async function launch(){
-    proc = spawn(exe, [], { cwd: directory, windowsHide: true, stdio: ['ignore','pipe','pipe'], env: { ...process.env, APPDATA: path.join(directory, 'appdata'), WOODS_ISLAND_DATA_DIR: dataDir, WOODS_ISLAND_AGENT_HOME:agentHome, WOODS_ISLAND_STEAM_PATH:path.join(directory,'steam'), WOODS_ISLAND_MUSIC_PORT:String(musicPort), WOODS_ISLAND_WEATHER_URL:weatherUrl, WOODS_ISLAND_LYRICS_URL:weatherUrl.replace('/forecast','/lyrics'), WOODS_ISLAND_PASSIVE_QA:'1', WEBVIEW2_USER_DATA_FOLDER:path.join(directory,'webview'), WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}` } });
+    proc = spawn(exe, [], { cwd: directory, windowsHide: true, stdio: ['ignore','pipe','pipe'], env: { ...process.env, TEMP:scratchDir, TMP:scratchDir, APPDATA: path.join(directory, 'appdata'), WOODS_ISLAND_DATA_DIR: dataDir, WOODS_ISLAND_AGENT_HOME:agentHome, WOODS_ISLAND_STEAM_PATH:path.join(directory,'steam'), WOODS_ISLAND_MUSIC_PORT:String(musicPort), WOODS_ISLAND_WEATHER_URL:weatherUrl, WOODS_ISLAND_LYRICS_URL:weatherUrl.replace('/forecast','/lyrics'), WOODS_ISLAND_PASSIVE_QA:'1', WEBVIEW2_USER_DATA_FOLDER:path.join(directory,'webview'), WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}` } });
     proc.stdout.on('data', data => process.stdout.write(data));
     proc.stderr.on('data', data => process.stderr.write(data));
     proc.on('exit', (code, signal) => console.log(`Native process exited: code=${code}, signal=${signal}`));
     await new Promise((resolve, reject) => { proc.once('spawn', resolve); proc.once('error', reject); });
+    await assertQaMusicBridge();
   }
   await launch();
   const pages = await pagesReady();
@@ -204,6 +292,15 @@ async function quit(client) {
       const after=await main.invoke('audio_devices');assert.deepEqual(after.filter(d=>d.default).map(d=>d.id),defaults);
       assert(after.some(d=>d.id===chosen.id&&d.chosen));return {selected:chosen.name,defaultUnchanged:true};
     }finally{await main.invoke('settings_set',{settings:{audioOutput:prior.audioOutput}});}
+  });
+  await check('Bootstrap supplies virtual desktop state before the first frontend telemetry listener',async()=>{
+    const boot=await main.invoke('bootstrap');assert(Object.hasOwn(boot,'vdesk'));
+    if(boot.vdesk===null)return {available:false,initialState:null};
+    assert(boot.vdesk.count>=1&&boot.vdesk.index>=1&&boot.vdesk.index<=boot.vdesk.count);
+    await waitFor(main,'(async()=>{const {ot}=await import("/assets/runtime-debug.js");return ot.getState().vdesk!==null;})()','Initial virtual desktop snapshot');
+    const initial=await main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");return ot.getState().vdesk;})()');
+    assert(initial.count>=1&&initial.index>=1&&initial.index<=initial.count);
+    return {available:true,bootstrap:boot.vdesk,initial};
   });
   await check('Capture visibility setting changes native display protection',async()=>{
     assert.equal((await main.invoke('window_diagnostics')).captureAffinity,0x11);
@@ -442,7 +539,7 @@ async function quit(client) {
         await main.invoke('settings_set',{settings:{mediaPill:'lyrics'}});
         await waitFor(main,'document.querySelector("[data-lyrics-line]")?.textContent === "Да"','Typed lyrics mount');await pause(1000);
         const lyrics=await sample();heightIs(lyrics.height,44);heightIs(lyrics.viewportHeight,30);assert(lyrics.lineW>0);assert(lyrics.width<=682);
-        position=8500;await send();await pause(450);const long=await sample();assert(Math.abs(long.width-lyrics.width)<1);assert.equal(long.height,lyrics.height);
+        position=8500;await send();await pause(450);const long=await sample();assert(Math.abs(long.width-lyrics.width)<1,JSON.stringify({scale,lyrics,long}));assert.equal(long.height,lyrics.height);
         position=1000;await send();await pause(350);
         await main.invoke('settings_set',{settings:{mediaPill:'normal',character:'legs',characterMusic:'legs',showClock:true}});await pause(900);
         const face=await sample();heightIs(face.height,32);assert(face.width>=265,JSON.stringify({scale,face}));assert.equal(face.lineW,0,'Lyrics must release width on unmount');
@@ -487,6 +584,224 @@ async function quit(client) {
       }
       return {measurements,insideCover:true,insidePill:true,twoBarsVisible:true,highContrast:true,scales:[80,100,150,200],modes:['title','normal','lyrics']};
     }finally{clearInterval(timer);await main.invoke('media_pick',{id:null});await main.invoke('settings_set',{settings:prior});await pause(3400);}
+  });
+  await check('Typed character engine renders all 25 characters, pause, sleep and cursor at every scale',async()=>{
+    const prior=await main.invoke('settings_get');
+    const measured=[];let playing=false,timer;
+    const send=()=>fetch(`http://127.0.0.1:${musicPort}/track`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({trackId:'character-engine-fixture',title:'Character fixture',artist:'Fixture',duration:20000,progress:1000,isPlaying:playing})});
+    try {
+      await main.invoke('settings_set',{settings:{liquidWith:false,showClock:false,showBattery:false,showWeather:false,showCaps:false,layoutInPill:false,desktopInPill:false,agentsStatus:false,obsStatus:false,showPrivacy:false,downloadsInPill:'off',moduleShelf:false,openOnHover:false,lyrics:false,mediaPill:'normal',moduleMedia:true}});
+      await send();await main.invoke('media_pick',{id:'ru.yandex.desktop.music.mod.connector'});
+      timer=setInterval(()=>void send().catch(()=>{}),80);
+      const catalog=await main.evaluate('(async()=>{const {characterCatalog}=await import("/assets/runtime-debug.js");return characterCatalog.map(({id,kind})=>({id,kind}));})()');
+      for(const scale of [80,100,150,200]) {
+        await main.invoke('settings_set',{settings:{scale}});
+        const rows=[];
+        for(const definition of catalog) {
+          await main.invoke('settings_set',{settings:{character:definition.id,characterMusic:definition.id}});
+          for(const state of ['idle','music','pause','sleep']) {
+            playing=state==='music';await send();
+            await main.evaluate(`(async()=>{const {ot,setCharacterCursor}=await import('/assets/runtime-debug.js');setCharacterCursor([120,45]);ot.setState({expanded:false,palette:false,peek:null,queue:[],hovered:false,pinned:false,holdOpen:false,tall:false,tab:'home',dragOver:null,asleep:${state==='sleep'}});})()`);
+            const expectedMood=playing?'music':state==='sleep'?'sleep':'idle';
+            await pause(300);
+            const sampleCurrent=()=>main.evaluate(`(()=>{
+            const pill=document.querySelector('[data-island]'),expectedMood=${JSON.stringify(expectedMood)};
+            // AnimatePresence can retain the preceding media/idle slot during its exit.
+            const roots=Array.from(pill.querySelectorAll('[data-character="${definition.id}"]'));
+            const root=roots.findLast(element=>element.dataset.characterMood===expectedMood)??roots.at(-1);
+            const svg=root?.tagName==='svg'?root:root?.querySelector('svg');
+            let artwork=null;
+            if(svg){const box=svg.getBBox(),matrix=svg.getScreenCTM();
+              const points=[[box.x,box.y],[box.x+box.width,box.y+box.height]].map(([x,y])=>new DOMPoint(x,y).matrixTransform(matrix));
+              artwork={left:points[0].x,top:points[0].y,right:points[1].x,bottom:points[1].y,width:box.width,height:box.height};}
+            const bounds=pill.getBoundingClientRect();
+            return {mood:root?.dataset.characterMood,
+              nodes:svg?.querySelectorAll('*').length??0,artwork,viewport:[innerWidth,innerHeight],
+              pill:{width:bounds.width,height:bounds.height},clip:getComputedStyle(pill.querySelector('[data-liquid-clip]')).overflow};
+            })()`);
+            let sample=await sampleCurrent();
+            // Transport updates and AnimatePresence exits are asynchronous. Wait for the
+            // requested painted state, rather than accepting an outgoing slot's element.
+            for(let attempt=0;definition.id!=='none'&&(sample.nodes===0||sample.mood!==expectedMood)&&attempt<30;attempt++){
+              await send();await pause(100);sample=await sampleCurrent();
+            }
+            rows.push({...definition,state,...sample});
+          }
+        }
+        assert.equal(rows.length,104);
+        for(const row of rows){
+          assert(row.pill.width>0&&row.pill.height>0,JSON.stringify(row));
+          assert.equal(row.clip,'hidden');
+          if(row.id==='none'){assert.equal(row.nodes,0);continue;}
+          assert(row.nodes>0,'Drawing missing: '+JSON.stringify(row));
+          assert.equal(row.mood,row.state==='music'?'music':row.state==='sleep'?'sleep':'idle',JSON.stringify(row));
+          assert(row.artwork.width>0&&row.artwork.height>0,JSON.stringify(row));
+          assert(row.artwork.right>0&&row.artwork.left<row.viewport[0]&&row.artwork.bottom>0&&row.artwork.top<row.viewport[1],
+            'Drawing outside native viewport: '+JSON.stringify(row));
+        }
+        measured.push({scale,rows});console.log('Character matrix scale '+scale+': '+rows.length+' frames');
+      }
+      const focusCheck=await assertPassiveForeground(main);
+      const screenshot=await main.command('Page.captureScreenshot',{format:'png'});
+      await fs.writeFile(path.join(directory,'typed-character-engine.png'),Buffer.from(screenshot.data,'base64'));
+      return {characters:25,plainOption:true,scales:[80,100,150,200],states:['idle','music','pause','sleep'],
+        cursor:'Synthetic native coordinates; physical pointer untouched',measured,noFocus:true,...focusCheck};
+    }finally{
+      clearInterval(timer);await main.invoke('media_pick',{id:null});
+      await main.invoke('settings_set',{settings:prior});
+      await main.evaluate('(async()=>{const {ot,setCharacterCursor}=await import("/assets/runtime-debug.js");setCharacterCursor(null);ot.setState({mediaLive:false,asleep:false,media:null,expanded:false,palette:false,peek:null,queue:[]});})()');
+      await pause(400);
+    }
+  });
+  await check('Attached tail and legs remain painted inside native bounds through pause, move and scale',async()=>{
+    const prior=await main.invoke('settings_get');
+    let playing=false,timer,background;
+    const measurements=[],geometryOnly=[],desktopProof=[];
+    const send=async()=>{
+      const response=await fetch(`http://127.0.0.1:${musicPort}/track`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({trackId:'attached-fixture',title:'Attached fixture',artist:'Fixture',duration:300000,progress:60000,isPlaying:playing})});
+      assert.equal(response.status,200);
+    };
+    const reset=()=>main.evaluate('(async()=>{const {ot,setCharacterCursor}=await import("/assets/runtime-debug.js");setCharacterCursor([120,45]);ot.setState({expanded:false,palette:false,peek:null,queue:[],hovered:false,pinned:false,holdOpen:false,tall:false,tab:"home",dragOver:null,asleep:false});})()');
+    const sample=()=>main.evaluate(`(${readAttachedPaint.toString()})()`);
+    const proveDesktop=async(label)=>{
+      const d=await main.invoke('window_diagnostics');
+      await main.invoke('plugin:window|set_position',{label:'settings',value:{Physical:{x:d.left-20,y:d.top}}});
+      await main.invoke('plugin:window|set_size',{label:'settings',value:{Physical:{width:d.width+40,height:d.height+80}}});
+      await main.invoke('plugin:window|show',{label:'settings'});
+      await main.invoke('plugin:window|set_always_on_top',{label:'settings',value:true});
+      await main.invoke('plugin:window|set_always_on_top',{label:'main',value:false});
+      await main.invoke('plugin:window|set_always_on_top',{label:'main',value:true});
+      await main.invoke('set_island_hidden',{hidden:false});
+      await main.evaluate('(async()=>{const {suspendCharacterAnimations}=await import("/assets/runtime-debug.js");suspendCharacterAnimations("attached-desktop-proof",true);})()');
+      try{
+        const painted=await sample();
+        await main.evaluate('(()=>{const svg=document.querySelector("[data-attached-character]");window.__attachedVisibility=svg.style.visibility;svg.style.visibility="hidden";})()');await pause(150);
+        const hidden=await main.invoke('window_diagnostics',{snapshot:true});assert(hidden.snapshot,hidden.snapshotError);
+        await main.evaluate('(()=>{document.querySelector("[data-attached-character]").style.visibility=window.__attachedVisibility;})()');await pause(150);
+        const visible=await main.invoke('window_diagnostics',{snapshot:true});assert(visible.snapshot,visible.snapshotError);
+        for(const key of ['left','top','width','height','bounds','visualBounds'])assert.deepEqual(visible[key],hidden[key],'Attachment visibility changed native geometry: '+key);
+        const physical=assertAttachedContainment(painted,visible,label+'/desktop');
+        const decode=uri=>Buffer.from(uri.split(',')[1],'base64');
+        const a=rgbaPng(decode(hidden.snapshot)),b=rgbaPng(decode(visible.snapshot));
+        assert.equal(a.width,b.width);assert.equal(a.height,b.height);
+        let changed=0,fixturePixels=0,right=-Infinity,bottom=-Infinity;
+        // Expanded pills cast a shadow under the shoes. Check the unobscured
+        // background across the canvas, then compare only the SVG's paint box.
+        for(let y=80;y<a.height;y+=8)for(let x=0;x<a.width;x+=8){
+          const offset=(y*a.width+x)*4;
+          if(a.pixels[offset]===185&&a.pixels[offset+1]===212&&a.pixels[offset+2]===56)fixturePixels++;
+        }
+        for(let y=Math.max(0,Math.floor(physical.top));y<Math.min(a.height,Math.ceil(physical.bottom)+2);y++){
+          for(let x=Math.max(0,Math.floor(physical.left));x<Math.min(a.width,Math.ceil(physical.right)+2);x++){
+            if(x<=visible.bounds[2]+1&&y<=visible.bounds[3]+1)continue;
+            const offset=(y*a.width+x)*4;
+            const delta=Math.max(...[0,1,2].map(channel=>Math.abs(a.pixels[offset+channel]-b.pixels[offset+channel])));
+            if(delta>20){changed++;right=Math.max(right,x+1);bottom=Math.max(bottom,y+1);}
+          }
+        }
+        assert(fixturePixels>30,'Isolated solid background missing behind attached paint: '+label);
+        if(changed<=10){
+          await fs.writeFile(path.join(directory,label.replaceAll('/','-')+'-hidden-debug.png'),decode(hidden.snapshot));
+          await fs.writeFile(path.join(directory,label.replaceAll('/','-')+'-visible-debug.png'),decode(visible.snapshot));
+          const cdp=await main.command('Page.captureScreenshot',{format:'png'});await fs.writeFile(path.join(directory,label.replaceAll('/','-')+'-cdp-debug.png'),Buffer.from(cdp.data,'base64'));
+        }
+        assert(changed>10,'Native desktop screenshot contains no attached paint outside the hitbox: '+JSON.stringify({label,painted,physical,native:{bounds:visible.bounds,visualBounds:visible.visualBounds,width:visible.width,height:visible.height},fixturePixels,changed}));
+        assert(bottom>=physical.bottom-6*visible.pageFactor,'Native desktop clipped the bottom of attached paint: '+JSON.stringify({label,physical,bottom}));
+        if(painted.id==='tail')assert(right>=physical.right-8*visible.pageFactor,'Native desktop clipped the tail tip: '+JSON.stringify({label,physical,right}));
+        desktopProof.push({label,changed,fixturePixels,right,bottom,physical,native:visible.visualBounds});
+        if(/\/200\/(music|expanded|chat)$/.test(label))await fs.writeFile(path.join(directory,label.replaceAll('/','-')+'-desktop.png'),decode(visible.snapshot));
+      }finally{
+        await main.evaluate('(()=>{const svg=document.querySelector("[data-attached-character]");if(svg&&window.__attachedVisibility!==undefined)svg.style.visibility=window.__attachedVisibility;delete window.__attachedVisibility;})()');
+        await main.evaluate('(async()=>{const {suspendCharacterAnimations}=await import("/assets/runtime-debug.js");suspendCharacterAnimations("attached-desktop-proof",false);})()');
+      }
+    };
+    const record=async(label)=>{
+      // Several live animation frames catch rotating shoes and the swinging tail.
+      const frames=[];
+      for(let frame=0;frame<5;frame++){
+        const painted=await sample(),native=await main.invoke('window_diagnostics');
+        frames.push({sample:painted,native,physical:assertAttachedContainment(painted,native,label)});
+        await pause(80);
+      }
+      measurements.push({label,frames});
+      await proveDesktop(label);
+      return frames.at(-1);
+    };
+    try{
+      await main.invoke('media_pick',{id:null});
+      await main.invoke('settings_set',{settings:{liquidWith:false,showClock:false,showBattery:false,showWeather:false,showCaps:false,layoutInPill:false,desktopInPill:false,agentsStatus:false,obsStatus:false,showPrivacy:false,downloadsInPill:'off',moduleShelf:false,openOnHover:false,lyrics:false,mediaPill:'normal',moduleMedia:true,offsetX:0,captureVisible:true}});
+      assert(await main.invoke('open_settings',{section:'general'}));
+      const pages=await pagesReady(page=>page.url.endsWith('/settings.html'));
+      background=await attach(pages.find(page=>page.url.endsWith('/settings.html')));
+      await waitFor(background,'!!document.body','Attached proof background canvas');
+      await background.evaluate('(()=>{const e=document.createElement("div");e.id="woods-attached-background";e.style.cssText="position:fixed;inset:0;z-index:2147483647;background:#b9d438;pointer-events:none";document.body.append(e);})()');
+      await reset();await send();await main.invoke('media_pick',{id:'ru.yandex.desktop.music.mod.connector'});
+      timer=setInterval(()=>void send().catch(error=>errors.push({description:error.message})),100);
+      for(const id of ['tail','legs'])for(const scale of [80,100,150,200]){
+        await main.invoke('settings_set',{settings:{character:id,characterMusic:id,scale}});
+        playing=false;await send();await reset();
+        await waitFor(main,'(async()=>{const {ot}=await import("/assets/runtime-debug.js");return !ot.getState().mediaLive;})()','Attached idle after pause grace');
+        await pause(850);
+        assert.equal((await sample()).mood,'idle');await record(`${id}/${scale}/idle`);
+        playing=true;await send();
+        await waitFor(main,'!!document.querySelector("[data-media-pill=normal][data-playback-state=playing]")','Attached playing media');
+        await pause(850);assert.equal((await sample()).mood,'music');await record(`${id}/${scale}/music`);
+        playing=false;await send();
+        await waitFor(main,'!!document.querySelector("[data-media-paused]")','Attached immediate pause');
+        await pause(350);assert.equal((await sample()).mood,'idle');await record(`${id}/${scale}/pause`);
+        await waitFor(main,'(async()=>{const {ot}=await import("/assets/runtime-debug.js");return !ot.getState().mediaLive;})()','Attached pause collapse');
+        await pause(850);await record(`${id}/${scale}/pauseCollapsed`);
+        await main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");ot.setState({expanded:true,tab:"controls",tall:false});})()');
+        await pause(1100);const expanded=await record(`${id}/${scale}/expanded`);
+        assert(Math.abs(expanded.sample.pill.width-680)<3,'Expanded attachment fixture must test maximum width');
+        await main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");ot.setState({tab:"chat",tall:true});})()');
+        await pause(1100);const chat=await record(`${id}/${scale}/chat`);
+        assert(chat.sample.pill.height>=419,'Chat attachment fixture must test maximum height');
+        assert(Math.abs(chat.sample.layoutViewportHeight-480)<2,'Transparent overscan changed chat layout viewport');
+        await reset();await pause(1000);
+        const before=await record(`${id}/${scale}/beforeGeometryOnly`);
+        // Block only rectangle reports. Native scale/position must preserve the
+        // last attachment insets even when the CSS rectangle stays unchanged.
+        await main.evaluate('(async()=>{const {O}=await import("/assets/runtime-debug.js");window.__attachedQa={api:O,reportRect:O.reportRect,blocked:0,root:document.querySelector("[data-attached-character]"),nodes:Array.from(document.querySelectorAll("[data-attached-character] *"))};O.reportRect=function(){window.__attachedQa.blocked++;return Promise.resolve(null);};})()');
+        try{
+          assert.equal(await main.evaluate('(async()=>{const {O}=await import("/assets/runtime-debug.js");return await O.reportRect(0,0,0,0,false)===null;})()'),true,'Rectangle report override must prevent IPC dispatch');
+          const nextScale=scale===200?80:200;
+          for(const [kind,patch]of [['move',{offsetX:37}],['scale',{scale:nextScale}],['restore',{offsetX:0,scale}]]){
+            assert.deepEqual(await main.invoke('settings_set',{settings:patch}),[]);
+            await pause(850);const current=await record(`${id}/${scale}/${kind}WithoutRectReport`);
+            const reuse=await main.evaluate('(()=>{const qa=window.__attachedQa,root=document.querySelector("[data-attached-character]");return {sameRoot:root===qa.root,sameNodes:qa.nodes.every(node=>root.contains(node)),blocked:qa.blocked};})()');
+            assert(reuse.sameRoot&&reuse.sameNodes,'Native geometry change rebuilt attached DOM');
+            assert(reuse.blocked>=1,'Rectangle report override was not exercised');
+            for(const key of ['left','top','width','height'])assert(Math.abs(current.sample.pill[key]-before.sample.pill[key])<2,'CSS pill changed in geometry-only test: '+key);
+            if(kind==='move')assert(Math.abs(current.native.left-before.native.left-Math.round(37*current.native.scale))<=1,'Native move fixture did not move the window');
+            if(kind==='scale')assert.equal(current.native.zoom,nextScale/100);
+            geometryOnly.push({id,scale,kind,reuse,native:current.native});
+          }
+        }finally{
+          await main.evaluate('(()=>{window.__attachedQa.api.reportRect=window.__attachedQa.reportRect;delete window.__attachedQa;window.dispatchEvent(new Event("resize"));})()');
+        }
+        console.log(`Attachment matrix ${id}/${scale}: paint, pause, expanded/chat, move/scale passed`);
+      }
+      await main.invoke('settings_set',{settings:{character:'none',characterMusic:'none',scale:100}});
+      await reset();await pause(850);
+      const plain=await main.invoke('window_diagnostics');
+      assert.deepEqual(plain.canvasOverscan,[0,0]);assert.equal(plain.width,Math.round(760*plain.scale));
+      assert.equal(await sample(),null);
+      const focus=await assertPassiveForeground(main);
+      return {characters:['tail','legs'],scales:[80,100,150,200],states:['idle','music','pause','pauseCollapsed','expanded','chat'],measurements,geometryOnly,desktopProof,plainReset:true,strokeAndTransformedCorners:true,...focus};
+    }finally{
+      clearInterval(timer);await main.invoke('media_pick',{id:null});
+      await main.evaluate('(()=>{if(window.__attachedQa){window.__attachedQa.api.reportRect=window.__attachedQa.reportRect;delete window.__attachedQa;}})()');
+      await main.invoke('set_island_hidden',{hidden:false});
+      if(background){
+        await main.invoke('plugin:window|hide',{label:'settings'});
+        await main.invoke('plugin:window|set_always_on_top',{label:'settings',value:false});
+        await background.evaluate('document.getElementById("woods-attached-background")?.remove()');
+      }
+      await main.invoke('settings_set',{settings:prior});
+      await main.evaluate('(async()=>{const {ot,setCharacterCursor}=await import("/assets/runtime-debug.js");setCharacterCursor(null);ot.setState({mediaLive:false,media:null,asleep:false,expanded:false,palette:false,peek:null,queue:[],tall:false,tab:"home"});})()');
+      await pause(400);
+    }
   });
   await check('Disabled download cards and agent questions suppress their UI events',async()=>{
     const prior=await main.invoke('settings_get');
@@ -889,7 +1204,12 @@ async function quit(client) {
     return {sections,controlsBySection,charactersMounted:characters.length,rendererReleased:true,recreatedWithoutFocus:true};
   });
   await check('Notes button exports Markdown to Obsidian without overwriting files',async()=>{
-    assert.equal(await main.evaluate('performance.getEntriesByType("resource").some(r=>r.name.includes("vendor-editor-"))'),false,'Rich editor must not load before notes');
+    const loadedAssets=async()=>{
+      const resources=await main.command('Page.getResourceTree');
+      const collect=tree=>[...(tree.resources??[]).map(resource=>resource.url),...(tree.childFrames??[]).flatMap(collect)];
+      return collect(resources.frameTree);
+    };
+    assert.equal((await loadedAssets()).some(name=>name.includes('vendor-editor-')),false,'Rich editor must not load before notes');
     const vault=path.join(directory,'vault');await fs.mkdir(vault);
     await main.invoke('settings_set',{settings:{obsidianVaultPath:vault}});
     const markdown='## Проверка Obsidian\n\n**Важное**\n- [ ] План';
@@ -897,7 +1217,7 @@ async function quit(client) {
     await main.invoke('note');
     await waitFor(main,'!!document.querySelector("[data-note-export]")','Obsidian export button');
     await waitFor(main,'!!document.querySelector("[data-note-editor]")','Lazy rich editor');
-    const editorResources=await main.evaluate('performance.getEntriesByType("resource").map(r=>r.name)');
+    const editorResources=await loadedAssets();
     assert(editorResources.some(name=>name.includes('vendor-editor-')),JSON.stringify(editorResources));
     await main.evaluate('document.querySelector("[data-note-export]").click()');
     const folder=path.join(vault,'Woods Island');
@@ -948,10 +1268,11 @@ async function quit(client) {
     await quit(main);
   });
   const report = { directory, testedExe: suppliedExe, sha256:createHash('sha256').update(await fs.readFile(exe)).digest('hex'), passiveQa:true, results, frontendErrors: errors };
+  if(testFilter&&matchedChecks===0)results.push({name:'Test filter matches an acceptance check',ok:false,error:'No acceptance check matched WOODS_TEST_FILTER'});
   await fs.writeFile(path.join(directory,'report.json'),JSON.stringify(report,null,2));
   console.log(`REPORT ${path.join(directory,'report.json')}`);
   console.log(`${results.filter(r=>r.ok&&!r.skipped).length}/${results.filter(r=>!r.skipped).length} passed; ${results.filter(r=>r.skipped).length} skipped`);
-  process.exitCode = results.some(r=>!r.ok) ? 1 : 0;
+  process.exitCode = results.some(r=>!r.ok)||errors.length>0 ? 1 : 0;
 })().catch(error=>{ console.error(error.stack); process.exitCode=2; }).finally(()=>{
   for(const ws of connections) ws.close();
   if(proc && proc.exitCode===null) proc.kill();

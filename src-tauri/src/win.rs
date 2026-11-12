@@ -50,6 +50,11 @@ extern "system" {
 }
 
 static CURRENT_BOUNDS: Mutex<Option<(i32, i32, i32, i32)>> = Mutex::new(None);
+static VISUAL_BOUNDS: Mutex<Option<(i32, i32, i32, i32)>> = Mutex::new(None);
+// Physical geometry before transparent attachment overscan; never feeds chat sizing.
+static BASE_CANVAS: Mutex<Option<(i32, i32, i32, i32)>> = Mutex::new(None);
+static CANVAS_OVERSCAN: Mutex<(f64, f64)> = Mutex::new((0.0, 0.0));
+static ATTACHMENT_INSETS: Mutex<(f64, f64)> = Mutex::new((0.0, 0.0));
 static CLICK_THROUGH: AtomicBool = AtomicBool::new(false);
 static ISLAND_HWND: Mutex<isize> = Mutex::new(0);
 static PREVIOUS_FOCUS: Mutex<isize> = Mutex::new(0);
@@ -63,6 +68,35 @@ fn scaled_bounds(rect: (i32, i32, i32, i32), scale: f64, width: i32, height: i32
     let right = ((x2 as f64 * scale).ceil() as i32).clamp(left, width);
     let bottom = ((y2 as f64 * scale).ceil() as i32).clamp(top, height);
     (left, top, right, bottom)
+}
+
+pub fn safe_visual_inset(value: Option<f64>) -> f64 {
+    value.filter(|value| value.is_finite()).unwrap_or(0.0).clamp(0.0, 128.0)
+}
+
+// Reserve enough for the supported 680px expanded/chat pill. Native canvas is
+// centered, so a right attachment needs equal transparent overscan on both sides.
+fn attachment_overscan(right: f64, bottom: f64) -> (f64, f64) {
+    let width = (2.0 * (340.0 + right - 380.0)).max(0.0).ceil();
+    // 480 - (420px chat + 8px capsule offset) = 52px. Tall chat keeps ≥60px.
+    let height = if bottom > 52.0 { (bottom - 52.0).ceil() + 2.0 } else { 0.0 };
+    (width, height)
+}
+
+fn visual_bounds(hit: (i32, i32, i32, i32), scale: f64, canvas: (i32, i32), right: f64, bottom: f64) -> (i32, i32, i32, i32) {
+    let pad = (24.0 * scale).ceil() as i32;
+    let extra_right = (right * scale).ceil() as i32;
+    let extra_bottom = (bottom * scale).ceil() as i32;
+    ((hit.0 - pad).max(0), (hit.1 - pad).max(0),
+        (hit.2 + pad.max(extra_right)).min(canvas.0),
+        (hit.3 + pad.max(extra_bottom)).min(canvas.1))
+}
+
+pub struct CanvasReport {
+    pub shift_x: f64,
+    pub layout_height: f64,
+    pub overscan_width: f64,
+    pub overscan_bottom: f64,
 }
 
 unsafe extern "system" fn island_subclass_proc(
@@ -147,6 +181,7 @@ impl WindowManager {
         *ISLAND_ZOOM.lock().unwrap() = zoom;
         *PAGE_FACTOR.lock().unwrap() = None;
         *CURRENT_BOUNDS.lock().unwrap() = None;
+        *VISUAL_BOUNDS.lock().unwrap() = None;
     }
 
     pub fn effective_scale(hwnd: HWND) -> f64 {
@@ -157,6 +192,10 @@ impl WindowManager {
         if !width.is_finite() || width <= 0.0 { return; }
         let mut client = RECT::default();
         if unsafe { GetClientRect(hwnd, &mut client) }.is_ok() && client.right > 0 {
+            // A report queued before an overscan/zoom resize must not redefine the
+            // page factor using the old viewport width and start a resize feedback loop.
+            let expected_scale = Self::scale_factor(hwnd) * *ISLAND_ZOOM.lock().unwrap();
+            if (client.right as f64 / expected_scale - width).abs() > 2.0 { return; }
             *PAGE_FACTOR.lock().unwrap() = Some(client.right as f64 / width);
         }
     }
@@ -182,6 +221,9 @@ impl WindowManager {
                 "width": client.right, "height": client.bottom,
                 "left": rect.left, "top": rect.top,
                 "bounds": *CURRENT_BOUNDS.lock().unwrap(),
+                "visualBounds": *VISUAL_BOUNDS.lock().unwrap(),
+                "baseCanvas": *BASE_CANVAS.lock().unwrap(),
+                "canvasOverscan": *CANVAS_OVERSCAN.lock().unwrap(),
                 "through": CLICK_THROUGH.load(Ordering::Relaxed),
                 "inputTransparent": GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_TRANSPARENT.0 as isize != 0
             })
@@ -238,9 +280,14 @@ impl WindowManager {
                 if tall { canvas_h = (info.rcMonitor.bottom - y).max(canvas_h); }
             }
             let x = left + (width - canvas_w) / 2 + (offset_x as f64 * scale).round() as i32;
-            let _ = SetWindowPos(hwnd, HWND_TOPMOST, x, y, canvas_w, canvas_h, SWP_NOACTIVATE | SWP_FRAMECHANGED);
+            *BASE_CANVAS.lock().unwrap() = Some((x, y, canvas_w, canvas_h));
+            let overscan = *CANVAS_OVERSCAN.lock().unwrap();
+            let extra_w = (overscan.0 * scale * zoom).round() as i32;
+            let extra_h = (overscan.1 * scale * zoom).round() as i32;
+            let _ = SetWindowPos(hwnd, HWND_TOPMOST, x - extra_w / 2, y, canvas_w + extra_w, canvas_h + extra_h, SWP_NOACTIVATE | SWP_FRAMECHANGED);
             // A DPI or geometry change invalidates cached region coordinates.
             *CURRENT_BOUNDS.lock().unwrap() = None;
+            *VISUAL_BOUNDS.lock().unwrap() = None;
             *PAGE_FACTOR.lock().unwrap() = None;
         }
     }
@@ -324,6 +371,7 @@ impl WindowManager {
             let screen_w = GetSystemMetrics(SM_CXSCREEN);
             let pos_x = (screen_w - physical_width) / 2;
             let pos_y = 0;
+            *BASE_CANVAS.lock().unwrap() = Some((pos_x, pos_y, physical_width, physical_height));
             
             SetWindowPos(
                 hwnd,
@@ -359,27 +407,63 @@ impl WindowManager {
     /// The rectangle follows the actual animated DOM size, never a rounded GDI
     /// substitute for the liquid contour. Hover never changes WebView styles.
     pub fn update_island_region(hwnd: HWND, rect: Option<(i32, i32, i32, i32)>) {
+        // Geometry-only changes may not produce another DOM rectangle report.
+        // Preserve the current attachment paint when moving or resizing the window.
+        let (right, bottom) = *ATTACHMENT_INSETS.lock().unwrap();
+        Self::update_island_region_with_insets(hwnd, rect, right, bottom);
+    }
+
+    /// Enlarge only the painted surface. HTCLIENT continues to use CURRENT_BOUNDS.
+    pub fn update_island_region_with_insets(hwnd: HWND, rect: Option<(i32, i32, i32, i32)>, right: f64, bottom: f64) {
+        *ATTACHMENT_INSETS.lock().unwrap() = (right, bottom);
         unsafe {
+            let mut client = RECT::default();
+            if GetClientRect(hwnd, &mut client).is_err() { return; }
+            let scale = Self::effective_scale(hwnd);
             let next = match rect {
                 Some((x1, y1, x2, y2)) => {
-                    let mut client = RECT::default();
-                    if GetClientRect(hwnd, &mut client).is_err() { return; }
-                    let scale = Self::effective_scale(hwnd);
                     let (rx1, ry1, rx2, ry2) = scaled_bounds((x1, y1, x2, y2), scale, client.right.max(0), client.bottom.max(0));
                     Some((rx1, ry1, rx2, ry2))
                 }
                 None => None,
             };
+            let visual = next.map(|hit| visual_bounds(hit, scale, (client.right.max(0), client.bottom.max(0)), right, bottom));
             let mut bounds = CURRENT_BOUNDS.lock().unwrap();
-            if *bounds == next {return;}
+            let mut painted = VISUAL_BOUNDS.lock().unwrap();
+            if *bounds == next && *painted == visual {return;}
             *bounds = next;
+            *painted = visual;
             drop(bounds);
-            let pad = (24.0 * Self::effective_scale(hwnd)).ceil() as i32;
-            let region = match next {
-                Some((left,top,right,bottom)) => CreateRectRgn((left-pad).max(0),(top-pad).max(0),right+pad,bottom+pad),
+            drop(painted);
+            let region = match visual {
+                Some((left,top,right,bottom)) => CreateRectRgn(left,top,right,bottom),
                 None => CreateRectRgn(0,0,0,0),
             };
             if SetWindowRgn(hwnd, region, true) == 0 {let _ = DeleteObject(region);}
+        }
+    }
+
+    /// A character change resizes the empty canvas once. The screen-space pill
+    /// center is preserved; the returned shift also covers the first pre-resize report.
+    pub fn ensure_attachment_canvas(hwnd: HWND, right: f64, bottom: f64) -> CanvasReport {
+        let scale = Self::effective_scale(hwnd);
+        let desired = attachment_overscan(right, bottom);
+        unsafe {
+            let mut client = RECT::default();
+            let _ = GetClientRect(hwnd, &mut client);
+            let current = Self::get_window_rect(hwnd).unwrap_or_default();
+            let base = *BASE_CANVAS.lock().unwrap().get_or_insert((current.left, current.top, client.right, client.bottom));
+            let width = base.2 + (desired.0 * scale).round() as i32;
+            let height = base.3 + (desired.1 * scale).round() as i32;
+            let mut shift_x = 0.0;
+            if client.right != width || client.bottom != height {
+                if SetWindowPos(hwnd, HWND_TOPMOST, base.0 - (width - base.2) / 2, base.1, width, height, SWP_NOACTIVATE | SWP_FRAMECHANGED).is_ok() {
+                    shift_x = (width - client.right) as f64 / scale / 2.0;
+                    *VISUAL_BOUNDS.lock().unwrap() = None;
+                }
+            }
+            *CANVAS_OVERSCAN.lock().unwrap() = desired;
+            CanvasReport { shift_x, layout_height: base.3 as f64 / scale, overscan_width: desired.0, overscan_bottom: desired.1 }
         }
     }
 
@@ -410,7 +494,7 @@ impl WindowManager {
 
 #[cfg(test)]
 mod tests {
-    use super::scaled_bounds;
+    use super::{attachment_overscan, safe_visual_inset, scaled_bounds, visual_bounds};
 
     #[test]
     fn css_bounds_follow_monitor_dpi() {
@@ -422,5 +506,60 @@ mod tests {
     fn off_canvas_bounds_are_clamped_without_inverting() {
         assert_eq!(scaled_bounds((-10, -5, 900, 800), 1.0, 760, 480), (0, 0, 760, 480));
         assert_eq!(scaled_bounds((900, 600, -1, -1), 1.0, 760, 480), (760, 480, 760, 480));
+    }
+
+    #[test]
+    fn attachment_values_are_optional_finite_and_bounded() {
+        assert_eq!(safe_visual_inset(None), 0.0);
+        assert_eq!(safe_visual_inset(Some(f64::NAN)), 0.0);
+        assert_eq!(safe_visual_inset(Some(f64::INFINITY)), 0.0);
+        assert_eq!(safe_visual_inset(Some(-20.0)), 0.0);
+        assert_eq!(safe_visual_inset(Some(1000.0)), 128.0);
+        assert_eq!(attachment_overscan(0.0, 0.0), (0.0, 0.0));
+        assert_eq!(attachment_overscan(0.0, 38.0), (0.0, 0.0));
+        assert_eq!(attachment_overscan(68.0, 56.0), (56.0, 6.0));
+    }
+
+    #[test]
+    fn visual_region_contains_tail_without_extending_hit_bounds_at_100_and_200_percent() {
+        for scale in [1.0, 2.0] {
+            let (extra_w, extra_h) = attachment_overscan(68.0, 56.0);
+            let canvas = (((760.0 + extra_w) * scale) as i32, ((480.0 + extra_h) * scale) as i32);
+            for (pill_width, pill_height, top) in [(150.0, 30.0, 0.0), (268.0, 32.0, 8.0), (680.0, 336.0, 0.0), (680.0, 420.0, 8.0)] {
+                let x = (760.0 + extra_w - pill_width) / 2.0;
+                let css_hit = ((x - 4.0) as i32, 0, (x + pill_width + 4.0) as i32, (top + pill_height + 6.0) as i32);
+                let hit = scaled_bounds(css_hit, scale, canvas.0, canvas.1);
+                let original_hit = hit;
+                let visual = visual_bounds(hit, scale, canvas, 68.0, 56.0);
+                assert_eq!(hit, original_hit);
+                assert_eq!(hit.2 - hit.0, ((pill_width + 8.0) * scale) as i32);
+                // Actual tail renderer: anchor=(pillRight-60,pillBottom-30).
+                // Cubic hull max x=116 + stroke/2=8; tip max y=74+9.92.
+                let paint_right = ((x + pill_width + 64.0) * scale).ceil() as i32;
+                let paint_bottom = ((top + pill_height + 53.92) * scale).ceil() as i32;
+                assert!(paint_right <= visual.2 && paint_bottom <= visual.3);
+                assert!(paint_right <= canvas.0 && paint_bottom <= canvas.1);
+                // Painted tail remains outside HTCLIENT; empty desktop stays interactive.
+                assert!(paint_right > hit.2 && paint_bottom > hit.3);
+            }
+        }
+    }
+
+    #[test]
+    fn transparent_overscan_preserves_screen_center_and_original_layout_height() {
+        for scale in [0.8, 1.0, 1.25, 2.0] {
+            let base_width = (760.0_f64 * scale).round() as i32;
+            let extra_width = (56.0_f64 * scale).round() as i32;
+            let base_left = 400;
+            let new_left = base_left - extra_width / 2;
+            let original_center = base_left as f64 + base_width as f64 / 2.0;
+            let new_center = new_left as f64 + (base_width + extra_width) as f64 / 2.0;
+            assert!((original_center - new_center).abs() <= 0.5);
+            let base_height = (480.0_f64 * scale).round();
+            let layout_height = base_height / scale;
+            let expanded_viewport_height = (base_height + (6.0_f64 * scale).round()) / scale;
+            assert!((layout_height - 480.0).abs() < 1.0);
+            assert!(expanded_viewport_height > layout_height);
+        }
     }
 }

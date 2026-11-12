@@ -128,7 +128,7 @@ export interface RustCommands {
   window_diagnostics: { args: { snapshot?: boolean | null }; result: JsonValue };
   bootstrap: { args: {  }; result: JsonValue };
   report_page_scale: { args: { width?: number | null }; result: void };
-  report_island_rect: { args: { x: number; y: number; w: number; h: number; expanded: boolean; tucked: boolean; through: boolean }; result: void };
+  report_island_rect: { args: { x: number; y: number; w: number; h: number; expanded: boolean; tucked: boolean; through: boolean; attachmentRight?: number | null; attachmentBottom?: number | null }; result: JsonValue };
   web_ai_popped: { args: {  }; result: string | null };
   web_ai_open: { args: { service?: string | null }; result: boolean };
   web_ai_embed: { args: { service?: string | null; x?: number | null; y?: number | null; width?: number | null; height?: number | null; focus?: boolean | null; word?: number | null }; result: boolean };

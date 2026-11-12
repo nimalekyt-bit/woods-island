@@ -12,6 +12,8 @@ export const api: {
     i: boolean,
     a?: boolean,
     o?: boolean,
+    attachmentRight?: number,
+    attachmentBottom?: number,
   ) => Promise<Commands["report_island_rect"]["result"]>;
   uploadImage: (e: string | null) => Promise<Commands["upload_image"]["result"]>;
   throughToggle: () => Promise<Commands["through_toggle"]["result"]>;
@@ -217,8 +219,8 @@ export const api: {
   editorSave: (e: string | null, t: boolean | null) => Promise<Commands["editor_save"]["result"]>;
 } = {
   bootstrap: () => T(`bootstrap`),
-  reportRect: (e, t, n, r, i, a = !1, o = !1) =>
-    T(`report_island_rect`, { x: e, y: t, w: n, h: r, expanded: i, tucked: a, through: o }),
+  reportRect: (e, t, n, r, i, a = !1, o = !1, attachmentRight = 0, attachmentBottom = 0) =>
+    T(`report_island_rect`, { x: e, y: t, w: n, h: r, expanded: i, tucked: a, through: o, attachmentRight, attachmentBottom }),
   uploadImage: (e) => T(`upload_image`, { path: e }),
   throughToggle: () => T(`through_toggle`),
   themeFlip: () => T(`theme_flip`),

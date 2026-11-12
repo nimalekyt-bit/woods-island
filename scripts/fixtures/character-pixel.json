@@ -1,0 +1,29 @@
+{
+  "baseline": "98838df",
+  "cases": 288,
+  "sha256": "b359bb3f652402f3d4bda8f7aad6c3b5d2ef5d965968ed83ee7931dcdc98b39f",
+  "colors": {
+    "idle": "#D97757",
+    "eat": "#D97757",
+    "sleep": "#9A5642",
+    "music": "#F0997B",
+    "think": "#8ea2ff",
+    "happy": "#5fe0a0",
+    "attn": "#fcd34d",
+    "sad": "#ff6b6b"
+  },
+  "intervals": {
+    "idle": 0,
+    "attn": 0,
+    "sad": 0,
+    "music": 380,
+    "think": 320,
+    "eat": 180,
+    "happy": 220,
+    "sleep": 900
+  },
+  "extraColors": {
+    "attn": "#fcd34d",
+    "sleep": "var(--color-ink-3)"
+  }
+}

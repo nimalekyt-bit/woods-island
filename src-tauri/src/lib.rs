@@ -265,7 +265,8 @@ fn start_cursor_loop(app: AppHandle, state: Arc<AppState>) {
             let at_top_edge = rel_y >= -2 && rel_y <= 3 && (rel_x >= (rect.x - 20) && rel_x <= (rect.x + rect.w + 20));
 
             if rel_x > -150 && rel_x < 910 && rel_y > -100 && rel_y < 580 {
-                let _ = app.emit("cursor:near", [(rel_x - 380) as f64, rel_y as f64]);
+                let canvas_center = (win_rect.right - win_rect.left) as f64 / scale / 2.0;
+                let _ = app.emit("cursor:near", [rel_x as f64 - canvas_center, rel_y as f64]);
             }
             let down = unsafe { windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(0x01) < 0 };
             if down && !mouse_down && !inside_pill && rect.expanded { let _ = app.emit("outside-click", ()); }
@@ -317,7 +318,7 @@ fn start_cursor_loop(app: AppHandle, state: Arc<AppState>) {
 
 /// Called on app startup to initialize the entire frontend Zustand store
 #[tauri::command]
-async fn bootstrap(state:tauri::State<'_, Arc<AppState>>)->Result<Value,String>{let state=state.inner().clone();tauri::async_runtime::spawn_blocking(move||{app_log("bootstrap worker entered");let result={let telemetry=telemetry::snapshot();json!({"settings":state.settings.lock().unwrap().clone(),"shelf":shelf_snapshot(&state),"launcher":state.launcher_items.lock().unwrap().clone(),"media":media::get_current_media(),"cover":media::get_current_cover(),"hotkeyErrors":state.hotkey_errors.lock().unwrap().clone(),"audio":audio::state().ok(),"privacy":telemetry["privacy"],"downloads":telemetry::downloads_snapshot(),"vpn":null,"update":null,"version":env!("CARGO_PKG_VERSION"),"capsLock":telemetry["capsLock"],"layout":telemetry["layout"],"license":license_status(),"trialOver":false,"news":news_get(),"battery":telemetry["battery"]})};app_log("bootstrap worker completed");result}).await.map_err(|e|e.to_string())}
+async fn bootstrap(state:tauri::State<'_, Arc<AppState>>)->Result<Value,String>{let state=state.inner().clone();tauri::async_runtime::spawn_blocking(move||{app_log("bootstrap worker entered");let result={let telemetry=telemetry::snapshot();json!({"settings":state.settings.lock().unwrap().clone(),"shelf":shelf_snapshot(&state),"launcher":state.launcher_items.lock().unwrap().clone(),"media":media::get_current_media(),"cover":media::get_current_cover(),"hotkeyErrors":state.hotkey_errors.lock().unwrap().clone(),"audio":audio::state().ok(),"privacy":telemetry["privacy"],"downloads":telemetry::downloads_snapshot(),"vpn":null,"update":null,"version":env!("CARGO_PKG_VERSION"),"capsLock":telemetry["capsLock"],"layout":telemetry["layout"],"license":license_status(),"trialOver":false,"news":news_get(),"battery":telemetry["battery"],"vdesk":telemetry["vdesk"]})};app_log("bootstrap worker completed");result}).await.map_err(|e|e.to_string())}
 
 #[tauri::command]
 fn report_page_scale(width: Option<f64>, state: tauri::State<'_, Arc<AppState>>) {
@@ -339,11 +340,19 @@ fn report_island_rect(
     expanded: bool,
     tucked: bool,
     through: bool,
+    attachment_right: Option<f64>,
+    attachment_bottom: Option<f64>,
     state: tauri::State<'_, Arc<AppState>>,
-) {
-    if ![x,y,w,h].iter().all(|v|v.is_finite()) || w<0.0 || h<0.0 { return; }
+) -> Value {
+    if ![x,y,w,h].iter().all(|v|v.is_finite()) || w<0.0 || h<0.0 { return Value::Null; }
+    let right = win::safe_visual_inset(attachment_right);
+    let bottom = win::safe_visual_inset(attachment_bottom);
+    let hwnd_value = *state.main_hwnd.lock().unwrap();
+    let canvas = hwnd_value.filter(|value| *value != 0).map(|value| {
+        win::WindowManager::ensure_attachment_canvas(windows::Win32::Foundation::HWND(value as _), right, bottom)
+    });
     let mut rect = state.island_rect.lock().unwrap();
-    rect.x = x.floor() as i32;
+    rect.x = (x + canvas.as_ref().map(|canvas| canvas.shift_x).unwrap_or(0.0)).floor() as i32;
     rect.y = y.floor() as i32;
     rect.w = w.ceil() as i32;
     rect.h = h.ceil() as i32;
@@ -352,7 +361,7 @@ fn report_island_rect(
     state.click_through.store(through, Ordering::Relaxed);
     win::WindowManager::set_click_through(through);
 
-    if let Some(hwnd_val) = *state.main_hwnd.lock().unwrap() {
+    if let Some(hwnd_val) = hwnd_value {
         if hwnd_val != 0 {
             let hwnd = windows::Win32::Foundation::HWND(hwnd_val as _);
             let pad_x = 4;
@@ -361,9 +370,10 @@ fn report_island_rect(
             let y1 = 0;
             let x2 = rect.x + rect.w + pad_x;
             let y2 = rect.y + rect.h + pad_bottom;
-            win::WindowManager::update_island_region(hwnd, if tucked && y2<=0 {None}else{Some((x1, y1, x2, y2))});
+            win::WindowManager::update_island_region_with_insets(hwnd, if tucked && y2<=0 {None}else{Some((x1, y1, x2, y2))}, right, bottom);
         }
     }
+    canvas.map(|canvas| json!({"layoutViewportHeight":canvas.layout_height,"canvasOverscanWidth":canvas.overscan_width,"canvasOverscanBottom":canvas.overscan_bottom})).unwrap_or(Value::Null)
 }
 
 #[tauri::command]

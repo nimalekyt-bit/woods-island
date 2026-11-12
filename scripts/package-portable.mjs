@@ -18,6 +18,8 @@ const assets = [
     'acceptance-runtime-parity-20261112.json', 'performance-20261112.json'].map(name => [name, join(root, 'docs', name)]),
   ...['MEDIA_PAUSE_CHARACTERS_20261112.md', 'acceptance-media-pause-20261112.json'].map(name => [name, join(root, 'docs', name)]),
   ...['ISLAND_GEOMETRY_COMPONENTS_20261112.md', 'acceptance-island-geometry-20261112.json'].map(name => [name, join(root, 'docs', name)]),
+  ...['CHARACTER_ENGINE.md', 'acceptance-character-engine-20261112.json',
+    'acceptance-character-engine-20261112.raw.json.gz'].map(name => [name, join(root, 'docs', name)]),
   ['LICENSE', join(root, 'LICENSE')],
   ['THIRD_PARTY_NOTICES.md', join(root, 'THIRD_PARTY_NOTICES.md')],
 ];

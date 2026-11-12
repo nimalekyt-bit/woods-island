@@ -1,4 +1,5 @@
 // Metadata is maintained here; the recovered drawing implementations are injected.
+import type { Drawing, DrawnCharacter } from './types';
 export type CharacterKind = "liquid" | "none" | "attach" | "slot";
 export type CharacterGroup = "island" | "characters" | "creatures" | "things";
 export type CharacterBox = [number, number, number, number];
@@ -8,16 +9,9 @@ export interface CharacterDefinition {
   desc: string;
   kind: CharacterKind;
   group: CharacterGroup;
-  puppet?: unknown;
+  puppet?: Drawing;
   generic?: boolean;
   box?: CharacterBox;
-  face?: boolean;
-}
-interface DrawnCharacter {
-  id: string;
-  name: string;
-  desc: string;
-  outside?: boolean;
   face?: boolean;
 }
 export function createCharacterCatalog({
@@ -28,7 +22,7 @@ export function createCharacterCatalog({
 }: {
   creatures: DrawnCharacter[];
   things: DrawnCharacter[];
-  renderers: Record<string, unknown>;
+  renderers: Record<string, Drawing>;
   language: () => string;
 }) {
   const boxes: Record<string, CharacterBox> = {

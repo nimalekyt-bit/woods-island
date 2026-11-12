@@ -17,6 +17,7 @@
     "test:hooks": "node --test scripts/island-notify.test.cjs",
     "test:runtime-state": "node --test scripts/runtime-state.test.cjs scripts/island-events.test.cjs scripts/island-geometry.test.cjs",
     "test:ipc": "node --test scripts/ipc-generation.test.cjs",
+    "test:characters": "node --test scripts/character-engine.test.cjs scripts/character-pixel.test.cjs scripts/character-state.test.cjs scripts/liquid-engine.test.cjs scripts/character-attached.test.cjs",
     "check:authors": "node scripts/check-commit-owners.mjs",
     "test:native": "node scripts/verify-runtime.cjs",
     "test:controls": "node scripts/verify-controls.cjs",
