@@ -1,10 +1,12 @@
+import { calculateIslandGeometry, agentQuestionHeight as dj } from '../island/geometry';
+import { LIQUID_FOLDED, updateSizeHistory, selectSizeTransition } from '../island/transitions';
 import { k as subscribeEvent } from './shared.js';
-import { createMediaActivityTracker } from '../media/activity';
+import { createMediaEventController } from '../media/events';
+import { createIslandInteractions, hasPersistentActivity } from '../island/interactions';
 import { LazyNoteEditor as ek } from '../components/LazyNoteEditor';
 import { ProgramIcon } from '../components/ProgramIcon';
 // Compatibility application source; migrate components incrementally.
 import { AgentQuestion } from "../components/AgentQuestion";
-import { lyricsSizeTransition } from "./../components/woods-extensions.js";
 import {
   A as e,
   B as t,
@@ -1071,11 +1073,7 @@ function Fi(e) {
   let t = [`shelf`];
   return (e.launcher && t.push(`launcher`), e.chat && t.push(`chat`), t);
 }
-var Ii = (e) => [e >= 3 ? 620 : 460, 128];
-function Li(e, t, n = 2) {
-  let [r, i] = Ii(n);
-  return e ? [Math.max(t[0], r), Math.max(t[1], i)] : [r, i];
-}
+
 var Ri = 6e4,
   zi = 60 * Ri,
   Bi = 24 * zi,
@@ -9471,10 +9469,7 @@ function uj(e) {
     }
   }
 }
-function dj(e, t = 0) {
-  let n = e.questions[Math.min(t, e.questions.length - 1)];
-  return 80 + (n.question.length > 56 ? 38 : 19) + n.options.length * 38 - 4 + (n.multiSelect ? 40 : 0);
-}
+
 function fj({ peek: e }) {
   let t = e.ask,
     n = async (e, n) => {
@@ -10300,98 +10295,6 @@ function wj({ peek: e }) {
       });
   }
 }
-function Tj(e) {
-  switch (e.kind) {
-    case `screenshot`:
-      return [430, 100];
-    case `recorded`:
-      return [430, 100];
-    case `copied`:
-      return [360, 60];
-    case `ocr`:
-    case `qr`:
-      return [400, 60];
-    case `color`:
-      return [380, 88];
-    case `volume`:
-      return [340, 46];
-    case `device`:
-      return [330, 56];
-    case `layout`:
-      return [110, 34];
-    case `caps`:
-      return [230, 40];
-    case `mic`:
-      return [420, 60];
-    case `micMuted`:
-      return [270, 52];
-    case `cam`:
-      return [330, 56];
-    case `vpn`:
-      return [380, 60];
-    case `download`:
-      return [420, 72];
-    case `update`:
-      return [400, 64];
-    case `news`:
-      return [410, 64];
-    case `notification`: {
-      let t = e.note.body;
-      return [
-        440,
-        t
-          ? t.length > 48 ||
-            t.includes(`
-`)
-            ? 80
-            : 64
-          : 54,
-      ];
-    }
-    case `agent`:
-      return [440, e.agent.message ? 64 : 52];
-    case `agentAsk`:
-      return [500, e.ask.kind === `question` ? dj(e.ask, e.step) : 108];
-    case `chat`:
-      return [420, 60];
-    case `reminder`:
-      return [460, 68];
-    case `timer`:
-      return [400, 64];
-    case `weather`:
-      return [330, 62];
-    case `pro`:
-      return [420, 62];
-    case `dictated`:
-      return [460, 68];
-    case `done`:
-      return [Math.round(Math.min(460, Math.max(280, 120 + Array.from(e.label).length * 7.5))), 52];
-    case `error`:
-      return [400, 64];
-    default:
-      return [340, 60];
-  }
-}
-var Ej = 760,
-  Dj = {
-    idle: [150, 30],
-    liveStatus: [176, 30],
-    liveMedia: [268, 32],
-    liveShelf: [140, 30],
-    liveDownloads: [320, 32],
-    liveUpdating: [260, 32],
-    liveRecording: [262, 32],
-    liveDictation: [236, 34],
-    drop: Ii(2),
-    expanded: [680, 336],
-    chat: [680, 420],
-  },
-  Oj = 780,
-  kj = 60;
-function Aj(e) {
-  let t = Math.floor((e - 2) / 1.1);
-  return Math.max(Dj.chat[1], Math.min(Oj, Math.floor(e) - kj, t));
-}
 var jj = 428;
 function Mj() {
   let e = useIslandStore(
@@ -10428,19 +10331,6 @@ function Nj() {
     }, []),
     e
   );
-}
-function Pj(e, t) {
-  return t ? 330 : 56 + Math.max(0, e) * 42 + (e > 0 ? 8 : 0);
-}
-var Fj = { type: `spring`, stiffness: 420, damping: 34, mass: 0.9 },
-  Ij = { type: `spring`, stiffness: 520, damping: 42, mass: 0.8 },
-  Lj = { type: `spring`, stiffness: 260, damping: 18, mass: 1 },
-  Rj = { type: `spring`, stiffness: 340, damping: 21, mass: 1 };
-function zj(e, t) {
-  let n = Math.min(0.113, t / Math.max(e, 1)),
-    r = -Math.log(n) / Math.PI,
-    i = r / Math.sqrt(1 + r * r);
-  return { type: `spring`, stiffness: 340, damping: 2 * Math.sqrt(340) * i, mass: 1 };
 }
 var Bj = 700,
   Vj = { type: `spring`, stiffness: 420, damping: 34, mass: 0.9 },
@@ -10527,184 +10417,61 @@ function useIslandGeometry(e) {
     xe = useIslandStore((e) => (e.media?.durationMs ?? 0) > 0),
     Se = useIslandStore((e) => e.settings?.lyrics === !0 && e.settings.lyricsInPlayer !== !1),
     Ce = Yt((e) => (e.status === `ready` ? e.lineW : 0)),
-    we = xe ? Ce : 0,
-    j = `idle`;
-  t
-    ? (j = `palette`)
-    : r
-      ? (j = `expanded`)
-      : fe
-        ? (j = `liveDictation`)
-        : o
-          ? (j = `peek`)
-          : de
-            ? (j = `liveRecording`)
-            : ue
-              ? (j = `liveUpdating`)
-              : pe
-                ? (j = `liveDownloads`)
-                : ce
-                  ? (j = `liveMedia`)
-                  : le > 0
-                    ? (j = `liveShelf`)
-                    : ve && (j = `liveStatus`);
-  let Te =
-    j === `liveMedia` &&
-    be === `lyrics` &&
-    re({
-      face: se,
-      character: ee,
-      clock: T,
-      seconds: E,
-      battery: k,
-      weather: w,
-      caps: me,
-      layout: D,
-      desk: O,
-      dots: he,
-      obs: ge,
-      agent: _e,
-      download: A,
-      shelf: le,
-      timer: ye,
-      words: we,
-    });
+    we = xe ? Ce : 0;
+  const geometry = calculateIslandGeometry({
+    palette: t, expanded: r, dragOver: !!i, dropZoneCount: a,
+    peek: !!o, dictating: fe, recording: de, updating: ue, downloads: pe,
+    mediaLive: ce, shelfCount: le, status: !!ve,
+    paletteMeasure: e, tall: !!s, externalChat: c, viewportHeight: l, homeSize: C,
+    peekContent: o ? {
+      kind: o.kind, noteBody: o.kind === 'notification' ? o.note.body : undefined,
+      agentMessage: o.kind === 'agent' ? o.agent.message : undefined,
+      question: o.kind === 'agentAsk' && o.ask.kind === 'question',
+      questionHeight: o.kind === 'agentAsk' && o.ask.kind === 'question' ? dj(o.ask, o.step) : undefined,
+      label: o.kind === 'done' ? o.label : undefined,
+    } : null,
+    mediaPill: be, devicePixelRatio: window.devicePixelRatio,
+    widgets: {
+      character: ee, slot: ie, big: te, face: se, weather: w,
+      clock: T, seconds: E, battery: k, caps: me, layout: D, desk: O,
+      dots: he, obs: ge, agent: _e, download: A, shelf: le, timer: ye,
+      seekable: xe, lyrics: Se, words: we,
+    },
+  });
   (0, ReactRuntime.useEffect)(() => {
-    Yt.getState().wrap !== Te && Yt.setState({ wrap: Te });
-  }, [Te]);
-  let [Ee, De] =
-      j === `palette`
-        ? [640, Pj(e.rows, e.answer)]
-        : j === `peek` && o
-          ? Tj(o)
-          : j === `expanded` && s
-            ? c
-              ? [Dj.chat[0], Aj(l)]
-              : Dj.chat
-            : j === `expanded` && C
-              ? C
-              : j === `idle` || j === `liveStatus` || j === `liveShelf`
-                ? x({
-                    character: ee,
-                    slot: ie,
-                    big: te,
-                    face: se,
-                    weather: w,
-                    clock: T,
-                    seconds: E,
-                    battery: k,
-                    caps: me,
-                    layout: D,
-                    desk: O,
-                    dots: he,
-                    obs: ge,
-                    agent: _e,
-                    download: A,
-                    shelf: le,
-                    timer: ye,
-                  })
-                : j === `liveMedia`
-                  ? be === `player`
-                    ? ae({
-                        face: se,
-                        character: ee,
-                        clock: T,
-                        seconds: E,
-                        battery: k,
-                        weather: w,
-                        caps: me,
-                        layout: D,
-                        desk: O,
-                        dots: he,
-                        obs: ge,
-                        agent: _e,
-                        download: A,
-                        shelf: le,
-                        timer: ye,
-                        seekable: xe,
-                        lyrics: Se,
-                      })
-                    : be === `lyrics`
-                      ? oe({
-                          face: se,
-                          character: ee,
-                          clock: T,
-                          seconds: E,
-                          battery: k,
-                          weather: w,
-                          caps: me,
-                          layout: D,
-                          desk: O,
-                          dots: he,
-                          obs: ge,
-                          agent: _e,
-                          download: A,
-                          shelf: le,
-                          timer: ye,
-                          words: we,
-                        })
-                      : be === `title`
-                        ? n({
-                            face: se,
-                            character: ee,
-                            clock: T,
-                            seconds: E,
-                            battery: k,
-                            weather: w,
-                            caps: me,
-                            layout: D,
-                            desk: O,
-                            dots: he,
-                            obs: ge,
-                            agent: _e,
-                            download: A,
-                            shelf: le,
-                            timer: ye,
-                          })
-                        : p({
-                            face: se,
-                            character: ee,
-                            clock: T,
-                            seconds: E,
-                            battery: k,
-                            weather: w,
-                            caps: me,
-                            layout: D,
-                            desk: O,
-                            dots: he,
-                            obs: ge,
-                            agent: _e,
-                            download: A,
-                            shelf: le,
-                            timer: ye,
-                          })
-                  : Dj[j],
-    Oe = (e) => b(e, window.devicePixelRatio);
-  if (!i) return { mode: j, w: Oe(Ee), h: De };
-  let [ke, Ae] = Li(j === `expanded` || j === `palette`, [Ee, De], a);
-  return { mode: `drop`, w: Oe(ke), h: Ae };
+    Yt.getState().wrap !== geometry.wrap && Yt.setState({ wrap: geometry.wrap });
+  }, [geometry.wrap]);
+  return geometry;
 }
 function useRuntimeEvents() {
   (0, ReactRuntime.useEffect)(() => {
     let e = useIslandStore,
-      t,
-      n,
-      i = ``,
-      a = null,
-      s = (t, n) => {
-        ((i = t), e.setState({ cover: n }), n && sr(n).then((t) => e.setState({ accent: t })));
-      },
       c = () => e.getState().settings;
-    const mediaActivity = createMediaActivityTracker({
+    let disposed = false;
+    const interactions = createIslandInteractions({
+      getState: e.getState,
+      setState: e.setState,
+      open: (source, tab) => e.getState().open(source, tab),
+      close: () => e.getState().close(),
+      openPalette: () => e.getState().openPalette(),
+      closePalette: () => e.getState().closePalette(),
+    });
+    const mediaEvents = createMediaEventController({
+      getMedia: () => e.getState().media,
+      setMedia: media => e.setState({ media }),
+      setCover: cover => e.setState({ cover }),
+      setAccent: accent => e.setState({ accent }),
+      resetLevel: () => e.setState({ level: 0 }),
+      extractAccent: sr,
       isLive: () => e.getState().mediaLive,
-      isPlaying: () => e.getState().media?.playing === true,
       setLive: mediaLive => e.setState({ mediaLive }),
     });
     (u.webAiPopped().then(
-      (t) => e.setState({ webAiPopped: t }),
+      (t) => !disposed && e.setState({ webAiPopped: t }),
       () => void 0,
     ),
       u.bootstrap().then((t) => {
+        if (disposed) return;
         (e.setState({
           settings: t.settings,
           shelf: t.shelf,
@@ -10727,112 +10494,27 @@ function useRuntimeEvents() {
           !t.news.told &&
             t.news.from !== t.news.version &&
             (e.getState().pushPeek({ kind: `news`, version: t.version }), u.newsTold()),
-          t.cover && sr(t.cover).then((t) => e.setState({ accent: t })));
+          mediaEvents.seed(t.media, t.cover));
       }),
       u
         .agentsNow()
-        .then((t) => e.setState({ agents: t }))
+        .then((t) => !disposed && e.setState({ agents: t }))
         .catch(() => {}));
     let l = (e) => c()?.[e] !== !1,
       d = [
-        T(`hover`, (r) => {
-          e.setState({ hovered: r });
-          let i = e.getState();
-          if (!i.palette) {
-            if (r) {
-              if ((clearTimeout(n), i.expanded)) {
-                e.setState({ enteredSinceOpen: !0 });
-                return;
-              }
-              if (i.peek || i.dragOver || Jj(i) || c()?.openOnHover !== !0) return;
-              (clearTimeout(t),
-                (t = setTimeout(() => {
-                  let t = e.getState();
-                  t.hovered &&
-                    !t.expanded &&
-                    !t.peek &&
-                    !t.dragOver &&
-                    !Jj(t) &&
-                    c()?.openOnHover === !0 &&
-                    t.open(`hover`);
-                }, c()?.hoverDelayMs ?? 150)));
-            } else {
-              if (
-                (clearTimeout(t),
-                !i.expanded ||
-                  i.pinned ||
-                  i.holdOpen ||
-                  i.draggingOut ||
-                  i.webAiActive ||
-                  (i.openedBy === `hotkey` && !i.enteredSinceOpen))
-              )
-                return;
-              (clearTimeout(n),
-                (n = setTimeout(() => {
-                  let t = e.getState();
-                  !t.hovered && !t.pinned && !t.holdOpen && !t.draggingOut && !t.webAiActive && t.close();
-                }, c()?.collapseDelayMs ?? 350)));
-            }
-          }
-        }),
-        T(`outside-click`, () => {
-          let t = e.getState();
-          t.palette ? t.closePalette() : t.expanded && !t.pinned && !t.draggingOut && !t.asking && t.close();
-        }),
-        T(`island:palette`, () => {
-          let t = e.getState();
-          t.palette ? t.closePalette() : t.openPalette();
-        }),
+        T(`hover`, interactions.hover),
+        T(`outside-click`, interactions.outsideClick),
+        T(`island:palette`, interactions.togglePalette),
         T(`webai:open`, (e) => fa(e)),
-        T(`webai:active`, (t) => {
-          e.setState({ webAiActive: t });
-          let r = e.getState();
-          t ||
-            !r.expanded ||
-            r.hovered ||
-            r.pinned ||
-            r.holdOpen ||
-            r.draggingOut ||
-            r.palette ||
-            ((r.openedBy !== `hotkey` || r.enteredSinceOpen) &&
-              (clearTimeout(n),
-              (n = setTimeout(() => {
-                let t = e.getState();
-                !t.hovered && !t.pinned && !t.holdOpen && !t.draggingOut && !t.webAiActive && t.close();
-              }, c()?.collapseDelayMs ?? 350))));
-        }),
+        T(`webai:active`, interactions.webAiActive),
         T(`webai:popped`, (t) => e.setState({ webAiPopped: t })),
-        T(`island:toggle`, ({ tab: t }) => {
-          let n = e.getState();
-          (n.palette && n.closePalette(),
-            n.expanded && (!t || t === n.tab) ? n.close() : n.open(`hotkey`, t ?? void 0));
-        }),
+        T(`island:toggle`, interactions.toggle),
         T(`clipboard:new`, (t) => {
           (window.dispatchEvent(new Event(ln)),
             !t.own && !t.again && e.getState().pushPeek({ kind: `copied`, clip: t.clip }));
         }),
-        T(`media:update`, (t) => {
-          let n = t && Le(t),
-            o = e.getState().media;
-          if (!n) e.setState({ media: null, cover: null, accent: null, level: 0 });
-          else if (o?.key !== n.key) {
-            e.setState({ media: n });
-            let t = n.key;
-            (a?.key === t && s(t, a.cover),
-              (a = null),
-              setTimeout(() => {
-                e.getState().media?.key === t && i !== t && e.setState({ cover: null, accent: null });
-              }, 4e3));
-          } else e.setState({ media: n });
-          mediaActivity.update(n);
-        }),
-        T(`media:cover`, ({ key: t, cover: n }) => {
-          if (e.getState().media?.key !== t) {
-            a = { key: t, cover: n };
-            return;
-          }
-          s(t, n);
-        }),
+        T(`media:update`, payload => mediaEvents.update(payload ? Le(payload) : null)),
+        T(`media:cover`, mediaEvents.cover),
         T(`media:level`, (t) => e.setState({ level: t })),
         T(`media:bands`, (t) => e.setState({ bands: t, bandsAt: performance.now() })),
         T(`mascot:look`, (t) => e.setState({ look: t })),
@@ -10992,7 +10674,7 @@ function useRuntimeEvents() {
               return n && a.includes(n) ? n : a[0];
             };
           if (r.type === `enter` || r.type === `over`) {
-            clearTimeout(t);
+            interactions.cancelHoverOpen();
             let n = o(r.position);
             i.dragOver?.zone !== n && e.setState({ dragOver: { zone: n } });
           } else if (r.type === `drop` && o(r.position) === `chat`)
@@ -11016,7 +10698,7 @@ function useRuntimeEvents() {
         }),
       ],
       f = (t) => {
-        t.key === `Escape` && e.getState().close();
+        t.key === `Escape` && interactions.escape();
       };
     window.addEventListener(`keydown`, f);
     let p = ua(),
@@ -11024,13 +10706,13 @@ function useRuntimeEvents() {
       h = ve(),
       g = yt();
     return () => {
-      (g(),
-        mediaActivity.dispose(),
+      (disposed = true,
+        g(),
+        mediaEvents.dispose(),
+        interactions.dispose(),
         p(),
         m(),
         h(),
-        clearTimeout(t),
-        clearTimeout(n),
         window.removeEventListener(`keydown`, f),
         d.forEach((e) => void e.then((e) => e())));
     };
@@ -11066,17 +10748,7 @@ function qj(e) {
   let t = v(e.settings?.mediaPill);
   return t === `lyrics` && e.settings?.lyrics !== !0 ? `title` : t;
 }
-function Jj(e) {
-  return (
-    e.dictation !== null ||
-    e.recording !== null ||
-    (e.settings?.mediaPill === `player` &&
-      e.settings.moduleMedia !== !1 &&
-      e.mediaLive &&
-      e.updating === null &&
-      e.downloads.length === 0)
-  );
-}
+const Jj = hasPersistentActivity;
 function IslandApp() {
   useRuntimeEvents();
   let e = Kj(),
@@ -11155,22 +10827,9 @@ function IslandApp() {
       (ce.current = oe));
   }, [oe, se]);
   let le = Math.min(c / 2, k ? 32 : 26),
-    ue = (0, ReactRuntime.useRef)({ w: s, h: c, fold: Rj });
-  if (ue.current.w !== s || ue.current.h !== c) {
-    let e = Math.abs(s - ue.current.w),
-      t = Math.abs(c - ue.current.h);
-    ue.current = { w: s, h: c, fold: { default: Rj, width: zj(e, 16), height: zj(t, 7) } };
-  }
-  let de =
-      a === `liveMedia` && useIslandStore.getState().settings?.mediaPill === `lyrics`
-        ? lyricsSizeTransition
-        : g
-          ? k
-            ? Lj
-            : ue.current.fold
-          : k
-            ? Fj
-            : Ij,
+    ue = (0, ReactRuntime.useRef)({ w: s, h: c, fold: LIQUID_FOLDED });
+  ue.current = updateSizeHistory(ue.current, s, c);
+  let de = selectSizeTransition(a, useIslandStore.getState().settings?.mediaPill === 'lyrics', g, ue.current.fold),
     fe = oi(s),
     pe = li(fe, (e) => b(e, window.devicePixelRatio));
   ((0, ReactRuntime.useLayoutEffect)(() => {

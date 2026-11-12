@@ -1,4 +1,6 @@
-import { CollapsedTrack, MediaTitle, PauseBadge } from '../components/CollapsedTrack';
+import { CollapsedTrack, MediaTitle } from '../components/CollapsedTrack';
+import { NormalMediaPill } from '../components/NormalMediaPill';
+import { LyricsMediaPill } from '../components/LyricsMediaPill';
 // Compatibility application source; migrate components incrementally.
 import {
   O as ReactRuntime,
@@ -48,7 +50,6 @@ import {
   Ea,
   qn,
 } from "../vendor/motion.js";
-import { songLyricsWidth } from "./../components/woods-extensions.js";
 import { validWeatherForecast } from "./../components/woods-extensions.js";
 import {
   B as e,
@@ -2085,69 +2086,52 @@ function dm() {
       });
 }
 function fm() {
-  let e = useIslandStore((e) => (e.settings?.moduleShelf === !1 ? 0 : e.shelf.length)),
-    t = be(),
-    n = ne().face === !0,
-    r = useIslandStore((e) => e.accent),
-    i = useIslandStore((e) => e.level),
-    a = re((e) => e.streaming),
-    o = useIslandStore((e) => e.media?.playing === !0),
-    s = useIslandStore((e) => e.settings?.showClock !== !1) && (0, jsxRuntime.jsx)($p, {}),
-    c = useIslandStore((e) => (e.settings?.showBattery === !1 ? null : e.battery)),
-    l = c && (0, jsxRuntime.jsx)(em, { battery: c }),
-    u = gf(),
-    d =
-      u &&
-      (0, jsxRuntime.jsxs)(`span`, {
-        className: `flex shrink-0 items-center gap-1`,
-        children: [
-          (0, jsxRuntime.jsx)(Jp, { sky: u.sky, night: u.night, size: 19, still: !0 }),
-          (0, jsxRuntime.jsx)(`span`, {
-            className: `tabular text-[12.5px] font-semibold text-ink`,
-            children: u.temp,
-          }),
-        ],
-      });
-  return (0, jsxRuntime.jsxs)(`div`, {
-    'data-media-pill': 'normal',
-    'data-playback-state': o ? 'playing' : 'paused',
-    className: `grid h-full grid-cols-[1fr_auto_1fr] items-center pl-2 ${t ? `pr-2` : `pr-3.5`}`,
-    children: [
-      (0, jsxRuntime.jsxs)(`span`, {
-        className: `flex items-center gap-2 justify-self-start`,
-        children: [
-          (0, jsxRuntime.jsxs)(`span`, {
-            className: `relative shrink-0`,
-            children: [(0, jsxRuntime.jsx)(kp, { size: 22, radius: 6 }), (0, jsxRuntime.jsx)(PauseBadge, { playing: o })],
-          }), n && s, n && l,
-        ],
-      }),
-      n
-        ? (0, jsxRuntime.jsx)(`span`, { style: { width: 40 } })
-        : (0, jsxRuntime.jsxs)(`span`, {
-            className: `flex items-center gap-2 px-3`,
-            children: [(0, jsxRuntime.jsx)(cm, {}), s, l, d],
-          }),
-      (0, jsxRuntime.jsxs)(`div`, {
-        className: `flex items-center gap-2.5 justify-self-end`,
-        children: [
-          n && d,
-          n && (0, jsxRuntime.jsx)(cm, {}),
-          (0, jsxRuntime.jsx)(dm, {}),
-          (0, jsxRuntime.jsx)(sm, {}),
-          e > 0 && (0, jsxRuntime.jsx)(gm, { count: e }),
-          t
-            ? (0, jsxRuntime.jsx)(ye, {
-                mood: a ? `think` : o ? `music` : void 0,
-                accent: a ? null : r,
-                level: i,
-                width: 52,
-                height: 32,
-              })
-            : (0, jsxRuntime.jsx)(jp, { height: 15 }),
-        ],
-      }),
-    ],
+  let shelfCount = useIslandStore((e) => (e.settings?.moduleShelf === !1 ? 0 : e.shelf.length)),
+    hasCharacter = be(),
+    characterHasFace = ne().face === !0,
+    accent = useIslandStore((e) => e.accent),
+    level = useIslandStore((e) => e.level),
+    streaming = re((e) => e.streaming),
+    playing = useIslandStore((e) => e.media?.playing === !0),
+    clock = useIslandStore((e) => e.settings?.showClock !== !1) && (0, jsxRuntime.jsx)($p, {}),
+    battery = useIslandStore((e) => (e.settings?.showBattery === !1 ? null : e.battery)),
+    charge = battery && (0, jsxRuntime.jsx)(em, { battery }),
+    weather = gf(),
+    weatherWidget = weather && (0, jsxRuntime.jsxs)(`span`, {
+      className: `flex shrink-0 items-center gap-1`,
+      children: [
+        (0, jsxRuntime.jsx)(Jp, { sky: weather.sky, night: weather.night, size: 19, still: !0 }),
+        (0, jsxRuntime.jsx)(`span`, {
+          className: `tabular text-[12.5px] font-semibold text-ink`,
+          children: weather.temp,
+        }),
+      ],
+    });
+  return (0, jsxRuntime.jsx)(NormalMediaPill, {
+    playing,
+    hasCharacter,
+    characterHasFace,
+    cover: (0, jsxRuntime.jsx)(kp, { size: 22, radius: 6 }),
+    clock,
+    battery: charge,
+    weather: weatherWidget,
+    inputIndicators: (0, jsxRuntime.jsx)(cm, {}),
+    status: (0, jsxRuntime.jsxs)(ReactRuntime.Fragment, {
+      children: [
+        (0, jsxRuntime.jsx)(dm, {}),
+        (0, jsxRuntime.jsx)(sm, {}),
+        shelfCount > 0 && (0, jsxRuntime.jsx)(gm, { count: shelfCount }),
+      ],
+    }),
+    character: hasCharacter
+      ? (0, jsxRuntime.jsx)(ye, {
+          mood: streaming ? `think` : playing ? `music` : void 0,
+          accent: streaming ? null : accent,
+          level,
+          width: 52,
+          height: 32,
+        })
+      : (0, jsxRuntime.jsx)(jp, { height: 15 }),
   });
 }
 function pm() {
@@ -2914,83 +2898,44 @@ function LyricsPanel() {
                 })
   );
 }
+function publishLyricsLineWidth(lineW) {
+  $.setState({ lineW });
+}
 function Ym() {
-  let e = useIslandStore((e) => e.media),
-    t = useIslandStore((e) => e.accent),
-    n = useIslandStore((e) => e.level),
-    r = re((e) => e.streaming),
-    i = useIslandStore((e) => e.media?.playing === !0),
-    a = be(),
-    { shelf: o, time: s, charge: c, now: l } = Vm(),
-    { lines: u, index: d } = zm(),
-    f = $((e) => e.widths),
-    p = $((e) => e.wrap);
-  if (
-    ((0, ReactRuntime.useEffect)(() => {
-      $.setState({ lineW: songLyricsWidth(f) });
-    }, [f]),
-    (0, ReactRuntime.useEffect)(() => () => $.setState({ lineW: 0 }), []),
-    !e)
-  )
-    return null;
-  let m = d >= 0 ? (u[d]?.text ?? ``) : ``;
-  return (0, jsxRuntime.jsxs)(`div`, {
-    "data-media-pill": `lyrics`,
-    className: `relative flex h-full items-center gap-2.5 pr-3 pl-2.5`,
-    children: [
-      (0, jsxRuntime.jsx)(kp, { size: 28, radius: 7 }),
-      d >= 0
-        ? (0, jsxRuntime.jsx)(`span`, {
-            "data-lyrics-viewport": !0,
-            className: `relative grid h-[30px] min-w-0 flex-1 items-center overflow-hidden text-[12.5px] leading-tight`,
-            children: (0, jsxRuntime.jsx)(ml, {
-              initial: !1,
-              mode: `sync`,
-              children: (0, jsxRuntime.jsxs)(
-                od.span,
-                {
-                  "data-lyrics-line": !0,
-                  style: { gridArea: `1 / 1`, minWidth: 0 },
-                  className: `flex min-w-0 items-center gap-1.5`,
-                  initial: { opacity: 0, y: 4 },
-                  animate: { opacity: 1, y: 0 },
-                  exit: { opacity: 0, y: -4 },
-                  transition: { duration: 0.24, ease: [0.2, 0.8, 0.2, 1] },
-                  children: [
-                    (0, jsxRuntime.jsx)(S, { size: 12, className: `shrink-0 text-ink-3` }),
-                    (0, jsxRuntime.jsx)(`span`, {
-                      style: { overflowWrap: `anywhere`, minWidth: 0 },
-                      className: `min-w-0 line-clamp-2 leading-[1.2] ${m ? `font-semibold text-ink` : `text-ink-3`}`,
-                      children: m || `♪ ♪ ♪`,
-                    }),
-                  ],
-                },
-                d,
-              ),
-            }),
-          })
-        : (0, jsxRuntime.jsx)(Bm, {
-            title: e.title,
-            artist: e.artist,
-            className: `flex-1 text-[12.5px] leading-tight`,
-          }),
-      (0, jsxRuntime.jsx)(cm, {}),
-      s,
-      c,
-      l,
-      (0, jsxRuntime.jsx)(dm, {}),
-      (0, jsxRuntime.jsx)(sm, {}),
-      o > 0 && (0, jsxRuntime.jsx)(gm, { count: o }),
-      a
-        ? (0, jsxRuntime.jsx)(ye, {
-            mood: r ? `think` : i ? `music` : void 0,
-            accent: r ? null : t,
-            level: n,
-            width: 52,
-            height: 32,
-          })
-        : (0, jsxRuntime.jsx)(jp, { height: 15 }),
-    ],
+  let media = useIslandStore((e) => e.media),
+    accent = useIslandStore((e) => e.accent),
+    level = useIslandStore((e) => e.level),
+    streaming = re((e) => e.streaming),
+    playing = useIslandStore((e) => e.media?.playing === !0),
+    hasCharacter = be(),
+    { shelf, time, charge, now } = Vm(),
+    { lines, index } = zm(),
+    widths = $((e) => e.widths);
+  return (0, jsxRuntime.jsx)(LyricsMediaPill, {
+    media,
+    activeIndex: index,
+    text: index >= 0 ? (lines[index]?.text ?? ``) : ``,
+    widths,
+    publishLineWidth: publishLyricsLineWidth,
+    cover: (0, jsxRuntime.jsx)(kp, { size: 28, radius: 7 }),
+    lineIcon: (0, jsxRuntime.jsx)(S, { size: 12, className: `shrink-0 text-ink-3` }),
+    extras: (0, jsxRuntime.jsxs)(ReactRuntime.Fragment, {
+      children: [
+        (0, jsxRuntime.jsx)(cm, {}), time, charge, now,
+        (0, jsxRuntime.jsx)(dm, {}),
+        (0, jsxRuntime.jsx)(sm, {}),
+        shelf > 0 && (0, jsxRuntime.jsx)(gm, { count: shelf }),
+      ],
+    }),
+    character: hasCharacter
+      ? (0, jsxRuntime.jsx)(ye, {
+          mood: streaming ? `think` : playing ? `music` : void 0,
+          accent: streaming ? null : accent,
+          level,
+          width: 52,
+          height: 32,
+        })
+      : (0, jsxRuntime.jsx)(jp, { height: 15 }),
   });
 }
 function Xm(e) {

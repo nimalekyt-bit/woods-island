@@ -421,6 +421,73 @@ async function quit(client) {
       return {stableWidth:width,stableHeight:height,frameCount:frames.length,openingFrames:opening.length,maxWidthChangePer16ms:Math.max(...normalizedSteps),shortLongAndUnbroken:true,lines};
     }finally{clearInterval(timer);await main.invoke('media_pick',{id:null});await main.invoke('settings_set',{settings:prior});await pause(3400);}
   });
+  await check('Typed pill transitions retain sizes and lyrics lifecycle at 80/100/150/200 percent',async()=>{
+    const prior=await main.invoke('settings_get');let playing=true,position=1000,timer;
+    const send=async()=>{
+      const response=await fetch(`http://127.0.0.1:${musicPort}/track`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({trackId:'typed-geometry',title:'Geometry',artist:'Fixture',duration:20000,progress:position,isPlaying:playing})});assert.equal(response.status,200);
+    };
+    const reset=()=>main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");ot.setState({expanded:false,palette:false,peek:null,queue:[],hovered:false,pinned:false,holdOpen:false,tall:false,tab:"home",dragOver:null});})()');
+    const sample=()=>main.evaluate('(async()=>{const {lyricsStore}=await import("/assets/runtime-debug.js"),p=document.querySelector("[data-island]").getBoundingClientRect(),v=document.querySelector("[data-lyrics-viewport]")?.getBoundingClientRect();return {width:p.width,height:p.height,viewportHeight:v?.height,lineW:lyricsStore.getState().lineW,wrap:lyricsStore.getState().wrap,pill:document.querySelector("[data-media-pill]")?.dataset.mediaPill};})()');
+    // WebView2 rounds layout coordinates to subpixels when page zoom is 80%.
+    const heightIs=(value,expected)=>assert(Math.abs(value-expected)<0.05,`Height ${value}, expected ${expected}`);
+    const measured=[];
+    try{
+      await main.invoke('settings_set',{settings:{lyrics:true,mediaPill:'normal',character:'none',characterMusic:'none',liquidWith:false,showClock:false,showBattery:false,showWeather:false,showCaps:false,layoutInPill:false,desktopInPill:false,agentsStatus:false,obsStatus:false,showPrivacy:false,downloadsInPill:'badge',moduleShelf:false,openOnHover:false}});
+      await reset();await send();await main.invoke('media_pick',{id:'ru.yandex.desktop.music.mod.connector'});
+      timer=setInterval(()=>void send().catch(()=>{}),200);
+      await waitFor(main,'!!document.querySelector("[data-media-pill=normal]")','Typed normal fixture');
+      for(const scale of [80,100,150,200]){
+        await main.invoke('settings_set',{settings:{scale,mediaPill:'normal'}});await reset();await pause(850);
+        const normal=await sample();assert(Math.abs(normal.width-268)<3,JSON.stringify({scale,normal}));heightIs(normal.height,32);assert.equal(normal.lineW,0);
+        await main.invoke('settings_set',{settings:{mediaPill:'lyrics'}});
+        await waitFor(main,'document.querySelector("[data-lyrics-line]")?.textContent === "Да"','Typed lyrics mount');await pause(1000);
+        const lyrics=await sample();heightIs(lyrics.height,44);heightIs(lyrics.viewportHeight,30);assert(lyrics.lineW>0);assert(lyrics.width<=682);
+        position=8500;await send();await pause(450);const long=await sample();assert(Math.abs(long.width-lyrics.width)<1);assert.equal(long.height,lyrics.height);
+        position=1000;await send();await pause(350);
+        await main.invoke('settings_set',{settings:{mediaPill:'normal',character:'legs',characterMusic:'legs',showClock:true}});await pause(900);
+        const face=await sample();heightIs(face.height,32);assert(face.width>=265,JSON.stringify({scale,face}));assert.equal(face.lineW,0,'Lyrics must release width on unmount');
+        await main.invoke('settings_set',{settings:{character:'pixel',characterMusic:'pixel'}});await pause(800);
+        const slot=await sample();heightIs(slot.height,32);assert(slot.width>=265,JSON.stringify({scale,slot}));
+        await main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");ot.getState().open("click","controls");})()');await pause(1000);
+        const expanded=await sample();assert(Math.abs(expanded.width-680)<3);heightIs(expanded.height,336);
+        await reset();await main.invoke('settings_set',{settings:{character:'none',characterMusic:'none',showClock:false,mediaPill:'title'}});await pause(900);
+        playing=false;await send();await waitFor(main,'!!document.querySelector("[data-media-paused]")','Typed paused title');
+        heightIs((await sample()).height,44);await pause(3400);const idle=await sample();assert(Math.abs(idle.width-150)<3);heightIs(idle.height,30);
+        assert.equal(await main.invoke('plugin:window|is_focused',{label:'main'}),false);
+        measured.push({scale,normal,lyrics,long,face,slot,expanded,idle});
+        playing=true;await send();await waitFor(main,'!!document.querySelector("[data-media-pill=title][data-playback-state=playing]")','Typed resume');
+      }
+      return {scales:[80,100,150,200],measured,lyricsUnmountResetsWidth:true,shortLongWidthStable:true,faceAndSlot:true,pausedCollapse:true,noFocus:true};
+    }finally{clearInterval(timer);await main.invoke('media_pick',{id:null});await main.invoke('settings_set',{settings:prior});await reset();await pause(3400);}
+  });
+  await check('Pause badge stays visible inside the cover in title/normal/lyrics at every scale',async()=>{
+    const prior=await main.invoke('settings_get');let playing=true,timer;
+    const send=async()=>{
+      const response=await fetch(`http://127.0.0.1:${musicPort}/track`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({trackId:'badge-fixture',title:'Pause fixture',artist:'Fixture',duration:300000,progress:60000,isPlaying:playing})});assert.equal(response.status,200);
+    };
+    const measurements=[];
+    const contains=(outer,inner)=>inner.left>=outer.left-.05&&inner.top>=outer.top-.05&&inner.right<=outer.right+.05&&inner.bottom<=outer.bottom+.05;
+    try{
+      await main.invoke('settings_set',{settings:{mediaPill:'title',lyrics:true,character:'none',characterMusic:'none',liquidWith:false,openOnHover:false}});
+      await main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");ot.setState({expanded:false,palette:false,peek:null,queue:[],hovered:false});})()');
+      await send();await main.invoke('media_pick',{id:'ru.yandex.desktop.music.mod.connector'});timer=setInterval(()=>void send().catch(()=>{}),150);
+      for(const scale of [80,100,150,200])for(const mode of ['title','normal','lyrics']){
+        playing=true;await send();await main.invoke('settings_set',{settings:{scale,mediaPill:mode}});
+        await waitFor(main,`!!document.querySelector('[data-media-pill=${mode}][data-playback-state=playing]')`,'Playing badge fixture');await pause(500);
+        playing=false;await send();await waitFor(main,`!!document.querySelector('[data-media-pill=${mode}] [data-media-paused]')`,'Pause badge mount');
+        const sample=await main.evaluate(`(()=>{const badge=document.querySelector('[data-media-pill=${mode}] [data-media-paused]'),cover=badge.parentElement,pill=badge.closest('[data-media-pill]'),icon=badge.querySelector('svg');const rect=e=>{const r=e.getBoundingClientRect();return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height};};const b=rect(badge),i=rect(icon),s=getComputedStyle(badge);return {badge:b,cover:rect(cover),pill:rect(pill),icon:i,position:s.position,background:s.backgroundColor,color:s.color,visibleAtCenter:badge.contains(document.elementFromPoint(b.left+b.width/2,b.top+b.height/2)),bars:icon.querySelectorAll('rect').length};})()`);
+        assert(contains(sample.cover,sample.badge),'Badge outside cover: '+JSON.stringify({scale,mode,...sample}));
+        assert(contains(sample.pill,sample.badge),'Badge clipped by pill');assert(contains(sample.badge,sample.icon));
+        assert(Math.abs(sample.badge.width-14)<.05&&Math.abs(sample.badge.height-14)<.05);assert.equal(sample.position,'absolute');assert.equal(sample.visibleAtCenter,true);assert.equal(sample.bars,2);assert.equal(sample.color,'rgb(255, 255, 255)');
+        measurements.push({scale,mode,...sample});
+        if(scale===100&&mode==='title'){
+          const shot=await main.command('Page.captureScreenshot',{format:'png'});await fs.writeFile(path.join(directory,'pause-badge-fixed.png'),Buffer.from(shot.data,'base64'));
+          const p=sample.pill;const crop=await main.command('Page.captureScreenshot',{format:'png',clip:{x:Math.max(0,p.left-3),y:Math.max(0,p.top),width:p.width+6,height:p.height,scale:3}});await fs.writeFile(path.join(directory,'pause-badge-fixed-detail.png'),Buffer.from(crop.data,'base64'));
+        }
+      }
+      return {measurements,insideCover:true,insidePill:true,twoBarsVisible:true,highContrast:true,scales:[80,100,150,200],modes:['title','normal','lyrics']};
+    }finally{clearInterval(timer);await main.invoke('media_pick',{id:null});await main.invoke('settings_set',{settings:prior});await pause(3400);}
+  });
   await check('Disabled download cards and agent questions suppress their UI events',async()=>{
     const prior=await main.invoke('settings_get');
     const peek=()=>main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");return ot.getState().peek?.kind??null;})()');

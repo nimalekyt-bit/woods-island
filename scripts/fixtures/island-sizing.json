@@ -1,0 +1,496 @@
+[
+  {
+    "options": {},
+    "expected": {
+      "idleSize": [
+        150,
+        30
+      ],
+      "normalMediaSize": [
+        268,
+        32
+      ],
+      "titleMediaSize": [
+        420,
+        44
+      ],
+      "lyricsMediaSize": [
+        420,
+        44
+      ],
+      "lyricsNeedWrap": false,
+      "playerMediaSize": [
+        360,
+        118
+      ]
+    }
+  },
+  {
+    "options": {
+      "face": true,
+      "clock": true
+    },
+    "expected": {
+      "idleSize": [
+        162,
+        30
+      ],
+      "normalMediaSize": [
+        268,
+        32
+      ],
+      "titleMediaSize": [
+        420,
+        44
+      ],
+      "lyricsMediaSize": [
+        420,
+        44
+      ],
+      "lyricsNeedWrap": false,
+      "playerMediaSize": [
+        360,
+        118
+      ]
+    }
+  },
+  {
+    "options": {
+      "character": true,
+      "face": true,
+      "big": true,
+      "slot": 116
+    },
+    "expected": {
+      "idleSize": [
+        212,
+        44
+      ],
+      "normalMediaSize": [
+        268,
+        32
+      ],
+      "titleMediaSize": [
+        420,
+        44
+      ],
+      "lyricsMediaSize": [
+        420,
+        44
+      ],
+      "lyricsNeedWrap": false,
+      "playerMediaSize": [
+        360,
+        118
+      ]
+    }
+  },
+  {
+    "options": {
+      "clock": true,
+      "seconds": true,
+      "battery": true,
+      "weather": true
+    },
+    "expected": {
+      "idleSize": [
+        222,
+        30
+      ],
+      "normalMediaSize": [
+        275,
+        32
+      ],
+      "titleMediaSize": [
+        461,
+        44
+      ],
+      "lyricsMediaSize": [
+        461,
+        44
+      ],
+      "lyricsNeedWrap": false,
+      "playerMediaSize": [
+        368,
+        118
+      ]
+    }
+  },
+  {
+    "options": {
+      "face": true,
+      "clock": true,
+      "battery": true,
+      "weather": true
+    },
+    "expected": {
+      "idleSize": [
+        278,
+        30
+      ],
+      "normalMediaSize": [
+        328,
+        32
+      ],
+      "titleMediaSize": [
+        441,
+        44
+      ],
+      "lyricsMediaSize": [
+        441,
+        44
+      ],
+      "lyricsNeedWrap": false,
+      "playerMediaSize": [
+        368,
+        118
+      ]
+    }
+  },
+  {
+    "options": {
+      "character": true,
+      "face": true,
+      "clock": true,
+      "battery": true,
+      "weather": true,
+      "slot": 90
+    },
+    "expected": {
+      "idleSize": [
+        278,
+        34
+      ],
+      "normalMediaSize": [
+        274,
+        32
+      ],
+      "titleMediaSize": [
+        466,
+        44
+      ],
+      "lyricsMediaSize": [
+        466,
+        44
+      ],
+      "lyricsNeedWrap": false,
+      "playerMediaSize": [
+        368,
+        118
+      ]
+    }
+  },
+  {
+    "options": {
+      "caps": true,
+      "layout": true,
+      "desk": 12,
+      "dots": 2,
+      "obs": true,
+      "agent": true,
+      "download": true,
+      "shelf": 12,
+      "timer": 8
+    },
+    "expected": {
+      "idleSize": [
+        486,
+        30
+      ],
+      "normalMediaSize": [
+        480,
+        32
+      ],
+      "titleMediaSize": [
+        662,
+        44
+      ],
+      "lyricsMediaSize": [
+        662,
+        44
+      ],
+      "lyricsNeedWrap": false,
+      "playerMediaSize": [
+        590,
+        118
+      ]
+    }
+  },
+  {
+    "options": {
+      "character": true,
+      "face": true,
+      "big": true,
+      "slot": 104,
+      "clock": true,
+      "seconds": true,
+      "battery": true,
+      "weather": true,
+      "caps": true,
+      "layout": true,
+      "desk": 5,
+      "dots": 2,
+      "obs": true,
+      "agent": true,
+      "download": true,
+      "shelf": 8,
+      "timer": 5,
+      "seekable": true,
+      "lyrics": true,
+      "words": 520
+    },
+    "expected": {
+      "idleSize": [
+        629,
+        44
+      ],
+      "normalMediaSize": [
+        617,
+        32
+      ],
+      "titleMediaSize": [
+        811,
+        44
+      ],
+      "lyricsMediaSize": [
+        680,
+        44
+      ],
+      "lyricsNeedWrap": true,
+      "playerMediaSize": [
+        771,
+        140
+      ]
+    }
+  },
+  {
+    "options": {
+      "words": 170
+    },
+    "expected": {
+      "idleSize": [
+        150,
+        30
+      ],
+      "normalMediaSize": [
+        268,
+        32
+      ],
+      "titleMediaSize": [
+        420,
+        44
+      ],
+      "lyricsMediaSize": [
+        442,
+        44
+      ],
+      "lyricsNeedWrap": false,
+      "playerMediaSize": [
+        360,
+        118
+      ]
+    }
+  },
+  {
+    "options": {
+      "words": 176
+    },
+    "expected": {
+      "idleSize": [
+        150,
+        30
+      ],
+      "normalMediaSize": [
+        268,
+        32
+      ],
+      "titleMediaSize": [
+        420,
+        44
+      ],
+      "lyricsMediaSize": [
+        448,
+        44
+      ],
+      "lyricsNeedWrap": false,
+      "playerMediaSize": [
+        360,
+        118
+      ]
+    }
+  },
+  {
+    "options": {
+      "words": 520
+    },
+    "expected": {
+      "idleSize": [
+        150,
+        30
+      ],
+      "normalMediaSize": [
+        268,
+        32
+      ],
+      "titleMediaSize": [
+        420,
+        44
+      ],
+      "lyricsMediaSize": [
+        680,
+        44
+      ],
+      "lyricsNeedWrap": true,
+      "playerMediaSize": [
+        360,
+        118
+      ]
+    }
+  },
+  {
+    "options": {
+      "words": 1000
+    },
+    "expected": {
+      "idleSize": [
+        150,
+        30
+      ],
+      "normalMediaSize": [
+        268,
+        32
+      ],
+      "titleMediaSize": [
+        420,
+        44
+      ],
+      "lyricsMediaSize": [
+        680,
+        44
+      ],
+      "lyricsNeedWrap": true,
+      "playerMediaSize": [
+        360,
+        118
+      ]
+    }
+  },
+  {
+    "options": {
+      "lyrics": true,
+      "seekable": true
+    },
+    "expected": {
+      "idleSize": [
+        150,
+        30
+      ],
+      "normalMediaSize": [
+        268,
+        32
+      ],
+      "titleMediaSize": [
+        420,
+        44
+      ],
+      "lyricsMediaSize": [
+        420,
+        44
+      ],
+      "lyricsNeedWrap": false,
+      "playerMediaSize": [
+        628,
+        140
+      ]
+    }
+  },
+  {
+    "options": {
+      "clock": true,
+      "seconds": true,
+      "timer": 8,
+      "words": 300
+    },
+    "expected": {
+      "idleSize": [
+        162,
+        30
+      ],
+      "normalMediaSize": [
+        268,
+        32
+      ],
+      "titleMediaSize": [
+        420,
+        44
+      ],
+      "lyricsMediaSize": [
+        572,
+        44
+      ],
+      "lyricsNeedWrap": false,
+      "playerMediaSize": [
+        390,
+        118
+      ]
+    }
+  },
+  {
+    "options": {
+      "shelf": 1,
+      "timer": 1
+    },
+    "expected": {
+      "idleSize": [
+        150,
+        30
+      ],
+      "normalMediaSize": [
+        268,
+        32
+      ],
+      "titleMediaSize": [
+        420,
+        44
+      ],
+      "lyricsMediaSize": [
+        420,
+        44
+      ],
+      "lyricsNeedWrap": false,
+      "playerMediaSize": [
+        360,
+        118
+      ]
+    }
+  },
+  {
+    "options": {
+      "shelf": 10,
+      "timer": 6
+    },
+    "expected": {
+      "idleSize": [
+        177,
+        30
+      ],
+      "normalMediaSize": [
+        268,
+        32
+      ],
+      "titleMediaSize": [
+        420,
+        44
+      ],
+      "lyricsMediaSize": [
+        420,
+        44
+      ],
+      "lyricsNeedWrap": false,
+      "playerMediaSize": [
+        360,
+        118
+      ]
+    }
+  }
+]

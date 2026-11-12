@@ -1,0 +1,1041 @@
+{
+  "date": "2026-11-12",
+  "task": "TASK-1420",
+  "sha256": "33f89220cae2afa5aaa7942a0ba8ce323a0ee489819284af023b81112bc354be",
+  "passiveQa": true,
+  "verification": {
+    "frontendBuild": {
+      "exitCode": 0
+    },
+    "runtimeCheck": {
+      "exitCode": 0
+    },
+    "releaseBuild": {
+      "exitCode": 0
+    },
+    "runtimeState": {
+      "exitCode": 0,
+      "passed": 23,
+      "geometry": 9,
+      "events": 8,
+      "priorPolicies": 6
+    },
+    "hooks": {
+      "exitCode": 0,
+      "passed": 5
+    },
+    "ipc": {
+      "exitCode": 0,
+      "passed": 1
+    },
+    "rustTests": {
+      "exitCode": 0,
+      "passed": 62
+    },
+    "native": {
+      "exitCode": 0,
+      "passed": 46,
+      "failed": 0,
+      "skipped": 1
+    },
+    "controls": {
+      "exitCode": 0,
+      "sha256": "33f89220cae2afa5aaa7942a0ba8ce323a0ee489819284af023b81112bc354be",
+      "panelReadyMs": 70,
+      "focused": false,
+      "frontendErrors": []
+    }
+  },
+  "geometryParity": {
+    "baseline": "9a3d929",
+    "booleanCombinations": 16384,
+    "comparisons": 98304,
+    "matched": 98304,
+    "goldenCases": 16
+  },
+  "pause": {
+    "plainIdle": true,
+    "plainPaused": true,
+    "titleBadge": true,
+    "normalBadge": true,
+    "frozenProgress": true,
+    "metadataEveryMs": 120,
+    "collapseMs": 2447,
+    "resumeCancelsCollapse": true,
+    "pausedWidth": 420,
+    "collapsedWidth": 150
+  },
+  "lyricsGeometry": {
+    "stableWidth": 680,
+    "stableHeight": 44,
+    "frameCount": 298,
+    "openingFrames": 414,
+    "maxWidthChangePer16ms": 27.586206893008047,
+    "shortLongAndUnbroken": true,
+    "lines": [
+      {
+        "position": 4500,
+        "width": 680,
+        "height": 44,
+        "viewportHeight": 30,
+        "textHeight": 30,
+        "wrap": "anywhere",
+        "lineCount": 1
+      },
+      {
+        "position": 8500,
+        "width": 680,
+        "height": 44,
+        "viewportHeight": 30,
+        "textHeight": 30,
+        "wrap": "anywhere",
+        "lineCount": 1
+      },
+      {
+        "position": 1000,
+        "width": 680,
+        "height": 44,
+        "viewportHeight": 30,
+        "textHeight": 15,
+        "wrap": "anywhere",
+        "lineCount": 1
+      }
+    ]
+  },
+  "scaleTransitions": {
+    "scales": [
+      80,
+      100,
+      150,
+      200
+    ],
+    "measured": [
+      {
+        "scale": 80,
+        "normal": {
+          "width": 267.5,
+          "height": 31.9921875,
+          "lineW": 0,
+          "wrap": false,
+          "pill": "normal"
+        },
+        "lyrics": {
+          "width": 680,
+          "height": 43.984375,
+          "viewportHeight": 30,
+          "lineW": 528,
+          "wrap": true,
+          "pill": "lyrics"
+        },
+        "long": {
+          "width": 680,
+          "height": 43.984375,
+          "viewportHeight": 30,
+          "lineW": 528,
+          "wrap": true,
+          "pill": "lyrics"
+        },
+        "face": {
+          "width": 267.5,
+          "height": 31.9921875,
+          "lineW": 0,
+          "wrap": false,
+          "pill": "normal"
+        },
+        "slot": {
+          "width": 267.5,
+          "height": 31.9921875,
+          "lineW": 0,
+          "wrap": false,
+          "pill": "normal"
+        },
+        "expanded": {
+          "width": 680,
+          "height": 335.99609375,
+          "lineW": 0,
+          "wrap": false
+        },
+        "idle": {
+          "width": 150,
+          "height": 30,
+          "lineW": 0,
+          "wrap": false
+        }
+      },
+      {
+        "scale": 100,
+        "normal": {
+          "width": 268,
+          "height": 32,
+          "lineW": 0,
+          "wrap": false,
+          "pill": "normal"
+        },
+        "lyrics": {
+          "width": 680,
+          "height": 44,
+          "viewportHeight": 30,
+          "lineW": 528,
+          "wrap": true,
+          "pill": "lyrics"
+        },
+        "long": {
+          "width": 680,
+          "height": 44,
+          "viewportHeight": 30,
+          "lineW": 528,
+          "wrap": true,
+          "pill": "lyrics"
+        },
+        "face": {
+          "width": 268,
+          "height": 32,
+          "lineW": 0,
+          "wrap": false,
+          "pill": "normal"
+        },
+        "slot": {
+          "width": 268,
+          "height": 32,
+          "lineW": 0,
+          "wrap": false,
+          "pill": "normal"
+        },
+        "expanded": {
+          "width": 680,
+          "height": 336,
+          "lineW": 0,
+          "wrap": false
+        },
+        "idle": {
+          "width": 150,
+          "height": 30,
+          "lineW": 0,
+          "wrap": false
+        }
+      },
+      {
+        "scale": 150,
+        "normal": {
+          "width": 268,
+          "height": 32,
+          "lineW": 0,
+          "wrap": false,
+          "pill": "normal"
+        },
+        "lyrics": {
+          "width": 680,
+          "height": 44,
+          "viewportHeight": 30,
+          "lineW": 528,
+          "wrap": true,
+          "pill": "lyrics"
+        },
+        "long": {
+          "width": 680,
+          "height": 44,
+          "viewportHeight": 30,
+          "lineW": 528,
+          "wrap": true,
+          "pill": "lyrics"
+        },
+        "face": {
+          "width": 268,
+          "height": 32,
+          "lineW": 0,
+          "wrap": false,
+          "pill": "normal"
+        },
+        "slot": {
+          "width": 268,
+          "height": 32,
+          "lineW": 0,
+          "wrap": false,
+          "pill": "normal"
+        },
+        "expanded": {
+          "width": 680,
+          "height": 336,
+          "lineW": 0,
+          "wrap": false
+        },
+        "idle": {
+          "width": 150.6666717529297,
+          "height": 30,
+          "lineW": 0,
+          "wrap": false
+        }
+      },
+      {
+        "scale": 200,
+        "normal": {
+          "width": 268,
+          "height": 32,
+          "lineW": 0,
+          "wrap": false,
+          "pill": "normal"
+        },
+        "lyrics": {
+          "width": 680,
+          "height": 44,
+          "viewportHeight": 30,
+          "lineW": 528,
+          "wrap": true,
+          "pill": "lyrics"
+        },
+        "long": {
+          "width": 680,
+          "height": 44,
+          "viewportHeight": 30,
+          "lineW": 528,
+          "wrap": true,
+          "pill": "lyrics"
+        },
+        "face": {
+          "width": 268,
+          "height": 32,
+          "lineW": 0,
+          "wrap": false,
+          "pill": "normal"
+        },
+        "slot": {
+          "width": 268,
+          "height": 32,
+          "lineW": 0,
+          "wrap": false,
+          "pill": "normal"
+        },
+        "expanded": {
+          "width": 680,
+          "height": 336,
+          "lineW": 0,
+          "wrap": false
+        },
+        "idle": {
+          "width": 150,
+          "height": 30,
+          "lineW": 0,
+          "wrap": false
+        }
+      }
+    ],
+    "lyricsUnmountResetsWidth": true,
+    "shortLongWidthStable": true,
+    "faceAndSlot": true,
+    "pausedCollapse": true,
+    "noFocus": true
+  },
+  "badgePlacement": {
+    "measurements": [
+      {
+        "scale": 80,
+        "mode": "title",
+        "badge": {
+          "left": 193.0078125,
+          "top": 20.99609375,
+          "right": 206.9921875,
+          "bottom": 34.98046875,
+          "width": 13.984375,
+          "height": 13.984375
+        },
+        "cover": {
+          "left": 180,
+          "top": 7.98828125,
+          "right": 207.98828125,
+          "bottom": 35.9765625,
+          "width": 27.98828125,
+          "height": 27.98828125
+        },
+        "pill": {
+          "left": 170,
+          "top": 0,
+          "right": 590,
+          "bottom": 43.984375,
+          "width": 420,
+          "height": 43.984375
+        },
+        "icon": {
+          "left": 195.5078125,
+          "top": 23.49609375,
+          "right": 204.4921875,
+          "bottom": 32.48046875,
+          "width": 8.984375,
+          "height": 8.984375
+        },
+        "position": "absolute",
+        "background": "rgb(23, 23, 23)",
+        "color": "rgb(255, 255, 255)",
+        "visibleAtCenter": true,
+        "bars": 2
+      },
+      {
+        "scale": 80,
+        "mode": "normal",
+        "badge": {
+          "left": 261.25,
+          "top": 12.01171875,
+          "right": 275.234375,
+          "bottom": 25.99609375,
+          "width": 13.984375,
+          "height": 13.984375
+        },
+        "cover": {
+          "left": 254.23828125,
+          "top": 5,
+          "right": 276.23046875,
+          "bottom": 26.9921875,
+          "width": 21.9921875,
+          "height": 21.9921875
+        },
+        "pill": {
+          "left": 246.25,
+          "top": 0,
+          "right": 513.75,
+          "bottom": 31.9921875,
+          "width": 267.5,
+          "height": 31.9921875
+        },
+        "icon": {
+          "left": 263.75,
+          "top": 14.51171875,
+          "right": 272.734375,
+          "bottom": 23.49609375,
+          "width": 8.984375,
+          "height": 8.984375
+        },
+        "position": "absolute",
+        "background": "rgb(23, 23, 23)",
+        "color": "rgb(255, 255, 255)",
+        "visibleAtCenter": true,
+        "bars": 2
+      },
+      {
+        "scale": 80,
+        "mode": "lyrics",
+        "badge": {
+          "left": 179.2578125,
+          "top": 20.99609375,
+          "right": 193.2421875,
+          "bottom": 34.98046875,
+          "width": 13.984375,
+          "height": 13.984375
+        },
+        "cover": {
+          "left": 166.25,
+          "top": 7.98828125,
+          "right": 194.23828125,
+          "bottom": 35.9765625,
+          "width": 27.98828125,
+          "height": 27.98828125
+        },
+        "pill": {
+          "left": 156.25,
+          "top": 0,
+          "right": 603.75,
+          "bottom": 43.984375,
+          "width": 447.5,
+          "height": 43.984375
+        },
+        "icon": {
+          "left": 181.7578125,
+          "top": 23.49609375,
+          "right": 190.7421875,
+          "bottom": 32.48046875,
+          "width": 8.984375,
+          "height": 8.984375
+        },
+        "position": "absolute",
+        "background": "rgb(23, 23, 23)",
+        "color": "rgb(255, 255, 255)",
+        "visibleAtCenter": true,
+        "bars": 2
+      },
+      {
+        "scale": 100,
+        "mode": "title",
+        "badge": {
+          "left": 193,
+          "top": 21,
+          "right": 207,
+          "bottom": 35,
+          "width": 14,
+          "height": 14
+        },
+        "cover": {
+          "left": 180,
+          "top": 8,
+          "right": 208,
+          "bottom": 36,
+          "width": 28,
+          "height": 28
+        },
+        "pill": {
+          "left": 170,
+          "top": 0,
+          "right": 590,
+          "bottom": 44,
+          "width": 420,
+          "height": 44
+        },
+        "icon": {
+          "left": 195.5,
+          "top": 23.5,
+          "right": 204.5,
+          "bottom": 32.5,
+          "width": 9,
+          "height": 9
+        },
+        "position": "absolute",
+        "background": "rgb(23, 23, 23)",
+        "color": "rgb(255, 255, 255)",
+        "visibleAtCenter": true,
+        "bars": 2
+      },
+      {
+        "scale": 100,
+        "mode": "normal",
+        "badge": {
+          "left": 261,
+          "top": 12,
+          "right": 275,
+          "bottom": 26,
+          "width": 14,
+          "height": 14
+        },
+        "cover": {
+          "left": 254,
+          "top": 5,
+          "right": 276,
+          "bottom": 27,
+          "width": 22,
+          "height": 22
+        },
+        "pill": {
+          "left": 246,
+          "top": 0,
+          "right": 514,
+          "bottom": 32,
+          "width": 268,
+          "height": 32
+        },
+        "icon": {
+          "left": 263.5,
+          "top": 14.5,
+          "right": 272.5,
+          "bottom": 23.5,
+          "width": 9,
+          "height": 9
+        },
+        "position": "absolute",
+        "background": "rgb(23, 23, 23)",
+        "color": "rgb(255, 255, 255)",
+        "visibleAtCenter": true,
+        "bars": 2
+      },
+      {
+        "scale": 100,
+        "mode": "lyrics",
+        "badge": {
+          "left": 179,
+          "top": 21,
+          "right": 193,
+          "bottom": 35,
+          "width": 14,
+          "height": 14
+        },
+        "cover": {
+          "left": 166,
+          "top": 8,
+          "right": 194,
+          "bottom": 36,
+          "width": 28,
+          "height": 28
+        },
+        "pill": {
+          "left": 156,
+          "top": 0,
+          "right": 604,
+          "bottom": 44,
+          "width": 448,
+          "height": 44
+        },
+        "icon": {
+          "left": 181.5,
+          "top": 23.5,
+          "right": 190.5,
+          "bottom": 32.5,
+          "width": 9,
+          "height": 9
+        },
+        "position": "absolute",
+        "background": "rgb(23, 23, 23)",
+        "color": "rgb(255, 255, 255)",
+        "visibleAtCenter": true,
+        "bars": 2
+      },
+      {
+        "scale": 150,
+        "mode": "title",
+        "badge": {
+          "left": 193,
+          "top": 21,
+          "right": 207,
+          "bottom": 35,
+          "width": 14,
+          "height": 14
+        },
+        "cover": {
+          "left": 180,
+          "top": 8,
+          "right": 208,
+          "bottom": 36,
+          "width": 28,
+          "height": 28
+        },
+        "pill": {
+          "left": 170,
+          "top": 0,
+          "right": 590,
+          "bottom": 44,
+          "width": 420,
+          "height": 44
+        },
+        "icon": {
+          "left": 195.5,
+          "top": 23.5,
+          "right": 204.5,
+          "bottom": 32.5,
+          "width": 9,
+          "height": 9
+        },
+        "position": "absolute",
+        "background": "rgb(23, 23, 23)",
+        "color": "rgb(255, 255, 255)",
+        "visibleAtCenter": true,
+        "bars": 2
+      },
+      {
+        "scale": 150,
+        "mode": "normal",
+        "badge": {
+          "left": 261,
+          "top": 12,
+          "right": 275,
+          "bottom": 26,
+          "width": 14,
+          "height": 14
+        },
+        "cover": {
+          "left": 254,
+          "top": 5,
+          "right": 276,
+          "bottom": 27,
+          "width": 22,
+          "height": 22
+        },
+        "pill": {
+          "left": 246,
+          "top": 0,
+          "right": 514,
+          "bottom": 32,
+          "width": 268,
+          "height": 32
+        },
+        "icon": {
+          "left": 263.5,
+          "top": 14.5,
+          "right": 272.5,
+          "bottom": 23.5,
+          "width": 9,
+          "height": 9
+        },
+        "position": "absolute",
+        "background": "rgb(23, 23, 23)",
+        "color": "rgb(255, 255, 255)",
+        "visibleAtCenter": true,
+        "bars": 2
+      },
+      {
+        "scale": 150,
+        "mode": "lyrics",
+        "badge": {
+          "left": 179,
+          "top": 21,
+          "right": 193,
+          "bottom": 35,
+          "width": 14,
+          "height": 14
+        },
+        "cover": {
+          "left": 166,
+          "top": 8,
+          "right": 194,
+          "bottom": 36,
+          "width": 28,
+          "height": 28
+        },
+        "pill": {
+          "left": 156,
+          "top": 0,
+          "right": 604,
+          "bottom": 44,
+          "width": 448,
+          "height": 44
+        },
+        "icon": {
+          "left": 181.5,
+          "top": 23.5,
+          "right": 190.5,
+          "bottom": 32.5,
+          "width": 9,
+          "height": 9
+        },
+        "position": "absolute",
+        "background": "rgb(23, 23, 23)",
+        "color": "rgb(255, 255, 255)",
+        "visibleAtCenter": true,
+        "bars": 2
+      },
+      {
+        "scale": 200,
+        "mode": "title",
+        "badge": {
+          "left": 193,
+          "top": 21,
+          "right": 207,
+          "bottom": 35,
+          "width": 14,
+          "height": 14
+        },
+        "cover": {
+          "left": 180,
+          "top": 8,
+          "right": 208,
+          "bottom": 36,
+          "width": 28,
+          "height": 28
+        },
+        "pill": {
+          "left": 170,
+          "top": 0,
+          "right": 590,
+          "bottom": 44,
+          "width": 420,
+          "height": 44
+        },
+        "icon": {
+          "left": 195.5,
+          "top": 23.5,
+          "right": 204.5,
+          "bottom": 32.5,
+          "width": 9,
+          "height": 9
+        },
+        "position": "absolute",
+        "background": "rgb(23, 23, 23)",
+        "color": "rgb(255, 255, 255)",
+        "visibleAtCenter": true,
+        "bars": 2
+      },
+      {
+        "scale": 200,
+        "mode": "normal",
+        "badge": {
+          "left": 261,
+          "top": 12,
+          "right": 275,
+          "bottom": 26,
+          "width": 14,
+          "height": 14
+        },
+        "cover": {
+          "left": 254,
+          "top": 5,
+          "right": 276,
+          "bottom": 27,
+          "width": 22,
+          "height": 22
+        },
+        "pill": {
+          "left": 246,
+          "top": 0,
+          "right": 514,
+          "bottom": 32,
+          "width": 268,
+          "height": 32
+        },
+        "icon": {
+          "left": 263.5,
+          "top": 14.5,
+          "right": 272.5,
+          "bottom": 23.5,
+          "width": 9,
+          "height": 9
+        },
+        "position": "absolute",
+        "background": "rgb(23, 23, 23)",
+        "color": "rgb(255, 255, 255)",
+        "visibleAtCenter": true,
+        "bars": 2
+      },
+      {
+        "scale": 200,
+        "mode": "lyrics",
+        "badge": {
+          "left": 179,
+          "top": 21,
+          "right": 193,
+          "bottom": 35,
+          "width": 14,
+          "height": 14
+        },
+        "cover": {
+          "left": 166,
+          "top": 8,
+          "right": 194,
+          "bottom": 36,
+          "width": 28,
+          "height": 28
+        },
+        "pill": {
+          "left": 156,
+          "top": 0,
+          "right": 604,
+          "bottom": 44,
+          "width": 448,
+          "height": 44
+        },
+        "icon": {
+          "left": 181.5,
+          "top": 23.5,
+          "right": 190.5,
+          "bottom": 32.5,
+          "width": 9,
+          "height": 9
+        },
+        "position": "absolute",
+        "background": "rgb(23, 23, 23)",
+        "color": "rgb(255, 255, 255)",
+        "visibleAtCenter": true,
+        "bars": 2
+      }
+    ],
+    "insideCover": true,
+    "insidePill": true,
+    "twoBarsVisible": true,
+    "highContrast": true,
+    "scales": [
+      80,
+      100,
+      150,
+      200
+    ],
+    "modes": [
+      "title",
+      "normal",
+      "lyrics"
+    ]
+  },
+  "results": [
+    {
+      "name": "Main UI mounts",
+      "ok": true
+    },
+    {
+      "name": "Settings and image editor renderers are absent until requested",
+      "ok": true
+    },
+    {
+      "name": "No Windows caption; DPI bounds match canvas",
+      "ok": true
+    },
+    {
+      "name": "Bootstrap uses real audio device",
+      "ok": true
+    },
+    {
+      "name": "Chosen audio endpoint changes monitoring without rerouting sound",
+      "ok": true
+    },
+    {
+      "name": "Capture visibility setting changes native display protection",
+      "ok": true
+    },
+    {
+      "name": "Chosen microphone remains readable without recording or mute changes",
+      "ok": true
+    },
+    {
+      "name": "Native notification and network reads return usable contracts",
+      "ok": true
+    },
+    {
+      "name": "Settings merge + persist, toggles do not crash",
+      "ok": true
+    },
+    {
+      "name": "Island scale changes physical size, viewport and clip bounds together",
+      "ok": true
+    },
+    {
+      "name": "Weather search works offline for Брянск",
+      "ok": true
+    },
+    {
+      "name": "Media source and playback contracts",
+      "ok": true
+    },
+    {
+      "name": "Weather opens, switches hours/week and units, and rejects legacy data",
+      "ok": true
+    },
+    {
+      "name": "Live Yandex connector reaches the rendered pill with cover and advancing time",
+      "ok": true,
+      "skipped": true
+    },
+    {
+      "name": "Plain island and visible pause collapse after 2500 ms despite repeated metadata",
+      "ok": true
+    },
+    {
+      "name": "LRCLIB milliseconds highlight, advance, pause and seek the rendered lyrics",
+      "ok": true
+    },
+    {
+      "name": "Lyrics keep stable geometry across short, wrapped and unbroken lines",
+      "ok": true
+    },
+    {
+      "name": "Typed pill transitions retain sizes and lyrics lifecycle at 80/100/150/200 percent",
+      "ok": true
+    },
+    {
+      "name": "Pause badge stays visible inside the cover in title/normal/lyrics at every scale",
+      "ok": true
+    },
+    {
+      "name": "Disabled download cards and agent questions suppress their UI events",
+      "ok": true
+    },
+    {
+      "name": "Optional hover opens after its delay; click remains the default",
+      "ok": true
+    },
+    {
+      "name": "Opening the releases page does not leave a fictitious download running",
+      "ok": true
+    },
+    {
+      "name": "WASAPI follows the active player output and animates the liquid spectrum",
+      "ok": true
+    },
+    {
+      "name": "Repeated hover keeps the folded pill visible and native styles unchanged",
+      "ok": true
+    },
+    {
+      "name": "Click expands, Escape collapses",
+      "ok": true
+    },
+    {
+      "name": "Native desktop pixels outside collapsed and expanded island have no glass tint",
+      "ok": true
+    },
+    {
+      "name": "Notes/chat/timer/launcher groups round-trip",
+      "ok": true
+    },
+    {
+      "name": "Launcher link and shelf persist",
+      "ok": true
+    },
+    {
+      "name": "Agents state and config ownership are read without changing fixtures",
+      "ok": true
+    },
+    {
+      "name": "Web AI read contract and invalid service rejection",
+      "ok": true
+    },
+    {
+      "name": "Claude single and multiple choices reach the real answer file",
+      "ok": true
+    },
+    {
+      "name": "Store inventory and icons are native; launcher accepts an installed AUMID",
+      "ok": true
+    },
+    {
+      "name": "PPTX attachments preserve presentation order and Unicode text",
+      "ok": true
+    },
+    {
+      "name": "Attachments return document/image contracts and missing-file errors",
+      "ok": true
+    },
+    {
+      "name": "AI models, UTF-8 streaming, attachment resolution and HTTP error events",
+      "ok": true
+    },
+    {
+      "name": "OBS v5 handshake authenticates, reads state and rejects bad password",
+      "ok": true
+    },
+    {
+      "name": "Native screen capture produces real PNG and dimensions",
+      "ok": true
+    },
+    {
+      "name": "Windows OCR recognizes actual rendered text from a PNG",
+      "ok": true
+    },
+    {
+      "name": "MP4 screen recording contains video and WASAPI system audio",
+      "ok": true
+    },
+    {
+      "name": "Image editor loads and saves its isolated fixture without clipboard writes",
+      "ok": true
+    },
+    {
+      "name": "Settings UI renders after repeated harmless toggles",
+      "ok": true
+    },
+    {
+      "name": "Notes button exports Markdown to Obsidian without overwriting files",
+      "ok": true
+    },
+    {
+      "name": "Steam progress and completion use actual manifest changes",
+      "ok": true
+    },
+    {
+      "name": "Virtual desktop telemetry reaches the real frontend store",
+      "ok": true
+    },
+    {
+      "name": "Restart restores settings, notes, chat, timer, launcher and shelf",
+      "ok": true
+    },
+    {
+      "name": "No unhandled frontend exceptions",
+      "ok": true
+    },
+    {
+      "name": "Explicit quit exits the application",
+      "ok": true
+    }
+  ],
+  "frontendErrors": [],
+  "limitations": [
+    "No new CPU/RAM comparison in TASK-1420; measurement follows in TASK-1422.",
+    "Home tile/card layout and remaining feature event adapters remain in compat JS.",
+    "Live Yandex session skipped; isolated bridge fixtures tested without controlling personal music.",
+    "No physical input, focus, clipboard write, VPN connect, or real device reconnect in passive QA."
+  ],
+  "initialDiagnosticFailures": [
+    "Scale test originally assumed exact CSS integers; corrected for subpixel and even-physical-pixel rounding.",
+    "Owner screenshot revealed clipped PauseBadge despite DOM presence; explicit positioning and bounds/visibility regression added."
+  ]
+}
