@@ -4,7 +4,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
-const { agentRecord } = require('./island-notify.cjs');
+const { agentRecord, questionAnswers, decisionFor } = require('./island-notify.cjs');
 
 test('Codex completion and OpenCode idle preserve real session and project fields', () => {
   const record = agentRecord({ 'thread-id':'abc', cwd:'<WORKSPACE>', 'last-assistant-message':'готово' }, 'codex', 'agent-turn-complete');
@@ -45,6 +45,74 @@ test('Claude permission waits for a matching reply and emits the native decision
     assert.equal(JSON.parse(output).hookSpecificOutput.decision.behavior,'deny');
   } finally {
     assert(path.resolve(directory).startsWith(path.resolve(os.tmpdir())+path.sep));
+    await fs.rm(directory,{recursive:true,force:true});
+  }
+});
+
+const questions = [
+  { question:'Какой режим?',header:'Режим',options:[{label:'Быстро',description:'Сразу'},{label:'Качественно',description:'Подробно'}],multiSelect:false },
+  { question:'Что добавить?',header:'Выбор',options:[{label:'A, B'},{label:'C'},{label:'D'}],multiSelect:true },
+];
+
+test('Claude question selection validates exact keys, labels and single/multi cardinality', () => {
+  assert.deepEqual({...questionAnswers(questions,{'Какой режим?':'Быстро','Что добавить?':['A, B','C']})},{'Какой режим?':'Быстро','Что добавить?':'A, B, C'});
+  assert.deepEqual({...questionAnswers(questions,{'Какой режим?':['Качественно'],'Что добавить?':'C, D'})},{'Какой режим?':'Качественно','Что добавить?':'C, D'});
+  for (const answers of [
+    {'Какой режим?':'Быстро'},
+    {'Какой режим?':'Быстро','Другой':'C'},
+    {'Какой режим?':['Быстро','Качественно'],'Что добавить?':['C']},
+    {'Какой режим?':'Быстро','Что добавить?':['C','C']},
+    {'Какой режим?':'Быстро','Что добавить?':['unknown']},
+    {'Какой режим?':'Быстро','Что добавить?':[]},
+    {'Какой режим?':true,'Что добавить?':['C']},
+    {'Какой режим?':'Быстро','Что добавить?':['C'],extra:'D'},
+  ]) assert.throws(()=>questionAnswers(questions,answers));
+  assert.throws(()=>decisionFor({verdict:'answer',answers:{}},{kind:'permission'},{}));
+  assert.throws(()=>decisionFor({verdict:'allow'},{kind:'question'},{}));
+  assert.equal(decisionFor({verdict:'terminal'},{kind:'question'},{}),null);
+});
+
+test('Claude AskUserQuestion returns updatedInput preserving questions and original fields', async () => {
+  const root = path.join(os.tmpdir(),'woodscorp_obs');
+  await fs.mkdir(root,{recursive:true});
+  const directory = await fs.mkdtemp(path.join(root,'woods-question-test-'));
+  let child;
+  let heartbeat;
+  try {
+    await fs.mkdir(path.join(directory,'agents','answers'),{recursive:true});
+    const beat = ()=>fs.writeFile(path.join(directory,'agents','heartbeat.json'),JSON.stringify({at:Date.now()}));
+    await beat();
+    heartbeat = setInterval(()=>beat().catch(()=>{}),1000);
+    child = spawn(process.execPath,[path.join(__dirname,'island-notify.cjs'),'--provider','claude','--event','PermissionRequest'],{env:{...process.env,WOODS_ISLAND_DATA_DIR:directory},windowsHide:true});
+    let output=''; let error='';
+    child.stdout.on('data',data=>{output+=data;}); child.stderr.on('data',data=>{error+=data;});
+    const exited = new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',resolve);});
+    const toolInput = {questions,metadata:{real:'preserve'},answers:{old:'overwritten'}};
+    child.stdin.end(JSON.stringify({session_id:'question-fixture',cwd:'E:\\Test',tool_name:'AskUserQuestion',tool_input:toolInput}));
+    let ask;
+    for(let attempt=0;attempt<60&&!ask;attempt++){
+      for(const file of await fs.readdir(path.join(directory,'agents'))){
+        if(file.endsWith('.json')&&file!=='heartbeat.json'){
+          const record=JSON.parse(await fs.readFile(path.join(directory,'agents',file),'utf8'));ask=record.ask;
+        }
+      }
+      if(!ask)await new Promise(resolve=>setTimeout(resolve,50));
+    }
+    assert(ask,'The hook must publish question choices');
+    assert.equal(ask.kind,'question'); assert.deepEqual(ask.questions,questions);
+    const answerFile=path.join(directory,'agents','answers',`${ask.id}.json`);
+    await fs.writeFile(answerFile,JSON.stringify({verdict:'answer',answers:{'Какой режим?':'Быстро','Что добавить?':['unknown']}}));
+    await new Promise(resolve=>setTimeout(resolve,250));
+    assert.equal(output,'','An invalid choice must never approve the tool');
+    await fs.writeFile(answerFile,JSON.stringify({verdict:'answer',answers:{'Какой режим?':['Качественно'],'Что добавить?':['A, B','C']}}));
+    const code=await Promise.race([exited,new Promise((_,reject)=>{const timer=setTimeout(()=>reject(new Error('Question hook did not complete')),5000);timer.unref();})]);
+    assert.equal(code,0,error);
+    assert.deepEqual(JSON.parse(output),{hookSpecificOutput:{hookEventName:'PermissionRequest',decision:{behavior:'allow',updatedInput:{...toolInput,answers:{'Какой режим?':'Качественно','Что добавить?':'A, B, C'}}}}});
+    const records=(await fs.readdir(path.join(directory,'agents'))).filter(file=>file.endsWith('.json')&&file!=='heartbeat.json');
+    assert.equal(JSON.parse(await fs.readFile(path.join(directory,'agents',records[0]),'utf8')).ask,undefined);
+  } finally {
+    clearInterval(heartbeat); if(child&&child.exitCode===null)child.kill();
+    assert(path.resolve(directory).startsWith(path.resolve(root)+path.sep));
     await fs.rm(directory,{recursive:true,force:true});
   }
 });

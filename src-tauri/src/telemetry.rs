@@ -1,6 +1,6 @@
 //! Read-only Windows privacy, battery, keyboard and Downloads telemetry.
 use serde_json::{json,Value};
-use std::{collections::{HashMap,HashSet},path::{Path,PathBuf},sync::Arc,time::{Duration,Instant,SystemTime}};
+use std::{collections::{HashMap,HashSet},path::{Path,PathBuf},sync::{Arc,Mutex},time::{Duration,Instant,SystemTime}};
 use tauri::Emitter;
 use windows::{core::{PCWSTR,PWSTR},Win32::{
     Foundation::{CloseHandle,ERROR_SUCCESS},
@@ -161,6 +161,9 @@ impl Downloads{
     }
 }
 
+static DOWNLOAD_SNAPSHOT: Mutex<Option<Value>> = Mutex::new(None);
+pub fn downloads_snapshot() -> Value { DOWNLOAD_SNAPSHOT.lock().unwrap_or_else(|e|e.into_inner()).clone().unwrap_or_else(||json!([])) }
+
 pub fn start(app:tauri::AppHandle,state:Arc<crate::AppState>){
     let downloads_app=app.clone();let downloads_state=state.clone();
     std::thread::spawn(move||{
@@ -168,9 +171,8 @@ pub fn start(app:tauri::AppHandle,state:Arc<crate::AppState>){
         loop{
             let settings=downloads_state.settings.lock().unwrap().clone();let (mut active,mut completed)=tracker.poll(&settings);
             let (steam_active,steam_done)=steam.poll(settings["steamDownloads"].as_bool().unwrap_or(true));active.extend(steam_active);completed.extend(steam_done);let active=Value::Array(active);
-            // Repeat the measured snapshot so a webview that subscribes after
-            // setup also sees paused/in-progress downloads without a size change.
-            let _=downloads_app.emit("downloads:update",&active);
+            let changed = { let mut saved = DOWNLOAD_SNAPSHOT.lock().unwrap_or_else(|e|e.into_inner()); let changed=saved.as_ref()!=Some(&active); if changed { *saved=Some(active.clone()); } changed };
+            if changed { let _=downloads_app.emit("downloads:update",&active); }
             for file in completed{let _=downloads_app.emit("downloads:done",file);}
             std::thread::sleep(std::time::Duration::from_secs(1));
         }

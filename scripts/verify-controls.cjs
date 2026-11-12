@@ -52,7 +52,7 @@ let proc, ws;
   for(let i=0;i<6;i++){const at=performance.now();controls=await invoke('controls_get');readings.push(Math.round((performance.now()-at)*10)/10);await pause(100);}
   assert(Array.isArray(controls.vpns));
   const openAt=performance.now();
-  await evaluate('(async()=>{const m=await import("/assets/Liquid-BbsJJY6K.js");m.ot.setState({expanded:true,tab:"controls"});})()');
+  await evaluate('(async()=>{const m=await import("/assets/runtime-debug.js");m.ot.setState({expanded:true,tab:"controls"});})()');
   let tile;
   for(let i=0;i<150;i++){
     tile=await evaluate('(()=>{const e=document.querySelector("[data-control=ethernet]");return e?{on:e.dataset.on,disabled:e.disabled,text:e.textContent}:null})()');

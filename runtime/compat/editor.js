@@ -1,0 +1,325 @@
+// Compatibility application source; migrate components incrementally.
+import { G as e, H as t, O as n, U as r, i, q as a, r as o, t as s } from "./shared.js";
+import { r as c, t as l } from "./window.js";
+import { i as u, n as d, r as f, t as p } from "./undo.js";
+import { n as m, t as h } from "./check.js";
+import { a as g, i as _, n as v, o as y, r as b, t as x } from "./markup.js";
+var S = a(e(), 1),
+  C = r(),
+  w = i();
+function T(e, t, n, r) {
+  (e.clearRect(0, 0, e.canvas.width, e.canvas.height),
+    e.drawImage(t, 0, 0, e.canvas.width, e.canvas.height),
+    b(e, n, e.canvas.width / t.naturalWidth, r, { img: t, scale: 1, dx: 0, dy: 0 }));
+}
+function E({ on: e, title: t, onClick: n, children: r }) {
+  return (0, w.jsx)(`button`, {
+    title: t,
+    onClick: n,
+    className: `press grid size-9 place-items-center rounded-lg ${e ? `bg-white/15 text-white` : `text-white/60 hover:bg-white/8 hover:text-white`}`,
+    children: r,
+  });
+}
+function D() {
+  let [e, r] = (0, S.useState)(null),
+    [i, a] = (0, S.useState)(`arrow`),
+    [o, b] = (0, S.useState)(x[0]),
+    [C, D] = (0, S.useState)(v[1]),
+    [O, k] = (0, S.useState)([]),
+    [, A] = (0, S.useState)([]),
+    [j, M] = (0, S.useState)(null),
+    [N, P] = (0, S.useState)(null),
+    [F, I] = (0, S.useState)(!1),
+    [L, R] = (0, S.useState)(null),
+    z = (0, S.useRef)(null),
+    B = (0, S.useRef)(null),
+    [V, H] = (0, S.useState)({ w: 0, h: 0 });
+  ((0, S.useEffect)(() => {
+    n.editorImage()
+      .then((e) => {
+        let t = new Image();
+        ((t.onload = () => r(t)), (t.src = e.dataUrl));
+      })
+      .catch((e) => R(String(e)));
+  }, []),
+    (0, S.useEffect)(() => {
+      if (!e || !B.current) return;
+      let t = () => {
+        let t = B.current.getBoundingClientRect(),
+          n = Math.min(1, (t.width - 32) / e.naturalWidth, (t.height - 32) / e.naturalHeight);
+        H({ w: Math.round(e.naturalWidth * n), h: Math.round(e.naturalHeight * n) });
+      };
+      t();
+      let n = new ResizeObserver(t);
+      return (n.observe(B.current), () => n.disconnect());
+    }, [e]));
+  let U = j ? [...O, j] : O;
+  (0, S.useEffect)(() => {
+    let t = z.current;
+    if (!t || !e || !V.w) return;
+    let n = window.devicePixelRatio;
+    ((t.width = Math.round(V.w * n)),
+      (t.height = Math.round(V.h * n)),
+      T(t.getContext(`2d`), e, U, (V.w * n) / e.naturalWidth));
+  }, [e, V, U]);
+  let W = (t) => {
+      let n = z.current.getBoundingClientRect();
+      return {
+        x: ((t.clientX - n.left) / n.width) * e.naturalWidth,
+        y: ((t.clientY - n.top) / n.height) * e.naturalHeight,
+      };
+    },
+    G = (e) => {
+      (k((t) => [...t, e]), A([]));
+    },
+    K = (0, S.useCallback)(() => {
+      P(
+        (e) => (
+          e && e.text.trim() && G({ t: `text`, at: e.at, text: e.text, color: o, size: 14 + C * 3 }),
+          null
+        ),
+      );
+    }, [o, C]),
+    q = (t) => {
+      if (!e || t.button !== 0) return;
+      let n = W(t);
+      if (i === `text`) {
+        (t.preventDefault(), N && K());
+        let e = z.current.getBoundingClientRect();
+        P({ at: n, screen: { x: t.clientX - e.left, y: t.clientY - e.top }, text: `` });
+        return;
+      }
+      try {
+        t.currentTarget.setPointerCapture(t.pointerId);
+      } catch {}
+      M(
+        i === `pen` || i === `marker`
+          ? { t: i, pts: [n], color: o, w: C }
+          : i === `blur`
+            ? { t: `blur`, a: n, b: n }
+            : { t: i, a: n, b: n, color: o, w: C },
+      );
+    },
+    J = (e) => {
+      if (!j) return;
+      let t = W(e);
+      j.t === `pen` || j.t === `marker`
+        ? M({ ...j, pts: [...j.pts, t] })
+        : j.t !== `text` && M({ ...j, b: t });
+    },
+    Y = () => {
+      j && (_(j) || G(j), M(null));
+    },
+    X = () => {
+      k((e) => (e.length ? (A((t) => [...t, e[e.length - 1]]), e.slice(0, -1)) : e));
+    },
+    Z = () => {
+      A((e) => (e.length ? (k((t) => [...t, e[e.length - 1]]), e.slice(0, -1)) : e));
+    },
+    Q = () => {
+      let t = document.createElement(`canvas`);
+      return (
+        (t.width = e.naturalWidth),
+        (t.height = e.naturalHeight),
+        T(t.getContext(`2d`), e, O, 1),
+        t.toDataURL(`image/png`)
+      );
+    },
+    $ = async (t) => {
+      if (e && !F) {
+        (N && K(), I(!0));
+        try {
+          (await n.editorSave(Q(), !0), t && (await c().close()));
+        } catch (e) {
+          R(String(e));
+        } finally {
+          I(!1);
+        }
+      }
+    };
+  return (
+    (0, S.useEffect)(() => {
+      let e = (e) => {
+        if (N) return;
+        let t = e.ctrlKey || e.metaKey;
+        if (t && e.code === `KeyZ`) (e.preventDefault(), e.shiftKey ? Z() : X());
+        else if (t && e.code === `KeyY`) (e.preventDefault(), Z());
+        else if (t && e.code === `KeyS`) (e.preventDefault(), $(!0));
+        else if (t && e.code === `KeyC`) (e.preventDefault(), $(!1));
+        else if (e.key === `Escape`) c().close();
+        else if (!t) {
+          let t = { KeyA: `arrow`, KeyR: `rect`, KeyP: `pen`, KeyM: `marker`, KeyT: `text`, KeyB: `blur` };
+          t[e.code] && a(t[e.code]);
+        }
+      };
+      return (window.addEventListener(`keydown`, e), () => window.removeEventListener(`keydown`, e));
+    }),
+    (0, w.jsxs)(`div`, {
+      className: `flex h-full flex-col bg-[#101113] text-white select-none`,
+      children: [
+        (0, w.jsxs)(`div`, {
+          className: `flex h-[52px] shrink-0 items-center gap-1 border-b border-white/[0.06] px-3`,
+          children: [
+            (0, w.jsx)(E, {
+              on: i === `arrow`,
+              title: t(`Стрелка (A)`, `Arrow (A)`),
+              onClick: () => a(`arrow`),
+              children: (0, w.jsx)(u, { size: 18 }),
+            }),
+            (0, w.jsx)(E, {
+              on: i === `rect`,
+              title: t(`Рамка (R)`, `Box (R)`),
+              onClick: () => a(`rect`),
+              children: (0, w.jsx)(h, { size: 16 }),
+            }),
+            (0, w.jsx)(E, {
+              on: i === `pen`,
+              title: t(`Маркер (P)`, `Marker (P)`),
+              onClick: () => a(`pen`),
+              children: (0, w.jsx)(d, { size: 16 }),
+            }),
+            (0, w.jsx)(E, {
+              on: i === `marker`,
+              title: t(`Выделитель (M)`, `Highlighter (M)`),
+              onClick: () => a(`marker`),
+              children: (0, w.jsx)(f, { size: 16 }),
+            }),
+            (0, w.jsx)(E, {
+              on: i === `text`,
+              title: t(`Текст (T)`, `Text (T)`),
+              onClick: () => a(`text`),
+              children: (0, w.jsx)(s, { size: 17 }),
+            }),
+            (0, w.jsx)(E, {
+              on: i === `blur`,
+              title: t(`Скрыть данные (B)`, `Hide data (B)`),
+              onClick: () => a(`blur`),
+              children: (0, w.jsx)(y, { size: 17 }),
+            }),
+            (0, w.jsx)(`span`, { className: `mx-2 h-6 w-px bg-white/10` }),
+            x.map((e) =>
+              (0, w.jsx)(
+                `button`,
+                {
+                  title: e,
+                  onClick: () => b(e),
+                  className: `press size-6 rounded-full ring-offset-2 ring-offset-[#101113] ${o === e ? `ring-2 ring-white` : `ring-1 ring-white/20`}`,
+                  style: { background: e },
+                },
+                e,
+              ),
+            ),
+            (0, w.jsx)(`span`, { className: `mx-2 h-6 w-px bg-white/10` }),
+            v.map((e) =>
+              (0, w.jsx)(
+                `button`,
+                {
+                  title: t(`Толщина ${e}`, `Width ${e}`),
+                  onClick: () => D(e),
+                  className: `press grid size-8 place-items-center rounded-lg ${C === e ? `bg-white/15` : `hover:bg-white/8`}`,
+                  children: (0, w.jsx)(`span`, {
+                    className: `rounded-full bg-white`,
+                    style: { width: e + 3, height: e + 3 },
+                  }),
+                },
+                e,
+              ),
+            ),
+            (0, w.jsx)(`span`, { className: `mx-2 h-6 w-px bg-white/10` }),
+            (0, w.jsx)(E, {
+              title: t(`Отменить (Ctrl+Z)`, `Undo (Ctrl+Z)`),
+              onClick: X,
+              children: (0, w.jsx)(p, { size: 16 }),
+            }),
+            (0, w.jsx)(E, {
+              title: t(`Повторить (Ctrl+Y)`, `Redo (Ctrl+Y)`),
+              onClick: Z,
+              children: (0, w.jsx)(g, { size: 16 }),
+            }),
+            (0, w.jsx)(`div`, { className: `flex-1` }),
+            L &&
+              (0, w.jsx)(`span`, {
+                className: `mr-2 max-w-[260px] truncate text-[12px] text-[#ff8b8b]`,
+                children: L,
+              }),
+            (0, w.jsxs)(`button`, {
+              onClick: () => void $(!1),
+              disabled: !e || F,
+              className: `press flex h-9 items-center gap-1.5 rounded-lg bg-white/[0.08] px-3 text-[13px] hover:bg-white/[0.12] disabled:opacity-40`,
+              children: [(0, w.jsx)(l, { size: 14 }), ` `, t(`Копировать`, `Copy`)],
+            }),
+            (0, w.jsxs)(`button`, {
+              onClick: () => void $(!0),
+              disabled: !e || F,
+              className: `press ml-1.5 flex h-9 items-center gap-1.5 rounded-lg bg-white px-3.5 text-[13px] font-semibold text-black disabled:opacity-40`,
+              children: [(0, w.jsx)(m, { size: 15 }), ` `, t(`Готово`, `Done`)],
+            }),
+          ],
+        }),
+        (0, w.jsxs)(`div`, {
+          ref: B,
+          className: `relative grid min-h-0 flex-1 place-items-center overflow-hidden`,
+          children: [
+            !e &&
+              !L &&
+              (0, w.jsx)(`span`, {
+                className: `text-[13px] text-white/40`,
+                children: t(`Загружаю снимок…`, `Loading the screenshot…`),
+              }),
+            e &&
+              (0, w.jsxs)(`div`, {
+                className: `relative shadow-2xl shadow-black/60`,
+                style: { width: V.w, height: V.h },
+                children: [
+                  (0, w.jsx)(`canvas`, {
+                    ref: z,
+                    style: { width: V.w, height: V.h, cursor: i === `text` ? `text` : `crosshair` },
+                    onPointerDown: q,
+                    onPointerMove: J,
+                    onPointerUp: Y,
+                    onMouseDown: (e) => i === `text` && e.preventDefault(),
+                  }),
+                  N &&
+                    (0, w.jsx)(`textarea`, {
+                      autoFocus: !0,
+                      value: N.text,
+                      onChange: (e) => P({ ...N, text: e.target.value }),
+                      onKeyDown: (e) => {
+                        e.key === `Enter` && !e.shiftKey
+                          ? (e.preventDefault(), K())
+                          : e.key === `Escape` && P(null);
+                      },
+                      onBlur: K,
+                      placeholder: t(`Текст, Enter`, `Text, Enter`),
+                      className: `absolute min-w-[140px] resize-none rounded bg-black/50 px-1 font-semibold outline-1 outline-white/40 outline-dashed`,
+                      style: {
+                        left: N.screen.x,
+                        top: N.screen.y,
+                        color: o,
+                        fontSize: ((14 + C * 3) * V.w) / e.naturalWidth,
+                        lineHeight: 1.25,
+                      },
+                      rows: Math.max(
+                        1,
+                        N.text.split(`
+`).length,
+                      ),
+                    }),
+                ],
+              }),
+          ],
+        }),
+        (0, w.jsx)(`div`, {
+          className: `flex h-7 shrink-0 items-center justify-center text-[11px] text-white/35`,
+          children: t(
+            `Esc — закрыть · Ctrl+Z — отменить · Ctrl+C — скопировать · Ctrl+S — сохранить и закрыть`,
+            `Esc to close · Ctrl+Z to undo · Ctrl+C to copy · Ctrl+S to save and close`,
+          ),
+        }),
+      ],
+    })
+  );
+}
+(0, C.createRoot)(document.getElementById(`root`)).render(
+  (0, w.jsx)(S.StrictMode, { children: (0, w.jsx)(o, { children: (0, w.jsx)(D, {}) }) }),
+);

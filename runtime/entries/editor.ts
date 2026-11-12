@@ -1,0 +1,1 @@
+import "../compat/editor.js";

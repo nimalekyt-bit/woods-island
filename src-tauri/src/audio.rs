@@ -330,9 +330,11 @@ unsafe fn capture_session(app:&tauri::AppHandle)->Result<(),String> {
     let mut emitted=Instant::now();
     let mut checked=Instant::now();
     let mut received=Instant::now();
+    let mut last_sample: Option<([f32;8],f32)> = None;
+    let mut quiet = false;
     let outcome=(||->Result<(),String>{
         loop {
-            std::thread::sleep(Duration::from_millis(10));
+            std::thread::sleep(Duration::from_millis(if quiet {32} else {10}));
             while capture.GetNextPacketSize().map_err(|e|e.to_string())?>0 {
                 let mut data=std::ptr::null_mut();let mut frames=0;let mut flags=0;
                 capture.GetBuffer(&mut data,&mut frames,&mut flags,None,None).map_err(|e|e.to_string())?;
@@ -351,9 +353,17 @@ unsafe fn capture_session(app:&tauri::AppHandle)->Result<(),String> {
                 capture.ReleaseBuffer(frames).map_err(|e|e.to_string())?;
             }
             if emitted.elapsed()>=Duration::from_millis(80) {
-                if received.elapsed()>Duration::from_millis(100) {for _ in 0..FFT_SIZE{spectrum.push(0.);}}
-                let (bands,level)=spectrum.measure(parsed.rate);
-                let _=app.emit("media:bands",bands);let _=app.emit("media:level",level);
+                let sample=if received.elapsed()>Duration::from_millis(100) {
+                    for _ in 0..FFT_SIZE{spectrum.push(0.);}
+                    ([0.;8],0.)
+                } else { spectrum.measure(parsed.rate) };
+                quiet=sample.1 < 0.00001;
+                // The UI uses bandsAt to distinguish live audio from a stopped capture.
+                // Keep steady nonzero signals fresh; only deduplicate complete silence.
+                if sample != ([0.;8],0.) || last_sample != Some(sample) {
+                    let _=app.emit("media:bands",sample.0);let _=app.emit("media:level",sample.1);
+                    last_sample=Some(sample);
+                }
                 emitted=Instant::now();
             }
             if checked.elapsed()>=Duration::from_secs(1) {

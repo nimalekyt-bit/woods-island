@@ -1,12 +1,11 @@
-import { readdir, readFile, cp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const project = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const source = join(project, 'frontend');
-const destination = join(project, 'dist');
+const source = join(project, 'dist');
 const validateOnly = process.argv.includes('--check');
 
 async function filesIn(directory) {
@@ -48,9 +47,6 @@ for (const file of files) {
     for (const match of text.matchAll(/(?:\bfrom\s*|\bimport\s*\()([`"'])([^`"']+)\1/g)) {
       if (/^(?:\.{1,2}\/|\/)/.test(match[2])) checkReference(file, match[2]);
     }
-    if (file.endsWith('type-DVE1z8l3.js')) {
-      for (const match of text.matchAll(/\bT\(([`"'])([a-z][a-z0-9_]*)\1/g)) invoked.add(match[2]);
-    }
     for (const match of text.matchAll(/__TAURI_INTERNALS__\.invoke\(([`"'])([a-z][a-z0-9_]*)\1/g)) invoked.add(match[2]);
   } else if (file.endsWith('.html')) {
     for (const match of text.matchAll(/<(?:script|link)\b[^>]*\b(?:src|href)=["']([^"']+)["']/g)) {
@@ -69,19 +65,21 @@ const registered = new Set(handler.match(/\b[a-z][a-z0-9_]*\b/g) ?? []);
 const missing = [...invoked].filter(command => !registered.has(command));
 if (missing.length) throw new Error(`Runtime IPC commands are not registered: ${missing.join(', ')}`);
 
+const runtimeFiles = await filesIn(join(project, 'runtime'));
+for (const file of runtimeFiles.filter(file => /\.(ts|tsx|js)$/.test(file))) {
+  const code = await readFile(file, 'utf8');
+  const calls = file.endsWith('legacy-api.ts') ? /\bT\(([\x22'`])([a-z][a-z0-9_]*)\1/g : /__TAURI_INTERNALS__\.invoke\(([\x22'`])([a-z][a-z0-9_]*)\1/g;
+  for (const match of code.matchAll(calls)) {
+    if (!registered.has(match[2])) throw new Error('Unregistered source IPC: ' + match[2]);
+    invoked.add(match[2]);
+  }
+}
 if (!validateOnly) {
-  // Resolve and verify the exact deletion target before replacing generated output.
-  if (resolve(destination) !== join(project, 'dist')) throw new Error('Unsafe build destination');
-  await rm(destination, { recursive: true, force: true });
-  await mkdir(destination, { recursive: true });
-  await cp(source, destination, { recursive: true });
   const pkg = JSON.parse(await readFile(join(project, 'package.json'), 'utf8'));
-  await writeFile(join(destination, 'runtime-manifest.json'), JSON.stringify({
-    version: pkg.version,
-    runtimeSource: 'frontend',
-    description: 'Woods Island Windows runtime.',
+  await writeFile(join(source, 'runtime-manifest.json'), JSON.stringify({
+    version: pkg.version, runtimeSource: 'runtime', compiler: 'Vite + TypeScript',
     commands: [...invoked].sort(),
-    files: manifest.sort((a, b) => a.path.localeCompare(b.path)),
+    files: manifest.filter(file => file.path !== 'runtime-manifest.json').sort((a, b) => a.path.localeCompare(b.path)),
   }, null, 2) + '\n', 'utf8');
 }
 console.log(`Runtime ${validateOnly ? 'validated' : 'built'}: ${files.length} resources, ${invoked.size} registered IPC commands, UTF-8 and JS syntax verified.`);

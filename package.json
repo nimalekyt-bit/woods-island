@@ -4,13 +4,18 @@
   "description": "Dynamic Island HUD for Windows 10 & 11 (Woods Corp)",
   "private": true,
   "packageManager": "pnpm@10.33.0",
-  "pnpm": { "onlyBuiltDependencies": ["esbuild"] },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  },
   "type": "module",
   "scripts": {
-    "dev": "vite frontend --port 1420 --strictPort",
-    "build": "node scripts/build-runtime.mjs",
-    "check:runtime": "node scripts/build-runtime.mjs --check",
+    "dev": "vite --config vite.runtime.config.ts",
+    "build": "node scripts/generate-ipc.mjs --check && tsc -p tsconfig.runtime.json && vite build --config vite.runtime.config.ts && node scripts/build-runtime.mjs",
+    "check:runtime": "node scripts/generate-ipc.mjs --check && tsc -p tsconfig.runtime.json && node scripts/build-runtime.mjs --check",
     "test:hooks": "node --test scripts/island-notify.test.cjs",
+    "test:runtime-state": "node --test scripts/runtime-state.test.cjs",
     "check:authors": "node scripts/check-commit-owners.mjs",
     "test:native": "node scripts/verify-runtime.cjs",
     "test:controls": "node scripts/verify-controls.cjs",
@@ -18,7 +23,9 @@
     "dev:prototype": "vite",
     "build:prototype": "tsc && vite build --outDir dist-prototype",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "generate:ipc": "node scripts/generate-ipc.mjs",
+    "test:performance": "node scripts/verify-performance.cjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.2.0",
@@ -37,6 +44,7 @@
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
+    "prettier": "3.6.2",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.2",
     "vite": "^6.0.3"

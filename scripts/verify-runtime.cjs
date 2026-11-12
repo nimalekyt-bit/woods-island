@@ -9,6 +9,12 @@ const assert = require('node:assert/strict');
 const { inflateSync } = require('node:zlib');
 
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+function zipFixture(files) {
+  const crc32=bytes=>{let c=0xffffffff;for(const b of bytes){c^=b;for(let i=0;i<8;i++)c=(c>>>1)^((c&1)?0xedb88320:0);}return(c^0xffffffff)>>>0;};
+  const parts=[],central=[];let offset=0;
+  for(const [name,content]of files){const n=Buffer.from(name),b=Buffer.from(content),crc=crc32(b),h=Buffer.alloc(30);h.writeUInt32LE(0x04034b50);h.writeUInt16LE(20,4);h.writeUInt32LE(crc,14);h.writeUInt32LE(b.length,18);h.writeUInt32LE(b.length,22);h.writeUInt16LE(n.length,26);parts.push(h,n,b);const c=Buffer.alloc(46);c.writeUInt32LE(0x02014b50);c.writeUInt16LE(20,4);c.writeUInt16LE(20,6);c.writeUInt32LE(crc,16);c.writeUInt32LE(b.length,20);c.writeUInt32LE(b.length,24);c.writeUInt16LE(n.length,28);c.writeUInt32LE(offset,42);central.push(c,n);offset+=h.length+n.length+b.length;}
+  const c=Buffer.concat(central),end=Buffer.alloc(22);end.writeUInt32LE(0x06054b50);end.writeUInt16LE(files.length,8);end.writeUInt16LE(files.length,10);end.writeUInt32LE(c.length,12);end.writeUInt32LE(offset,16);return Buffer.concat([...parts,c,end]);
+}
 const root = path.resolve(__dirname, '..');
 const suppliedExe = process.argv[2] || path.join(root, 'src-tauri', 'target', 'release', 'woods-island.exe');
 const port = Number(process.env.WOODS_TEST_CDP_PORT || 9334);
@@ -67,11 +73,15 @@ async function attach(page) {
   await command('Runtime.enable');
   const evaluate = async expression => (await command('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true })).result?.value;
   const invoke = (name, args = {}) => evaluate(`window.__TAURI_INTERNALS__.invoke(${JSON.stringify(name)},${JSON.stringify(args)})`);
+  await evaluate('performance.setResourceTimingBufferSize(10000)');
   connections.push(ws);
   return { ws, evaluate, invoke, command };
 }
 
 async function check(name, task) {
+  if(process.env.WOODS_TEST_FILTER && !new RegExp(process.env.WOODS_TEST_FILTER).test(name)){
+    results.push({name,ok:true,skipped:true,details:{skipped:true,reason:'Targeted diagnostic run'}});return;
+  }
   try { const details = await task(); const skipped=details?.skipped===true; results.push({ name, ok: true, ...(skipped?{skipped:true}:{}), details }); console.log(`${skipped?'SKIP':'PASS'} ${name}`); }
   catch (error) { results.push({ name, ok: false, error: error.message }); console.log(`FAIL ${name}: ${error.message}`); }
 }
@@ -93,6 +103,14 @@ async function pagesReady(predicate = p => p.url === 'http://tauri.localhost/') 
 async function waitFor(client, expression, name) {
   for(let attempt=0;attempt<100;attempt++) {if(await client.evaluate(expression))return;await pause(100);}
   throw new Error(`${name} did not initialize`);
+}
+async function waitForWindowClosed(suffix) {
+  for(let i=0;i<100;i++) {
+    const pages=await(await fetch(`http://127.0.0.1:${port}/json`)).json();
+    if(!pages.some(page=>page.url.endsWith(suffix)))return;
+    await pause(100);
+  }
+  throw new Error(`Closing ${suffix} did not release its WebView`);
 }
 async function listen(client, name) {
   return client.evaluate(`(() => { window.__woodsEvents ??= {}; window.__woodsEvents[${JSON.stringify(name)}] = []; const handler = window.__TAURI_INTERNALS__.transformCallback(e => window.__woodsEvents[${JSON.stringify(name)}].push(e.payload)); return window.__TAURI_INTERNALS__.invoke('plugin:event|listen', {event:${JSON.stringify(name)},target:{kind:'Any'},handler}); })()`);
@@ -122,6 +140,9 @@ async function quit(client) {
       lyricsRequests++;const query=new URL(req.url,'http://localhost').searchParams;
       if(query.get('track_name')==='Missing'){res.statusCode=404;res.end('{}');return;}
       if(query.get('track_name')==='Unavailable'){res.statusCode=503;res.end('{}');return;}
+      if(query.get('track_name')==='Geometry'){
+        res.end(JSON.stringify({id:43,plainLyrics:'',syncedLyrics:'[00:00.00]Да\n[00:04.00]Эта длинная строка проверяет плавную смену текста и перенос внутри музыкальной пилюли\n[00:08.00]Сверхдлинноесловобезпробелов'.repeat(1)+'продолжениесловабезразрывов'.repeat(8),instrumental:false}));return;
+      }
       res.end(JSON.stringify({id:42,plainLyrics:'Первая строка\nВторая строка\nТретья строка',syncedLyrics:'[00:00.00]Первая строка\n[00:04.00]Вторая строка\n[00:08.00]Третья строка',instrumental:false}));return;
     }
     weatherRequests++;res.end(JSON.stringify(req.url.startsWith('/sun')?{properties:{sunrise:{time:new Date((weatherStart-8*3600)*1000).toISOString()},sunset:{time:new Date((weatherStart-2*3600)*1000).toISOString()}}}:weatherFixture));
@@ -149,6 +170,10 @@ async function quit(client) {
   const fixture = path.join(directory,'fixture.txt');
   await fs.writeFile(fixture,'Woods Island acceptance · Проверка');
   await check('Main UI mounts', async () => { assert(await main.evaluate('!!document.querySelector("[data-island]")')); });
+  await check('Settings and image editor renderers are absent until requested',async()=>{
+    assert(!pages.some(page=>/\/(settings|editor)\.html$/.test(page.url)));
+    return {settingsLazy:true,imageEditorLazy:true};
+  });
   await check('No Windows caption; DPI bounds match canvas', async () => {
     const d = await main.invoke('window_diagnostics');
     assert.equal(d.style & 0x00C00000, 0);
@@ -219,7 +244,7 @@ async function quit(client) {
   await check('Island scale changes physical size, viewport and clip bounds together',async()=>{
     // Folded audio/volume notices can expire between measurements. Use the
     // fixed control panel so CSS geometry measures zoom rather than a notice.
-    await main.evaluate('(async()=>{const m=await import("/assets/Liquid-BbsJJY6K.js");m.ot.setState({expanded:true,tab:"controls"});})()');
+    await main.evaluate('(async()=>{const m=await import("/assets/runtime-debug.js");m.ot.setState({expanded:true,tab:"controls"});})()');
     await pause(1200);
     const original=await main.invoke('window_diagnostics');
     const rect=await main.evaluate('(()=>{const r=document.querySelector("[data-island]").getBoundingClientRect();return {width:r.width,height:r.height};})()');
@@ -240,7 +265,7 @@ async function quit(client) {
       measured.push({value,width:d.width,pillWidth:Math.round(dom.width*d.pageFactor),bounds:d.bounds});
     }
     assert.equal((await main.invoke('window_diagnostics')).width,original.width);
-    await main.evaluate('(async()=>{const m=await import("/assets/Liquid-BbsJJY6K.js");m.ot.setState({expanded:false,tab:"home"});})()');
+    await main.evaluate('(async()=>{const m=await import("/assets/runtime-debug.js");m.ot.setState({expanded:false,tab:"home"});})()');
     return measured;
   });
   await check('Weather search works offline for Брянск', async () => {
@@ -258,7 +283,7 @@ async function quit(client) {
     const data=await main.invoke('weather_get');assert(data&&data.schemaVersion===2);assert.equal(data.utcOffset,10800);
     assert(data.days.length>=7&&data.hours.length===24);assert(data.hours.every(h=>h.time<1e11&&Number.isFinite(h.code)));
     assert(weatherRequests>0,'Legacy cache must have been replaced');
-    const open=()=>main.evaluate('(async()=>{const m=await import("/assets/Liquid-BbsJJY6K.js");m.ot.setState({expanded:true,tab:"weather"});})()');
+    const open=()=>main.evaluate('(async()=>{const m=await import("/assets/runtime-debug.js");m.ot.setState({expanded:true,tab:"weather"});})()');
     await open();await waitFor(main,'!!document.querySelector("[data-wx-now]")','Weather panel');
     await main.evaluate('document.querySelector("[data-wx-view=week]").click()');await waitFor(main,'!!document.querySelector("[data-wx-week]")','Weather week');
     assert.equal(await main.evaluate('document.querySelector("[data-wx-week]").children.length'),7);
@@ -270,7 +295,7 @@ async function quit(client) {
     await waitFor(main,'document.body.innerText.includes("Некорректные данные прогноза")','Invalid weather recovery');
     await main.invoke('settings_set',{settings:{weatherUnits:'metric'}});await main.invoke('weather_refresh');await waitFor(main,'!!document.querySelector("[data-wx-now]")','Recovered weather');
     assert(!(await main.evaluate('document.querySelector("[data-island]").innerText')).includes('NaN'));
-    await main.evaluate('(async()=>{const m=await import("/assets/Liquid-BbsJJY6K.js");m.ot.setState({expanded:false,tab:"home"});})()');await pause(600);
+    await main.evaluate('(async()=>{const m=await import("/assets/runtime-debug.js");m.ot.setState({expanded:false,tab:"home"});})()');await pause(600);
     return {days:data.days.length,hours:data.hours.length,utcOffset:data.utcOffset,legacyCacheReplaced:true,imperial:true,invalidRecovery:true,protocolFixture:true};
   });
   await check('Live Yandex connector reaches the rendered pill with cover and advancing time',async()=>{
@@ -288,6 +313,41 @@ async function quit(client) {
     if(first.key===second?.key&&first.playing&&second.playing)assert(second.positionMs>first.positionMs,'Live position should advance');
     await main.invoke('settings_set',{settings:{mediaPill:'normal'}});
     return {live:true,title:first.title,artist:first.artist,position:first.positionMs,nextPosition:second?.positionMs,cover:!!cover};
+  });
+  await check('Plain island and visible pause collapse after 2500 ms despite repeated metadata',async()=>{
+    const prior=await main.invoke('settings_get');let playing=false,timer;
+    const publish=async()=>{
+      const response=await fetch(`http://127.0.0.1:${musicPort}/track`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({trackId:'pause-fixture',title:'Pause fixture',artist:'Fixture',duration:300000,progress:60000,isPlaying:playing})});
+      assert.equal(response.status,200);
+    };
+    const state=()=>main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js"),s=ot.getState(),pill=document.querySelector("[data-island]"),progress=document.querySelector("[data-media-progress]");return {live:s.mediaLive,playing:s.media?.playing,width:pill.getBoundingClientRect().width,liquid:!!document.querySelector("[data-island] > svg"),badge:!!document.querySelector("[data-media-paused]"),progress:progress?.style.width,transition:progress?getComputedStyle(progress).transitionDuration:null};})()');
+    try{
+      await main.invoke('media_pick',{id:null});
+      await main.invoke('settings_set',{settings:{character:'none',characterMusic:'liquid',liquidWith:true,mediaPill:'title',lyrics:false,showClock:false,showBattery:false,showWeather:false,layoutInPill:false,desktopInPill:false,agentsStatus:false,obsStatus:false,showPrivacy:false,downloadsInPill:'off',moduleShelf:false}});
+      await main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");ot.setState({expanded:false,palette:false,peek:null,queue:[]});})()');
+      await publish();await main.invoke('media_pick',{id:'ru.yandex.desktop.music.mod.connector'});
+      timer=setInterval(()=>publish().catch(error=>errors.push({description:error.message})),120);
+      await waitFor(main,'(async()=>{const {ot}=await import("/assets/runtime-debug.js");return ot.getState().media?.playing===false;})()','Paused isolated source');
+      await pause(3400);const idle=await state();assert.equal(idle.liquid,false,'No character must be plain: '+JSON.stringify(idle));
+      playing=true;await publish();
+      await waitFor(main,'!!document.querySelector("[data-media-pill=title][data-playback-state=playing]")','Playing title pill');await pause(800);
+      assert.equal((await state()).liquid,true,'Chosen music character still applies');
+      playing=false;await publish();await waitFor(main,'!!document.querySelector("[data-media-paused]")','Immediate pause badge');
+      const pausedAt=Date.now();const paused=await state();assert.equal(paused.live,true);assert.equal(paused.transition,'0s');
+      await pause(600);const still=await state();assert.equal(still.progress,paused.progress);assert.equal(still.liquid,false,'Pause restores plain idle character');
+      const screenshot=await main.command('Page.captureScreenshot',{format:'png'});await fs.writeFile(path.join(directory,'title-paused.png'),Buffer.from(screenshot.data,'base64'));
+      await pause(1000);assert.equal((await state()).live,true,'Grace must remain visible before deadline');
+      await waitFor(main,'(async()=>{const {ot}=await import("/assets/runtime-debug.js");return !ot.getState().mediaLive;})()','Pause grace deadline');
+      const collapseMs=Date.now()-pausedAt;assert(collapseMs>=2300&&collapseMs<3300,`Unexpected observed grace: ${collapseMs} ms`);
+      await pause(800);const collapsed=await state();assert(collapsed.width<paused.width-20,JSON.stringify({paused,collapsed}));assert.equal(collapsed.liquid,false);
+      playing=true;await publish();await waitFor(main,'!!document.querySelector("[data-media-pill=title][data-playback-state=playing]")','Resume after collapse');
+      playing=false;await publish();await waitFor(main,'!!document.querySelector("[data-media-paused]")','Second pause');await pause(600);
+      playing=true;await publish();await waitFor(main,'!!document.querySelector("[data-media-pill=title][data-playback-state=playing]")','Resume before deadline');await pause(2300);assert.equal((await state()).live,true);assert.equal((await state()).badge,false);
+      await main.invoke('settings_set',{settings:{mediaPill:'normal'}});playing=false;await publish();
+      await waitFor(main,'!!document.querySelector("[data-media-pill=normal] [data-media-paused]")','Normal pill pause badge');
+      assert.equal(await main.invoke('plugin:window|is_focused',{label:'main'}),false);
+      return {plainIdle:true,plainPaused:true,titleBadge:true,normalBadge:true,frozenProgress:true,metadataEveryMs:120,collapseMs,resumeCancelsCollapse:true,pausedWidth:paused.width,collapsedWidth:collapsed.width};
+    }finally{clearInterval(timer);await main.invoke('media_pick',{id:null});await main.invoke('settings_set',{settings:prior});await pause(3400);}
   });
   await check('LRCLIB milliseconds highlight, advance, pause and seek the rendered lyrics',async()=>{
     const prior=await main.invoke('settings_get');let progress=1000,playing=true,at=Date.now(),timer;
@@ -316,15 +376,85 @@ async function quit(client) {
       await waitFor(main,'Number(getComputedStyle(document.querySelector("[data-lyrics-now]")).opacity) >= 0.99','Lyrics highlight animation');
       const active=await main.evaluate('(()=>{const e=document.querySelector("[data-lyrics-now]");return {color:getComputedStyle(e).color,weight:getComputedStyle(e).fontWeight,opacity:getComputedStyle(e).opacity};})()');
       assert(Number(active.weight)>=600);assert(Number(active.opacity)>=0.99);
+      playing=true;at=Date.now();await publish();
       await main.invoke('settings_set',{settings:{mediaPill:'lyrics'}});
       await waitFor(main,'document.querySelector("[data-media-pill=lyrics] [data-lyrics-line]")?.textContent.includes("Третья строка")','Folded lyrics mode');
-      await main.evaluate('(async()=>{const m=await import("/assets/Liquid-BbsJJY6K.js");m.ot.setState({expanded:true,tab:"home"});})()');
+      await main.evaluate('(async()=>{const m=await import("/assets/runtime-debug.js");m.ot.setState({expanded:true,tab:"home"});})()');
       await waitFor(main,'document.querySelector("[data-home] [data-lyrics-now]")?.textContent === "Третья строка"','Home lyrics mode');
       assert(lyricsRequests>=4);return {milliseconds:true,highlight:true,advance:true,pause:true,seekBothDirections:true,foldedLyrics:true,homeLyrics:true,missing404:true,retryable503:true,isolatedBridge:true};
     }finally{
-      clearInterval(timer);await main.invoke('media_pick',{id:null});await main.evaluate('(async()=>{const m=await import("/assets/Liquid-BbsJJY6K.js");m.ot.setState({expanded:false,tab:"home"});})()');
+      clearInterval(timer);await main.invoke('media_pick',{id:null});await main.evaluate('(async()=>{const m=await import("/assets/runtime-debug.js");m.ot.setState({expanded:false,tab:"home"});})()');
       await main.invoke('settings_set',{settings:{lyrics:prior.lyrics,lyricsInPlayer:prior.lyricsInPlayer,lyricsInHome:prior.lyricsInHome,mediaPill:prior.mediaPill}});await pause(3400);
     }
+  });
+  await check('Lyrics keep stable geometry across short, wrapped and unbroken lines',async()=>{
+    const prior=await main.invoke('settings_get');let position=1000,timer;
+    const send=async()=>{
+      const response=await fetch(`http://127.0.0.1:${musicPort}/track`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({trackId:'geometry-fixture',title:'Geometry',artist:'Fixture',duration:20000,progress:position,isPlaying:true})});assert.equal(response.status,200);
+    };
+    try{
+      await main.invoke('settings_set',{settings:{lyrics:true,mediaPill:'lyrics',character:'liquid',liquidWith:false,showClock:false,showBattery:false,showWeather:false,layoutInPill:false,desktopInPill:false}});
+      await main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");ot.setState({expanded:false,palette:false,peek:null,queue:[]});})()');
+      await main.evaluate(`(()=>{window.__lyricMotion=[];const start=performance.now();function tick(){const p=document.querySelector('[data-island]')?.getBoundingClientRect();window.__lyricMotion.push({t:performance.now()-start,width:p?.width,height:p?.height});if(performance.now()-start<2500)requestAnimationFrame(tick);}requestAnimationFrame(tick);})()`);
+      await send();await main.invoke('media_pick',{id:'ru.yandex.desktop.music.mod.connector'});timer=setInterval(()=>void send().catch(()=>{}),200);
+      await waitFor(main,'document.querySelector("[data-lyrics-line]")?.textContent === "Да"','Short geometry line');await pause(1000);
+      const frames=await main.evaluate(`new Promise(resolve=>{const samples=[],start=performance.now();function tick(){const pill=document.querySelector('[data-island]'),viewport=document.querySelector('[data-lyrics-viewport]');const p=pill?.getBoundingClientRect(),v=viewport?.getBoundingClientRect();samples.push({t:performance.now()-start,width:p?.width,height:p?.height,viewportHeight:v?.height});if(performance.now()-start<1800)requestAnimationFrame(tick);else resolve(samples);}requestAnimationFrame(tick);})`);
+      assert(frames.length>15);const width=frames.at(-1).width,height=frames.at(-1).height;
+      assert(Math.max(...frames.map(f=>f.width))-Math.min(...frames.map(f=>f.width))<1);
+      const opening=await main.evaluate('window.__lyricMotion');
+      // Width is quantized to 2 physical pixels; very close RAF timestamps
+      // must not amplify that harmless rounding into a fictitious large jump.
+      const normalizedSteps=opening.slice(1).map((frame,i)=>Math.abs(frame.width-opening[i].width)*16/Math.max(4,frame.t-opening[i].t));
+      await fs.writeFile(path.join(directory,'lyrics-motion.json'),JSON.stringify(opening));
+      assert(Math.max(...normalizedSteps)<70,'Lyrics width must animate rather than jump: '+JSON.stringify(opening.filter((f,i)=>i&&normalizedSteps[i-1]>=70)));
+      assert(Math.max(...opening.map(f=>f.width))<=width+2,'Lyrics opening must not overshoot its final width');
+      const lines=[];
+      for(const next of [4500,8500,1000]){
+        position=next;await send();await pause(700);
+        const sample=await main.evaluate(`(()=>{const p=document.querySelector('[data-island]').getBoundingClientRect(),v=document.querySelector('[data-lyrics-viewport]').getBoundingClientRect(),line=Array.from(document.querySelectorAll('[data-lyrics-line]')).find(e=>Number(getComputedStyle(e).opacity)>.99),text=line?.lastElementChild;return {width:p.width,height:p.height,viewportHeight:v.height,textHeight:text?.getBoundingClientRect().height,wrap:text?getComputedStyle(text).overflowWrap:null,lineCount:document.querySelectorAll('[data-lyrics-line]').length,text:line?.textContent};})()`);
+        assert(Math.abs(sample.width-width)<1,JSON.stringify(sample));assert(Math.abs(sample.height-height)<1);
+        assert.equal(sample.viewportHeight,30);assert(sample.textHeight<=30);assert.equal(sample.lineCount,1);assert.equal(sample.wrap,'anywhere');lines.push({position:next,...sample,text:undefined});
+        if(next===4500){const shot=await main.command('Page.captureScreenshot',{format:'png'});await fs.writeFile(path.join(directory,'lyrics-wrapped.png'),Buffer.from(shot.data,'base64'));}
+      }
+      const screenshot=await main.command('Page.captureScreenshot',{format:'png'});await fs.writeFile(path.join(directory,'lyrics-stable.png'),Buffer.from(screenshot.data,'base64'));
+      assert.equal(await main.invoke('plugin:window|is_focused',{label:'main'}),false);
+      return {stableWidth:width,stableHeight:height,frameCount:frames.length,openingFrames:opening.length,maxWidthChangePer16ms:Math.max(...normalizedSteps),shortLongAndUnbroken:true,lines};
+    }finally{clearInterval(timer);await main.invoke('media_pick',{id:null});await main.invoke('settings_set',{settings:prior});await pause(3400);}
+  });
+  await check('Disabled download cards and agent questions suppress their UI events',async()=>{
+    const prior=await main.invoke('settings_get');
+    const peek=()=>main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");return ot.getState().peek?.kind??null;})()');
+    const reset=()=>main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");ot.setState({expanded:false,palette:false,peek:null,queue:[]});})()');
+    try{
+      for(const [field,event,payload,kind]of [
+        ['showDownloads','downloads:done',{id:'audit',path:fixture,name:'fixture.txt',size:1},'download'],
+        ['agentsAsk','agents:ask',{id:'audit-question',kind:'permission',agent:'claude',tool:'Read',input:{},until:Date.now()+30000},'agentAsk'],
+      ]){
+        await main.invoke('settings_set',{settings:{[field]:false}});await reset();
+        await main.invoke('plugin:event|emit',{event,payload});await pause(150);assert.notEqual(await peek(),kind);
+        await main.invoke('settings_set',{settings:{[field]:true}});await reset();
+        await main.invoke('plugin:event|emit',{event,payload});await waitFor(main,`(async()=>{const {ot}=await import('/assets/runtime-debug.js');return ot.getState().peek?.kind==='${kind}';})()`,field+' enabled');
+      }
+      return {showDownloads:true,agentsAsk:true,disabledAndEnabled:true};
+    }finally{await reset();await main.invoke('settings_set',{settings:prior});}
+  });
+  await check('Optional hover opens after its delay; click remains the default',async()=>{
+    const prior=await main.invoke('settings_get');
+    const reset=()=>main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");ot.setState({expanded:false,palette:false,peek:null,queue:[],hovered:false,mediaLive:false});})()');
+    try{
+      for(const enabled of [false,true]){
+        await main.invoke('settings_set',{settings:{openOnHover:enabled,hoverDelayMs:250}});await reset();
+        await main.invoke('plugin:event|emit',{event:'hover',payload:true});await pause(100);
+        assert.equal(await main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");return ot.getState().expanded;})()'),false);
+        await pause(250);assert.equal(await main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");return ot.getState().expanded;})()'),enabled);
+        await main.invoke('plugin:event|emit',{event:'hover',payload:false});
+      }
+      return {clickDefault:true,hoverOptIn:true,delay:true};
+    }finally{await reset();await main.invoke('settings_set',{settings:prior});}
+  });
+  await check('Opening the releases page does not leave a fictitious download running',async()=>{
+    const result=await main.evaluate(`(async()=>{const {ot}=await import('/assets/runtime-debug.js'),{O:api}=await import('/assets/runtime-debug.js');const original=api.updateInstall;let requests=0;try{api.updateInstall=()=>{requests++;return Promise.resolve(true);};ot.setState({expanded:true,palette:false,peek:null,queue:[],updating:null});ot.getState().installUpdate();await new Promise(r=>setTimeout(r,150));return {requests,updating:ot.getState().updating,expanded:ot.getState().expanded};}finally{api.updateInstall=original;ot.setState({expanded:false,peek:null,queue:[],updating:null});}})()`);
+    assert.equal(result.requests,1);assert.equal(result.updating,null);assert.equal(result.expanded,false);return {...result,backendOpenMocked:true};
   });
   await check('WASAPI follows the active player output and animates the liquid spectrum',async()=>{
     const prior=await main.invoke('settings_get');let timer;
@@ -335,14 +465,16 @@ async function quit(client) {
       timer=setInterval(()=>publish().catch(error=>errors.push({description:error.message})),120);
       await pause(1700);const samples=[];
       for(let index=0;index<25;index++){
-        samples.push(await main.evaluate('(async()=>{const m=await import("/assets/Liquid-BbsJJY6K.js"),s=m.ot.getState();return {level:s.level,bands:s.bands,age:performance.now()-s.bandsAt,path:document.querySelector("[data-island] > svg path")?.getAttribute("d")};})()'));
+        samples.push(await main.evaluate('(async()=>{const m=await import("/assets/runtime-debug.js"),s=m.ot.getState();return {level:s.level,bands:s.bands,age:performance.now()-s.bandsAt,path:document.querySelector("[data-island] > svg path")?.getAttribute("d")};})()'));
         await pause(100);
       }
-      assert(samples.every(s=>s.bands.length===8&&s.bands.every(v=>Number.isFinite(v)&&v>=0&&v<=1)&&Number.isFinite(s.level)&&s.level>=0&&s.level<=1&&s.age<700));
+      assert(samples.every(s=>s.bands.length===8&&s.bands.every(v=>Number.isFinite(v)&&v>=0&&v<=1)&&Number.isFinite(s.level)&&s.level>=0&&s.level<=1));
+      assert(samples.every(s=>s.age<700||(s.level===0&&s.bands.every(v=>v===0))),
+        'Nonzero live spectrum must remain fresh; silence may stop repeating events');
       const peak=Math.max(...samples.map(s=>s.level)),bandPeak=Math.max(...samples.flatMap(s=>s.bands)),paths=new Set(samples.map(s=>s.path)).size;
       if(process.env.WOODS_TEST_EXPECT_AUDIO==='1'){assert(peak>0.00001,'Expected playing audio must reach WASAPI');assert(bandPeak>0,'Expected spectrum must contain energy');}
       if(peak>0.00001)assert(paths>1,'The liquid contour must change with measured sound');
-      assert(samples.every(s=>s.path));return {eightBands:true,fresh:true,peak,bandPeak,distinctContours:paths,liveSoundDetected:peak>0.00001,explicitOutputPriority:true};
+      assert(samples.every(s=>s.path));return {eightBands:true,liveSpectrumFresh:true,silenceMayBeDeduplicated:true,peak,bandPeak,distinctContours:paths,liveSoundDetected:peak>0.00001,explicitOutputPriority:true};
     }finally{
       clearInterval(timer);await main.invoke('media_pick',{id:null});await main.invoke('settings_set',{settings:{audioOutput:prior.audioOutput,character:prior.character,characterMusic:prior.characterMusic,liquidWith:prior.liquidWith,liquidSpectrum:prior.liquidSpectrum,mediaPill:prior.mediaPill}});await pause(3400);
     }
@@ -382,11 +514,13 @@ async function quit(client) {
     assert(closed.h < after.h);
   });
   await check('Native desktop pixels outside collapsed and expanded island have no glass tint',async()=>{
+    assert(await main.invoke('open_settings',{section:'general'}));
     const priorCapture=(await main.invoke('settings_get')).captureVisible;
     await main.invoke('settings_set',{settings:{captureVisible:true}});
     const d=await main.invoke('window_diagnostics');
     const pages=await pagesReady(p=>p.url.endsWith('/settings.html'));
     const background=await attach(pages.find(p=>p.url.endsWith('/settings.html')));
+    await waitFor(background,'!!document.body','Settings background canvas');
     await background.evaluate('(() => {const e=document.createElement("div");e.id="woods-qa-background";e.style.cssText="position:fixed;inset:0;z-index:2147483647;background:repeating-conic-gradient(#b9d438 0% 25%,#593292 0% 50%) 0 0/64px 64px;pointer-events:none";document.body.append(e);})()');
     try{
       await main.invoke('plugin:window|set_position',{label:'settings',value:{Physical:{x:d.left-20,y:d.top}}});
@@ -456,6 +590,47 @@ async function quit(client) {
     assert.equal(await main.invoke('web_ai_popped'),null);
     const invalid=await main.evaluate('window.__TAURI_INTERNALS__.invoke("web_ai_embed",{service:"https://invalid.example",x:0,y:0,width:100,height:100,focus:false,word:0}).then(()=>({ok:true}),error=>({ok:false,error:String(error)}))');
     assert.equal(invalid.ok,false);assert.match(invalid.error,/Unknown AI website/);
+  });
+  await check('Claude single and multiple choices reach the real answer file',async()=>{
+    const id='native-choice-fixture';
+    const questions=[{question:'Какой режим?',header:'Режим',multiSelect:false,options:[{label:'Быстро'},{label:'Точно'}]},{question:'Что включить?',header:'Модули',multiSelect:true,options:[{label:'Музыка, текст'},{label:'Буфер'},{label:'Заметки'}]}];
+    const file=path.join(dataDir,'agents',id+'.json');await fs.mkdir(path.dirname(file),{recursive:true});
+    await main.invoke('settings_set',{settings:{agentsAsk:true,agentsStatus:true}});
+    await main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");ot.setState({expanded:false,palette:false,peek:null,queue:[]});})()');
+    await fs.writeFile(file,JSON.stringify({id,agent:'claude',state:'waiting',project:'Fixture',at:Date.now(),ask:{id,kind:'question',agent:'claude',project:'Fixture',tool:'AskUserQuestion',until:Date.now()+120000,questions}}));
+    await waitFor(main,'!!document.querySelector("[data-agent-ask=question]")','Claude question UI');
+    await main.evaluate('document.querySelector("[data-ask-choice=Быстро]").click()');
+    await waitFor(main,'!!document.querySelector("[data-ask-done]")','Multi-select step');
+    assert.equal(await main.evaluate('document.querySelector("[data-ask-done]").disabled'),true);
+    await main.evaluate(`document.querySelector('[data-ask-choice="Музыка, текст"]').click();document.querySelector('[data-ask-choice="Буфер"]').click()`);
+    assert.equal(await main.evaluate('document.querySelector("[data-ask-done]").disabled'),false);
+    await main.evaluate('document.querySelector("[data-ask-done]").click()');
+    const answerFile=path.join(dataDir,'agents','answers',id+'.json');
+    let answer;for(let i=0;i<50;i++){try{answer=JSON.parse(await fs.readFile(answerFile,'utf8'));break;}catch{}await pause(100);}
+    assert.equal(answer?.verdict,'answer');assert.deepEqual(answer.answers,{'Какой режим?':['Быстро'],'Что включить?':['Музыка, текст','Буфер']});
+    await fs.rm(file);return {single:true,multiple:true,commaLabel:true,nativeAnswer:true};
+  });
+  await check('Store inventory and icons are native; launcher accepts an installed AUMID',async()=>{
+    const apps=await main.invoke('palette_apps'),store=apps.filter(app=>app.path.startsWith('shell:AppsFolder\\'));
+    assert(store.length>0,'Installed Store applications must appear');
+    const selected=store[0];assert.equal(selected.kind,'app');assert(selected.aumid.includes('!'));
+    const icon=await main.invoke('palette_icon',{path:selected.path});assert.match(icon,/^data:image\/png;base64,/);
+    await main.invoke('launcher_add',{paths:[selected.path]});assert((await main.invoke('launcher_list')).some(item=>item.path===selected.path&&item.exists));
+    const invalid=await main.evaluate('window.__TAURI_INTERNALS__.invoke("open_path",{path:"shell:AppsFolder\\\\../invalid!id"}).then(()=>false,()=>true)');assert.equal(invalid,true);
+    return {storeCount:store.length,icon:true,launcher:true,activationImplementation:'IApplicationActivationManager; actual app activation omitted in passive QA'};
+  });
+  await check('PPTX attachments preserve presentation order and Unicode text',async()=>{
+    const bytes=zipFixture([
+      ['ppt/presentation.xml',"<p:presentation xmlns:p='p' xmlns:r='r'><p:sldIdLst><p:sldId id='2' r:id='second'/><p:sldId id='1' r:id='first'/></p:sldIdLst></p:presentation>"],
+      ['ppt/_rels/presentation.xml.rels',"<Relationships><Relationship Id='first' Type='http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide' Target='slides/slide1.xml'/><Relationship Id='second' Type='http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide' Target='slides/slide9.xml'/></Relationships>"],
+      ['ppt/slides/slide1.xml',"<p:sld xmlns:p='p' xmlns:a='a'><a:p><a:r><a:t>Первый файл</a:t></a:r></a:p></p:sld>"],
+      ['ppt/slides/slide9.xml',"<p:sld xmlns:p='p' xmlns:a='a'><a:p><a:r><a:t>Привет &amp; 🌲</a:t></a:r><a:br/><a:r><a:t>Вторая строка</a:t></a:r></a:p></p:sld>"],
+    ]);
+    const file=path.join(directory,'presentation.PPTX');await fs.writeFile(file,bytes);
+    const imported=await main.invoke('attach_paths',{paths:[file]});assert.deepEqual(imported.errors,[]);assert.equal(imported.items[0].kind,'document');
+    const document=JSON.parse(await fs.readFile(path.join(dataDir,'attachments',imported.items[0].id+'.json'),'utf8'));
+    assert(document.text.indexOf('Привет & 🌲')<document.text.indexOf('Первый файл'));assert(document.text.includes('🌲\nВторая строка'));
+    return {order:true,unicode:true,lineBreaks:true,attachment:true};
   });
   let attachmentId;
   const pixel='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
@@ -584,8 +759,18 @@ async function quit(client) {
     const image=await editor.invoke('editor_image');assert.match(image.dataUrl,/^data:image\/png;base64,/);
     assert.equal(await editor.invoke('editor_save',{dataUrl:image.dataUrl,copy:false}),true);
     assert.equal((await fs.readFile(imagePath)).subarray(0,8).toString('hex'),'89504e470d0a1a0a');
-    await editor.invoke('plugin:window|hide',{label:'editor'});
+    await main.invoke('plugin:window|close',{label:'editor'});
+    await waitForWindowClosed('/editor.html');
+    assert(await main.invoke('editor_open',{path:imagePath}));
+    const reopened=await pagesReady(page=>page.url.endsWith('/editor.html'));
+    const fresh=await attach(reopened.find(page=>page.url.endsWith('/editor.html')));
+    await waitFor(fresh,'document.querySelectorAll("canvas").length>0','Recreated editor canvas');
+    assert.equal(await fresh.invoke('plugin:window|is_focused',{label:'editor'}),false);
+    assert.match((await fresh.invoke('editor_image')).dataUrl,/^data:image\/png;base64,/);
+    await main.invoke('plugin:window|close',{label:'editor'});
+    await waitForWindowClosed('/editor.html');
     const size=await main.invoke('picker_size');assert(Array.isArray(size)&&size.length===2&&size.every(n=>n>0));
+    return {rendererReleased:true,recreatedWithoutFocus:true,persistedImage:true};
   });
   await check('Settings UI renders after repeated harmless toggles', async () => {
     await main.invoke('open_settings',{section:'appearance'});
@@ -598,11 +783,20 @@ async function quit(client) {
     assert.equal(await settings.evaluate('document.querySelector("h1").textContent'),'Woods Island');
     assert(await settings.evaluate('Number(document.querySelector("[data-nav=pro] svg circle")?.getAttribute("r"))===10'),'About uses the information icon');
     const sections=await settings.evaluate('Array.from(document.querySelectorAll("[data-nav]")).map(e=>e.dataset.nav)');
+    const controlsBySection=[];
     for(const section of sections){
       await settings.evaluate(`document.querySelector('[data-nav="${section}"]').click()`);
       await pause(80);
       assert(await settings.evaluate(`document.querySelector('[data-nav="${section}"]').dataset.now==='true'`),section);
+      const count=await settings.evaluate(`(()=>{const e=document.getElementById('${section}');return {switches:e?.querySelectorAll('[role=switch]').length??0,inputs:e?.querySelectorAll('input,textarea,select').length??0};})()`);
+      controlsBySection.push({section,...count});
     }
+    await settings.evaluate('document.querySelector("[data-nav=character]").click()');await pause(100);
+    const characters=await settings.evaluate('Array.from(document.querySelectorAll("[data-character-music] option")).map(e=>e.value).filter(Boolean)');
+    assert.equal(characters.length,25);
+    const previousCharacter=(await main.invoke('settings_get')).character;
+    for(const character of characters){await main.invoke('settings_set',{settings:{character}});await pause(70);assert(await main.evaluate('!!document.querySelector("[data-island]")'));}
+    await main.invoke('settings_set',{settings:{character:previousCharacter}});
     await settings.evaluate('document.querySelector("[data-nav=pro]").click()');await pause(100);
     const about=await settings.evaluate('document.querySelector("[data-woods-about]").textContent');
     assert(about.includes('Woods Island')&&about.includes('Obsidian'));
@@ -617,15 +811,27 @@ async function quit(client) {
     await pause(300);
     assert(await settings.evaluate('document.querySelectorAll("button").length > 10'));
     const screenshot=await settings.command('Page.captureScreenshot',{format:'png'});await fs.writeFile(path.join(directory,'settings.png'),Buffer.from(screenshot.data,'base64'));
-    return {sections};
+    await main.invoke('plugin:window|close',{label:'settings'});
+    await waitForWindowClosed('/settings.html');
+    assert(await main.invoke('open_settings',{section:'general'}));
+    const reopened=await pagesReady(page=>page.url.endsWith('/settings.html'));
+    const fresh=await attach(reopened.find(page=>page.url.endsWith('/settings.html')));
+    await waitFor(fresh,'document.querySelectorAll("button").length>10','Recreated settings UI');
+    await waitFor(fresh,'document.querySelector("[data-nav=general]")?.dataset.now==="true"','Requested settings section after recreation');
+    assert.equal(await fresh.invoke('plugin:window|is_focused',{label:'settings'}),false);
+    return {sections,controlsBySection,charactersMounted:characters.length,rendererReleased:true,recreatedWithoutFocus:true};
   });
   await check('Notes button exports Markdown to Obsidian without overwriting files',async()=>{
+    assert.equal(await main.evaluate('performance.getEntriesByType("resource").some(r=>r.name.includes("vendor-editor-"))'),false,'Rich editor must not load before notes');
     const vault=path.join(directory,'vault');await fs.mkdir(vault);
     await main.invoke('settings_set',{settings:{obsidianVaultPath:vault}});
     const markdown='## Проверка Obsidian\n\n**Важное**\n- [ ] План';
     await main.invoke('note_set',{text:markdown});persisted.set('note_get',markdown);
     await main.invoke('note');
     await waitFor(main,'!!document.querySelector("[data-note-export]")','Obsidian export button');
+    await waitFor(main,'!!document.querySelector("[data-note-editor]")','Lazy rich editor');
+    const editorResources=await main.evaluate('performance.getEntriesByType("resource").map(r=>r.name)');
+    assert(editorResources.some(name=>name.includes('vendor-editor-')),JSON.stringify(editorResources));
     await main.evaluate('document.querySelector("[data-note-export]").click()');
     const folder=path.join(vault,'Woods Island');
     for(let i=0;i<100;i++){if((await fs.readdir(folder).catch(()=>[])).length)break;await pause(100);}
@@ -642,20 +848,20 @@ async function quit(client) {
     const manifest=path.join(apps,'appmanifest_42.acf');
     const write=bytes=>fs.writeFile(manifest,`"AppState" { "appid" "42" "name" "Проверка Steam" "installdir" "fixture" "StateFlags" "${bytes<500?1024:4}" "BytesToDownload" "500" "BytesDownloaded" "${bytes}" }`);
     await listen(main,'downloads:update');await listen(main,'downloads:done');await write(100);
-    await pause(1300);assert(!(await main.evaluate(`window.__woodsEvents['downloads:update'].at(-1)`)).some(d=>d.id==='steam:42'),'Stale counters must not appear as an active download');
+    await pause(1300);assert(!(await main.evaluate(`window.__woodsEvents['downloads:update'].at(-1) ?? []`)).some(d=>d.id==='steam:42'),'Stale counters must not appear as an active download');
     await write(200);
     await waitFor(main,`window.__woodsEvents['downloads:update'].some(a=>a.some(d=>d.id==='steam:42'&&d.size===200&&d.total===500))`,'Steam in-progress manifest');
     await write(300);
     await waitFor(main,`window.__woodsEvents['downloads:update'].some(a=>a.some(d=>d.id==='steam:42'&&d.size===300&&d.speed>0))`,'Steam measured speed');
     await main.invoke('settings_set',{settings:{steamDownloads:false}});await pause(1200);
-    assert(!(await main.evaluate(`window.__woodsEvents['downloads:update'].at(-1)`)).some(d=>d.id==='steam:42'));
+    assert(!(await main.evaluate(`window.__woodsEvents['downloads:update'].at(-1) ?? []`)).some(d=>d.id==='steam:42'));
     await main.invoke('settings_set',{settings:{steamDownloads:true}});await pause(1200);
     await write(350);await waitFor(main,`window.__woodsEvents['downloads:update'].some(a=>a.some(d=>d.id==='steam:42'&&d.size===350))`,'Steam resumed transfer');
     await write(500);await waitFor(main,`window.__woodsEvents['downloads:done'].some(d=>d.id==='steam:42')`,'Steam completion');
     return {progress:true,speed:true,completion:true,setting:true};
   });
   await check('Virtual desktop telemetry reaches the real frontend store',async()=>{
-    const desk=await main.evaluate('(async()=>{const m=await import("/assets/Liquid-BbsJJY6K.js");return m.ot.getState().vdesk;})()');
+    const desk=await main.evaluate('(async()=>{const m=await import("/assets/runtime-debug.js");return m.ot.getState().vdesk;})()');
     assert(desk&&desk.count>=1&&desk.index>=1&&desk.index<=desk.count);return desk;
   });
   await check('Restart restores settings, notes, chat, timer, launcher and shelf',async()=>{

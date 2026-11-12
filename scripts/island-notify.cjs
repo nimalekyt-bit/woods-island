@@ -48,16 +48,46 @@ function emit(payload, source = provider, hook = event) {
   return record;
 }
 
+function questionAnswers(questions, answers) {
+  if (!Array.isArray(questions) || !questions.length || questions.length > 4 || !answers || typeof answers !== 'object' || Array.isArray(answers)) throw new Error('Invalid question answer');
+  if (Object.keys(answers).length !== questions.length) throw new Error('Every question needs an answer');
+  const normalized = Object.create(null);
+  for (const question of questions) {
+    const key = question?.question;
+    if (typeof key !== 'string' || !key || Object.hasOwn(normalized, key) || !Object.hasOwn(answers, key)) throw new Error('Missing or duplicate question');
+    if (!Array.isArray(question.options) || !question.options.length || question.options.some(option => typeof option?.label !== 'string' || !option.label)) throw new Error('Invalid question options');
+    if (question.multiSelect !== undefined && typeof question.multiSelect !== 'boolean') throw new Error('Invalid selection mode');
+    const labels = question.options.map(option => option.label);
+    const value = answers[key];
+    const selections = Array.isArray(value) ? value : typeof value === 'string' && labels.includes(value) ? [value] : typeof value === 'string' && question.multiSelect ? value.split(', ') : [];
+    if (!selections.length || (!question.multiSelect && selections.length !== 1) || new Set(selections).size !== selections.length || selections.some(label => typeof label !== 'string' || !labels.includes(label))) throw new Error('Invalid selected option');
+    normalized[key] = selections.join(', ');
+  }
+  return normalized;
+}
+
+function decisionFor(response, ask, toolInput) {
+  if (response.verdict === 'answer' && ask.kind === 'question') return {
+    behavior: 'allow', updatedInput: { ...toolInput, answers: questionAnswers(ask.questions, response.answers) },
+  };
+  if (response.verdict === 'deny') return { behavior: 'deny', message: 'Denied from Woods Island' };
+  if (response.verdict === 'allow' && ask.kind === 'permission') return { behavior: 'allow' };
+  if (response.verdict === 'terminal') return null;
+  throw new Error('Invalid reply for this request');
+}
+
 async function main() {
   const payload = readPayload();
   const record = agentRecord(payload);
   if (provider === 'claude' && event === 'PermissionRequest' && islandRunning()) {
     const requestId = crypto.randomUUID();
     const toolInput = payload.tool_input || {};
+    const isQuestion = payload.tool_name === 'AskUserQuestion';
     record.ask = {
-      id: requestId, kind: 'permission', agent: provider, project: record.project,
+      id: requestId, kind: isQuestion ? 'question' : 'permission', agent: provider, project: record.project,
       tool: payload.tool_name || 'Tool', note: text(payload.permission_suggestions?.[0]?.type),
       detail: text(toolInput.command || toolInput.file_path || toolInput.description),
+      ...(isQuestion ? { questions: toolInput.questions } : {}),
       until: Date.now() + 120000,
     };
     atomic(path.join(events, `${record.id}.json`), record);
@@ -65,16 +95,12 @@ async function main() {
     while (Date.now() < record.ask.until) {
       if (!islandRunning()) break;
       if (fs.existsSync(answerFile)) {
-        const response = JSON.parse(fs.readFileSync(answerFile, 'utf8'));
-        if (response.verdict === 'allow' || response.verdict === 'deny') {
-          process.stdout.write(JSON.stringify({ hookSpecificOutput: {
-            hookEventName: 'PermissionRequest', decision: {
-              behavior: response.verdict,
-              ...(response.verdict === 'deny' ? { message: 'Denied from Woods Island' } : {}),
-            },
-          } }));
-        }
-        break;
+        try {
+          const response = JSON.parse(fs.readFileSync(answerFile, 'utf8'));
+          const decision = decisionFor(response, record.ask, toolInput);
+          if (decision) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision } }));
+          break;
+        } catch { /* A malformed/stale reply must never approve a tool. Await a corrected response. */ }
       }
       await new Promise(resolve => setTimeout(resolve, 100));
     }
@@ -95,5 +121,5 @@ async function main() {
 }
 
 if (require.main === module) main().catch(() => { process.exitCode = 1; });
-module.exports = { agentRecord, projectName };
+module.exports = { agentRecord, projectName, questionAnswers, decisionFor };
 
