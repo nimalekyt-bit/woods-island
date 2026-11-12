@@ -1,0 +1,1204 @@
+{
+  "date": "2026-11-12",
+  "scope": "Static binding inventory; a reference is not evidence of correct behavior.",
+  "fields": [
+    {
+      "key": "autostart",
+      "type": "boolean",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hoverDelayMs",
+      "type": "number",
+      "consumerFiles": [
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "openOnHover",
+      "type": "boolean",
+      "consumerFiles": [
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "collapseDelayMs",
+      "type": "number",
+      "consumerFiles": [
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "style",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/win.rs",
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/Liquid-BbsJJY6K.js",
+        "frontend/assets/overlay-UROx9wcU.js",
+        "frontend/assets/settings-DKyXEiF7.js",
+        "frontend/assets/Stage-BwJb3ILo.js",
+        "frontend/assets/type-DVE1z8l3.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hideInFullscreen",
+      "type": "boolean",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "captureVisible",
+      "type": "boolean",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "autoHide",
+      "type": "boolean",
+      "consumerFiles": [
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js",
+        "frontend/assets/type-DVE1z8l3.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "showOnDesktop",
+      "type": "boolean",
+      "consumerFiles": [
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js",
+        "frontend/assets/type-DVE1z8l3.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "through",
+      "type": "boolean",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "src-tauri/src/win.rs",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js",
+        "frontend/assets/Stage-BwJb3ILo.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "opacityThrough",
+      "type": "number",
+      "consumerFiles": [
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js",
+        "frontend/assets/Stage-BwJb3ILo.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "offsetX",
+      "type": "number",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/settings-DKyXEiF7.js",
+        "frontend/assets/Stage-BwJb3ILo.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "underTaskbar",
+      "type": "boolean",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "monitor",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/Liquid-BbsJJY6K.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "liquidSpectrum",
+      "type": "boolean",
+      "consumerFiles": [
+        "frontend/assets/Liquid-BbsJJY6K.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "opacityRest",
+      "type": "number",
+      "consumerFiles": [
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js",
+        "frontend/assets/Stage-BwJb3ILo.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "opacityOpen",
+      "type": "number",
+      "consumerFiles": [
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js",
+        "frontend/assets/Stage-BwJb3ILo.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "scale",
+      "type": "number",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "src-tauri/src/win.rs",
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/Liquid-BbsJJY6K.js",
+        "frontend/assets/markup-Ch9cn9Ae.js",
+        "frontend/assets/settings-DKyXEiF7.js",
+        "frontend/assets/Stage-BwJb3ILo.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "theme",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js",
+        "frontend/assets/Stage-BwJb3ILo.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "islandColor",
+      "type": "string",
+      "consumerFiles": [
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js",
+        "frontend/assets/Stage-BwJb3ILo.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "shotDraw",
+      "type": "boolean",
+      "consumerFiles": [
+        "frontend/assets/overlay-UROx9wcU.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "showClock",
+      "type": "boolean",
+      "consumerFiles": [
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js",
+        "frontend/assets/Stage-BwJb3ILo.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "clockSeconds",
+      "type": "boolean",
+      "consumerFiles": [
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js",
+        "frontend/assets/Stage-BwJb3ILo.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "clockFormat",
+      "type": "string",
+      "consumerFiles": [
+        "frontend/assets/settings-DKyXEiF7.js",
+        "frontend/assets/Stage-BwJb3ILo.js",
+        "frontend/assets/type-DVE1z8l3.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "showBattery",
+      "type": "boolean",
+      "consumerFiles": [
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js",
+        "frontend/assets/Stage-BwJb3ILo.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "mediaPill",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js",
+        "frontend/assets/Stage-BwJb3ILo.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "lyrics",
+      "type": "boolean",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js",
+        "frontend/assets/Stage-BwJb3ILo.js",
+        "frontend/assets/type-DVE1z8l3.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "lyricsInPlayer",
+      "type": "boolean",
+      "consumerFiles": [
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/Stage-BwJb3ILo.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "lyricsInHome",
+      "type": "boolean",
+      "consumerFiles": [
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "homePlayer",
+      "type": "string",
+      "consumerFiles": [
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "alertSound",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "downloadsInPill",
+      "type": "string",
+      "consumerFiles": [
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "gpuAcceleration",
+      "type": "boolean",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "pasteOnClick",
+      "type": "boolean",
+      "consumerFiles": [
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyToggle",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyArea",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyScreen",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyOcr",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyClipboard",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyPlainPaste",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyMic",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyColor",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyQr",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyPalette",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyRecord",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyChat",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyDictate",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyThrough",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyVpn",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyMediaPill",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyTheme",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyWebAi",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "cardTime",
+      "type": "string",
+      "consumerFiles": [
+        "frontend/assets/Liquid-BbsJJY6K.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "homeHidden",
+      "type": "array",
+      "consumerFiles": [
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "tabsHidden",
+      "type": "array",
+      "consumerFiles": [
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "liquidWith",
+      "type": "boolean",
+      "consumerFiles": [
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js",
+        "frontend/assets/Stage-BwJb3ILo.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "recordFormat",
+      "type": "string",
+      "consumerFiles": [
+        "frontend/assets/overlay-UROx9wcU.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "recordingFps",
+      "type": "number",
+      "consumerFiles": [
+        "src-tauri/src/recorder.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "recordingSound",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/recorder.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "recordingQuality",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/recorder.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "clipLimit",
+      "type": "number",
+      "consumerFiles": [
+        "src-tauri/src/clipboard.rs",
+        "src-tauri/src/lib.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "clipExcludedApps",
+      "type": "array",
+      "consumerFiles": [
+        "src-tauri/src/clipboard.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "screenshotDir",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/capture.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "recordingDir",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/capture.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "uploadService",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "uploadKey",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "showNotifications",
+      "type": "boolean",
+      "consumerFiles": [
+        "src-tauri/src/notifications.rs",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "notifyMuted",
+      "type": "array",
+      "consumerFiles": [
+        "src-tauri/src/notifications.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "paletteFiles",
+      "type": "boolean",
+      "consumerFiles": [
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "paletteFolders",
+      "type": "array",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hideForApps",
+      "type": "array",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "keepForApps",
+      "type": "array",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hideForAppsMode",
+      "type": "string",
+      "consumerFiles": [],
+      "binding": "unused"
+    },
+    {
+      "key": "searchEngine",
+      "type": "string",
+      "consumerFiles": [
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "searchUrl",
+      "type": "string",
+      "consumerFiles": [
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "moduleMedia",
+      "type": "boolean",
+      "consumerFiles": [
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/Liquid-BbsJJY6K.js",
+        "frontend/assets/settings-DKyXEiF7.js",
+        "frontend/assets/Stage-BwJb3ILo.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "moduleShelf",
+      "type": "boolean",
+      "consumerFiles": [
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "moduleLauncher",
+      "type": "boolean",
+      "consumerFiles": [
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "moduleControls",
+      "type": "boolean",
+      "consumerFiles": [
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "controlsNet",
+      "type": "string",
+      "consumerFiles": [
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "vpnCustomName",
+      "type": "string",
+      "consumerFiles": [
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "settings-ui-only"
+    },
+    {
+      "key": "vpnCustomOn",
+      "type": "string",
+      "consumerFiles": [
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "settings-ui-only"
+    },
+    {
+      "key": "vpnCustomOff",
+      "type": "string",
+      "consumerFiles": [
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "settings-ui-only"
+    },
+    {
+      "key": "vpnCustomAdmin",
+      "type": "boolean",
+      "consumerFiles": [
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "settings-ui-only"
+    },
+    {
+      "key": "audioOutput",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/audio.rs",
+        "src-tauri/src/lib.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "audioInput",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/audio.rs",
+        "src-tauri/src/lib.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "showVolume",
+      "type": "boolean",
+      "consumerFiles": [
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "showLayout",
+      "type": "boolean",
+      "consumerFiles": [
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "layoutInPill",
+      "type": "boolean",
+      "consumerFiles": [
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js",
+        "frontend/assets/Stage-BwJb3ILo.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "desktopInPill",
+      "type": "boolean",
+      "consumerFiles": [
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js",
+        "frontend/assets/Stage-BwJb3ILo.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "showCaps",
+      "type": "boolean",
+      "consumerFiles": [
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "showDownloads",
+      "type": "boolean",
+      "consumerFiles": [
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "steamDownloads",
+      "type": "boolean",
+      "consumerFiles": [
+        "src-tauri/src/telemetry.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "obsStatus",
+      "type": "boolean",
+      "consumerFiles": [
+        "src-tauri/src/obs.rs",
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "obsPort",
+      "type": "number",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "src-tauri/src/obs.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "agentsStatus",
+      "type": "boolean",
+      "consumerFiles": [
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "agentsAsk",
+      "type": "boolean",
+      "consumerFiles": [
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "showPrivacy",
+      "type": "boolean",
+      "consumerFiles": [
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "showVpn",
+      "type": "boolean",
+      "consumerFiles": [
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "vpnLookupIp",
+      "type": "boolean",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "downloadsDir",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/telemetry.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "downloadsIgnore",
+      "type": "array",
+      "consumerFiles": [
+        "src-tauri/src/telemetry.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "checkUpdates",
+      "type": "boolean",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "mascot",
+      "type": "boolean",
+      "consumerFiles": [],
+      "binding": "unused"
+    },
+    {
+      "key": "character",
+      "type": "string",
+      "consumerFiles": [
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/Liquid-BbsJJY6K.js",
+        "frontend/assets/settings-DKyXEiF7.js",
+        "frontend/assets/Stage-BwJb3ILo.js",
+        "frontend/assets/type-DVE1z8l3.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "characterMusic",
+      "type": "string",
+      "consumerFiles": [
+        "frontend/assets/Liquid-BbsJJY6K.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "characterSize",
+      "type": "string",
+      "consumerFiles": [
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js",
+        "frontend/assets/Stage-BwJb3ILo.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "language",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/speech.rs",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js",
+        "frontend/assets/type-DVE1z8l3.js",
+        "frontend/assets/woods-extensions.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "aiBaseUrl",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/ai.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "aiModel",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/ai.rs",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "sttBaseUrl",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/speech.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "sttModel",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/speech.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "sttLanguage",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/speech.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "obsidianVaultPath",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "frontend/assets/woods-extensions.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "dictatePaste",
+      "type": "boolean",
+      "consumerFiles": [
+        "src-tauri/src/speech.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "moduleWeather",
+      "type": "boolean",
+      "consumerFiles": [
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js",
+        "frontend/assets/Stage-BwJb3ILo.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "weatherCity",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "src-tauri/src/weather.rs",
+        "frontend/assets/island-BrWchjAa.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "weatherLat",
+      "type": "number",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "src-tauri/src/weather.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "weatherLon",
+      "type": "number",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "src-tauri/src/weather.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "weatherUnits",
+      "type": "string",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "src-tauri/src/weather.rs",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "showWeather",
+      "type": "boolean",
+      "consumerFiles": [
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/settings-DKyXEiF7.js",
+        "frontend/assets/Stage-BwJb3ILo.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "weatherAlerts",
+      "type": "boolean",
+      "consumerFiles": [
+        "frontend/assets/Home-ILtKrcyA.js",
+        "frontend/assets/settings-DKyXEiF7.js"
+      ],
+      "binding": "runtime-reference"
+    }
+  ],
+  "summary": {
+    "runtime-reference": 116,
+    "settings-ui-only": 4,
+    "unused": 2
+  },
+  "nonFunctionalUiFields": [
+    "vpnCustomName",
+    "vpnCustomOn",
+    "vpnCustomOff",
+    "vpnCustomAdmin"
+  ],
+  "notes": [
+    "116 runtime references are wiring evidence, not 116 verified behaviors.",
+    "4 custom VPN fields are stored by the UI but have no execution handler.",
+    "hideForAppsMode and mascot are unused legacy fields absent from the settings UI.",
+    "Dynamic string keys are included; original proprietary backend is not available."
+  ]
+}

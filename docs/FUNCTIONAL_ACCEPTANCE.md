@@ -1,5 +1,41 @@
 # Woods Island — функциональная приёмка 12.11.2026
 
+## Плавность текста и аудит настроек — TASK-1416
+
+Последняя локальная сборка: SHA256
+`aa4414562d4a97498afbe8488ae5b8f724aefb647549fae461ef36da2bad3689`.
+pnpm build и cargo build --release — exit 0; Rust 51/51, hooks 3/3;
+пассивная нативная приёмка 39/39, 1 live Yandex skipped, 0 frontend exceptions.
+Информационное сообщение MSVC о создании import library выводится как linker warning;
+сборка завершена успешно. Это не утверждение об отсутствии всех warnings.
+
+Lyrics-пилюля резервирует ширину по всей песне и использует фиксированную область
+30 px для двух строк; исчезли пересчёт размера на каждую строку, размытие текста
+и выраженный отскок пружины. Native проверяет короткую, длинную и строку без
+пробелов, смену в обе стороны, 298 стабильных кадров и 412 кадров открытия.
+В тестовой конфигурации геометрия остаётся 680×44, текст 15/30 px и один активный
+элемент после crossfade. Максимальный измеренный шаг ширины — 47.66 px на 16 ms;
+выход за итоговую ширину не обнаружен. Это замер конкретного тестового перехода.
+
+showDownloads/agentsAsk теперь подавляют отключённые карточки. Open delay
+действует при отдельно включённом openOnHover; по умолчанию открытие по клику.
+checkUpdates подключён к запросу при запуске/раз в 6 часов. Кнопка release page
+не оставляет фиктивную бесконечную загрузку. Проверены 12 settings sections RU/EN
+и последовательное монтирование 25 персонажей. Все 122 default fields сверены
+по ссылкам: 116 runtime, 4 custom VPN UI-only, 2 unused legacy. Это инвентаризация
+связей, а не доказательство исправности 116 функций.
+
+Полного паритета с оригиналом нет: custom VPN не исполняет команды, автоматически
+поддержаны только RAS/WARP; Bluetooth без battery и проверки reconnect;
+Claude multiple-choice replies/PPTX не поддержаны; private GitHub ограничивает
+проверку обновлений, подписанной установки нет. Подробная сверка всех функций,
+аппаратные/облачные ограничения и источник оригинала:
+FEATURE_PARITY_20261112.md и settings-inventory-20261112.json.
+Доказательства: acceptance-lyrics-audit-20261112.json.
+
+Корневой EXE и portable обновляются только после указанной приёмки.
+Работающая пилюля получает изменения после перезапуска; настройки/БД сохранены.
+
 Проверка продолжает TASK-1413 и TASK-1414. Повод: сохранённый масштаб не менял остров,
 играющая Яндекс Музыка отсутствовала в пилюле, настройки требовали адаптации.
 Все GUI-проверки выполняются в отдельном профиле, без аппаратного ввода,
@@ -176,3 +212,31 @@ SHA256 EXE: 9f77eabb0e957f14740dbae97848fb70846c5b9b428e92cade54f1e660b06392.
 Отчёт без личных метаданных: docs/acceptance-controls-20261112.json.
 Корневой EXE и portable обновлены; уже работающий процесс применит исправления
 после перезапуска. Настройки и БД сохранены.
+
+
+## Исходники, паритет и нагрузка — TASK-1417, 12.11.2026
+
+Production Vite собирает runtime/; 161 Rust-контракт и 122 настройки, 120 runtime consumers.
+PPTX, Claude single/multi-select, Shell AppsFolder/AUMID и нативные иконки добавлены.
+VPN: RAS/WARP, службы AmneziaWG/WireGuard, custom команды и открытие GUI-клиентов.
+Настройки и редактор изображений создаются по запросу; закрытие освобождает renderer.
+
+Build/check/release — exit 0; Rust 62/62, hooks 5/5, native 43/43 + 1 live skipped,
+0 frontend exceptions; controls panel 48 мс. Сравнение включает native + WebView2:
+private memory 402,2 → 291,6 MiB idle и 410,0 → 318,3 MiB music metadata fixture.
+CPU всей машины 4,94 → 4,57% idle и 4,26 → 4,52% music; CPU-снижение на музыке
+не подтверждено. 12 logical processors, 20 секунд на сценарий после стабилизации.
+
+SHA256 EXE: 261be77ca4e68d0bf355612ba98c5034b2215bd3bb90ce37476bed42c7733bb7.
+Полная детализация и ограничения: RUNTIME_PARITY_PERFORMANCE_20261112.md,
+acceptance-runtime-parity-20261112.json, performance-20261112.json.
+Миграция compat постепенная; Rust Value остаётся JsonValue. Store activation,
+VPN connect, аппаратный ввод и личные облачные сервисы в QA не запускаются.
+
+
+## Форма и пауза — TASK-1418, 12.11.2026
+
+Без персонажа/liquidWith сохраняет plain; выбранный музыкальный персонаж действует только при playing. Title/normal показывают паузу, title progress прекращает CSS-переход сразу. Grace timer — 2500 мс с начала паузы, без продления от metadata, resume отменяет deadline.
+
+Build/check/release — exit 0; runtime-state 6/6, hooks 5/5, native 44/44 + 1 live skipped, frontend exceptions 0; controls — exit 0, панель 75 мс. Нативный fixture каждые 120 мс: наблюдаемый collapse 2551 мс, width 420 → 150 px.
+SHA256 EXE: 9330d8b6de8059030f51177afbdd77f76ddd576f40d033c80a5eeeb4d5369997. Отчёт: acceptance-media-pause-20261112.json; перенос TS/TSX и устройство персонажей: MEDIA_PAUSE_CHARACTERS_20261112.md и RUNTIME.md.

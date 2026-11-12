@@ -1,0 +1,363 @@
+{
+  "date": "2026-11-12",
+  "task": "TASK-1417",
+  "sha256": "261be77ca4e68d0bf355612ba98c5034b2215bd3bb90ce37476bed42c7733bb7",
+  "passiveQa": true,
+  "verification": {
+    "frontendBuild": {
+      "exitCode": 0
+    },
+    "rustCheck": {
+      "exitCode": 0
+    },
+    "rustTests": {
+      "exitCode": 0,
+      "passed": 62
+    },
+    "hookTests": {
+      "exitCode": 0,
+      "passed": 5
+    },
+    "releaseBuild": {
+      "exitCode": 0
+    },
+    "native": {
+      "exitCode": 0,
+      "passed": 43,
+      "failed": 0,
+      "skipped": 1
+    },
+    "controls": {
+      "exitCode": 0,
+      "baseline": false,
+      "passiveQa": true,
+      "sha256": "261be77ca4e68d0bf355612ba98c5034b2215bd3bb90ce37476bed42c7733bb7",
+      "startupMs": 799,
+      "controlsGetMs": [
+        55.2,
+        3.1,
+        5.3,
+        2.8,
+        2.5,
+        2.5
+      ],
+      "panelReadyMs": 48,
+      "ethernet": true,
+      "physicalAdapter": true,
+      "tileOn": "true",
+      "focused": false,
+      "frontendErrors": []
+    },
+    "performance": {
+      "exitCode": 0,
+      "scenarios": 4,
+      "wholeProcessTree": true,
+      "logicalProcessors": 12
+    }
+  },
+  "results": [
+    {
+      "name": "Main UI mounts",
+      "ok": true
+    },
+    {
+      "name": "Settings and image editor renderers are absent until requested",
+      "ok": true,
+      "details": {
+        "settingsLazy": true,
+        "imageEditorLazy": true
+      }
+    },
+    {
+      "name": "No Windows caption; DPI bounds match canvas",
+      "ok": true
+    },
+    {
+      "name": "Bootstrap uses real audio device",
+      "ok": true
+    },
+    {
+      "name": "Chosen audio endpoint changes monitoring without rerouting sound",
+      "ok": true
+    },
+    {
+      "name": "Capture visibility setting changes native display protection",
+      "ok": true
+    },
+    {
+      "name": "Chosen microphone remains readable without recording or mute changes",
+      "ok": true
+    },
+    {
+      "name": "Native notification and network reads return usable contracts",
+      "ok": true
+    },
+    {
+      "name": "Settings merge + persist, toggles do not crash",
+      "ok": true
+    },
+    {
+      "name": "Island scale changes physical size, viewport and clip bounds together",
+      "ok": true
+    },
+    {
+      "name": "Weather search works offline for Брянск",
+      "ok": true
+    },
+    {
+      "name": "Media source and playback contracts",
+      "ok": true
+    },
+    {
+      "name": "Weather opens, switches hours/week and units, and rejects legacy data",
+      "ok": true
+    },
+    {
+      "name": "Live Yandex connector reaches the rendered pill with cover and advancing time",
+      "ok": true,
+      "skipped": true,
+      "reason": "Live Yandex connector is unavailable on the isolated fixture port; native scenarios use loopback fixtures."
+    },
+    {
+      "name": "LRCLIB milliseconds highlight, advance, pause and seek the rendered lyrics",
+      "ok": true
+    },
+    {
+      "name": "Lyrics keep stable geometry across short, wrapped and unbroken lines",
+      "ok": true
+    },
+    {
+      "name": "Disabled download cards and agent questions suppress their UI events",
+      "ok": true
+    },
+    {
+      "name": "Optional hover opens after its delay; click remains the default",
+      "ok": true
+    },
+    {
+      "name": "Opening the releases page does not leave a fictitious download running",
+      "ok": true
+    },
+    {
+      "name": "WASAPI follows the active player output and animates the liquid spectrum",
+      "ok": true,
+      "details": {
+        "eightBands": true,
+        "liveSpectrumFresh": true,
+        "silenceMayBeDeduplicated": true,
+        "peak": 0,
+        "bandPeak": 0,
+        "distinctContours": 25,
+        "liveSoundDetected": false,
+        "explicitOutputPriority": true
+      }
+    },
+    {
+      "name": "Repeated hover keeps the folded pill visible and native styles unchanged",
+      "ok": true
+    },
+    {
+      "name": "Click expands, Escape collapses",
+      "ok": true
+    },
+    {
+      "name": "Native desktop pixels outside collapsed and expanded island have no glass tint",
+      "ok": true
+    },
+    {
+      "name": "Notes/chat/timer/launcher groups round-trip",
+      "ok": true
+    },
+    {
+      "name": "Launcher link and shelf persist",
+      "ok": true
+    },
+    {
+      "name": "Agents state and config ownership are read without changing fixtures",
+      "ok": true
+    },
+    {
+      "name": "Web AI read contract and invalid service rejection",
+      "ok": true
+    },
+    {
+      "name": "Claude single and multiple choices reach the real answer file",
+      "ok": true,
+      "details": {
+        "single": true,
+        "multiple": true,
+        "commaLabel": true,
+        "nativeAnswer": true
+      }
+    },
+    {
+      "name": "Store inventory and icons are native; launcher accepts an installed AUMID",
+      "ok": true,
+      "details": {
+        "storeCount": 48,
+        "icon": true,
+        "launcher": true,
+        "activationImplementation": "IApplicationActivationManager; actual app activation omitted in passive QA"
+      }
+    },
+    {
+      "name": "PPTX attachments preserve presentation order and Unicode text",
+      "ok": true,
+      "details": {
+        "order": true,
+        "unicode": true,
+        "lineBreaks": true,
+        "attachment": true
+      }
+    },
+    {
+      "name": "Attachments return document/image contracts and missing-file errors",
+      "ok": true
+    },
+    {
+      "name": "AI models, UTF-8 streaming, attachment resolution and HTTP error events",
+      "ok": true
+    },
+    {
+      "name": "OBS v5 handshake authenticates, reads state and rejects bad password",
+      "ok": true
+    },
+    {
+      "name": "Native screen capture produces real PNG and dimensions",
+      "ok": true
+    },
+    {
+      "name": "Windows OCR recognizes actual rendered text from a PNG",
+      "ok": true
+    },
+    {
+      "name": "MP4 screen recording contains video and WASAPI system audio",
+      "ok": true
+    },
+    {
+      "name": "Image editor loads and saves its isolated fixture without clipboard writes",
+      "ok": true,
+      "details": {
+        "rendererReleased": true,
+        "recreatedWithoutFocus": true,
+        "persistedImage": true
+      }
+    },
+    {
+      "name": "Settings UI renders after repeated harmless toggles",
+      "ok": true,
+      "details": {
+        "sections": [
+          "pro",
+          "character",
+          "general",
+          "hotkeys",
+          "ai",
+          "voice",
+          "weather",
+          "sound",
+          "events",
+          "clipboard",
+          "modules",
+          "updates"
+        ],
+        "controlsBySection": [
+          {
+            "section": "pro",
+            "switches": 0,
+            "inputs": 0
+          },
+          {
+            "section": "character",
+            "switches": 1,
+            "inputs": 1
+          },
+          {
+            "section": "general",
+            "switches": 14,
+            "inputs": 10
+          },
+          {
+            "section": "hotkeys",
+            "switches": 0,
+            "inputs": 0
+          },
+          {
+            "section": "ai",
+            "switches": 0,
+            "inputs": 3
+          },
+          {
+            "section": "voice",
+            "switches": 1,
+            "inputs": 3
+          },
+          {
+            "section": "weather",
+            "switches": 2,
+            "inputs": 1
+          },
+          {
+            "section": "sound",
+            "switches": 0,
+            "inputs": 2
+          },
+          {
+            "section": "events",
+            "switches": 14,
+            "inputs": 3
+          },
+          {
+            "section": "clipboard",
+            "switches": 2,
+            "inputs": 3
+          },
+          {
+            "section": "modules",
+            "switches": 7,
+            "inputs": 6
+          },
+          {
+            "section": "updates",
+            "switches": 1,
+            "inputs": 0
+          }
+        ],
+        "charactersMounted": 25,
+        "rendererReleased": true,
+        "recreatedWithoutFocus": true
+      }
+    },
+    {
+      "name": "Notes button exports Markdown to Obsidian without overwriting files",
+      "ok": true
+    },
+    {
+      "name": "Steam progress and completion use actual manifest changes",
+      "ok": true
+    },
+    {
+      "name": "Virtual desktop telemetry reaches the real frontend store",
+      "ok": true
+    },
+    {
+      "name": "Restart restores settings, notes, chat, timer, launcher and shelf",
+      "ok": true
+    },
+    {
+      "name": "No unhandled frontend exceptions",
+      "ok": true
+    },
+    {
+      "name": "Explicit quit exits the application",
+      "ok": true
+    }
+  ],
+  "frontendErrors": [],
+  "notes": [
+    "Personal device names, screenshot paths, local vault paths, file paths and metadata are excluded.",
+    "Store activation, VPN connections and owner commands are not executed in passive QA.",
+    "Rich editor resource timing buffer is enlarged before the settings sweep. Unchanged silence may stop repeating events; nonzero spectrum must remain fresh.",
+    "Settings/image editor renderers are absent on startup and are released on close; reopening restores the native data and the requested settings section without focus."
+  ]
+}

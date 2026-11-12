@@ -1,0 +1,931 @@
+{
+  "date": "2026-11-12T13:17:37.832Z",
+  "logicalProcessors": 12,
+  "method": "Sequential isolated profiles. CPU sums the native app and every descendant including hidden WebView2 windows. Music uses a loopback metadata fixture; the existing Windows audio output is observed without changing playback or volume.",
+  "baseline": {
+    "sha256": "aa4414562d4a97498afbe8488ae5b8f724aefb647549fae461ef36da2bad3689",
+    "scenarios": {
+      "idle": {
+        "durationSeconds": 18.9079627,
+        "cpuMachinePercent": 4.937569239016956,
+        "cpuOneCorePercent": 59.25083086820348,
+        "meanWorkingMiB": 706.93203125,
+        "meanPrivateMiB": 402.20104166666664,
+        "maxWorkingMiB": 743.3203125,
+        "processes": 10,
+        "names": [
+          "woods-island",
+          "msedgewebview2"
+        ],
+        "jsTaskSeconds": 2.851673,
+        "jsHeapMiB": 17.532028198242188,
+        "events": {
+          "media:bands": 251,
+          "media:level": 251,
+          "downloads:update": 21,
+          "agents:update": 0,
+          "controls:changed": 0
+        },
+        "samples": [
+          {
+            "seconds": 1.3344871,
+            "cpuSeconds": 0.890625,
+            "cpuMachinePercent": 5.561593663962731,
+            "cpuOneCorePercent": 66.73912396755277,
+            "workingBytes": 710492160,
+            "privateBytes": 388427776,
+            "processes": 10,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2188965,
+            "cpuSeconds": 0.765625,
+            "cpuMachinePercent": 5.234413531693079,
+            "cpuOneCorePercent": 62.81296238031695,
+            "workingBytes": 713138176,
+            "privateBytes": 390701056,
+            "processes": 10,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2303929,
+            "cpuSeconds": 0.828125,
+            "cpuMachinePercent": 5.6088113534031825,
+            "cpuOneCorePercent": 67.30573624083819,
+            "workingBytes": 716681216,
+            "privateBytes": 394706944,
+            "processes": 10,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2122566,
+            "cpuSeconds": 0.703125,
+            "cpuMachinePercent": 4.8334445034161915,
+            "cpuOneCorePercent": 58.001334040994294,
+            "workingBytes": 721031168,
+            "privateBytes": 399794176,
+            "processes": 10,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2656047999999993,
+            "cpuSeconds": 0.78125,
+            "cpuMachinePercent": 5.144115024426796,
+            "cpuOneCorePercent": 61.72938029312155,
+            "workingBytes": 724779008,
+            "privateBytes": 402739200,
+            "processes": 10,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.583567200000001,
+            "cpuSeconds": 1.15625,
+            "cpuMachinePercent": 6.084627584270918,
+            "cpuOneCorePercent": 73.01553101125101,
+            "workingBytes": 734208000,
+            "privateBytes": 412774400,
+            "processes": 10,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.3494928000000002,
+            "cpuSeconds": 0.890625,
+            "cpuMachinePercent": 5.499751462178975,
+            "cpuOneCorePercent": 65.9970175461477,
+            "workingBytes": 738398208,
+            "privateBytes": 417374208,
+            "processes": 10,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2384246999999995,
+            "cpuSeconds": 0.96875,
+            "cpuMachinePercent": 6.5186980416868865,
+            "cpuOneCorePercent": 78.22437650024264,
+            "workingBytes": 743096320,
+            "privateBytes": 422293504,
+            "processes": 10,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2462638999999989,
+            "cpuSeconds": 0.8125,
+            "cpuMachinePercent": 5.43290496766643,
+            "cpuOneCorePercent": 65.19485961199716,
+            "workingBytes": 746962944,
+            "privateBytes": 425746432,
+            "processes": 10,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2067465000000013,
+            "cpuSeconds": 0.578125,
+            "cpuMachinePercent": 3.9923118346175674,
+            "cpuOneCorePercent": 47.90774201541081,
+            "workingBytes": 750563328,
+            "privateBytes": 429490176,
+            "processes": 10,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.1864917999999989,
+            "cpuSeconds": 0.578125,
+            "cpuMachinePercent": 4.060464921319589,
+            "cpuOneCorePercent": 48.72557905583507,
+            "workingBytes": 753876992,
+            "privateBytes": 432857088,
+            "processes": 10,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2155822,
+            "cpuSeconds": 0.5,
+            "cpuMachinePercent": 3.427712800225823,
+            "cpuOneCorePercent": 41.132553602709876,
+            "workingBytes": 757071872,
+            "privateBytes": 443011072,
+            "processes": 10,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2085467000000012,
+            "cpuSeconds": 0.640625,
+            "cpuMachinePercent": 4.4173234403491906,
+            "cpuOneCorePercent": 53.00788128419029,
+            "workingBytes": 759660544,
+            "privateBytes": 445808640,
+            "processes": 10,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2091715,
+            "cpuSeconds": 0.515625,
+            "cpuMachinePercent": 3.5535695308729984,
+            "cpuOneCorePercent": 42.64283437047598,
+            "workingBytes": 769691648,
+            "privateBytes": 455446528,
+            "processes": 10,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2020374999999994,
+            "cpuSeconds": 0.59375,
+            "cpuMachinePercent": 4.116274797305965,
+            "cpuOneCorePercent": 49.395297567671584,
+            "workingBytes": 779427840,
+            "privateBytes": 464904192,
+            "processes": 10,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          }
+        ]
+      },
+      "music": {
+        "durationSeconds": 19.549118399999998,
+        "cpuMachinePercent": 4.2627668229444735,
+        "cpuOneCorePercent": 51.15320187533368,
+        "meanWorkingMiB": 733.07080078125,
+        "meanPrivateMiB": 409.985107421875,
+        "maxWorkingMiB": 736.78515625,
+        "processes": 10,
+        "names": [
+          "woods-island",
+          "msedgewebview2"
+        ],
+        "jsTaskSeconds": 2.4389900000000004,
+        "jsHeapMiB": 14.593517303466797,
+        "events": {
+          "media:bands": 258,
+          "media:level": 258,
+          "downloads:update": 22,
+          "agents:update": 0,
+          "controls:changed": 0
+        },
+        "samples": [
+          {
+            "seconds": 1.2103319,
+            "cpuSeconds": 0.65625,
+            "cpuMachinePercent": 4.518388716351276,
+            "cpuOneCorePercent": 54.22066459621531,
+            "workingBytes": 767795200,
+            "privateBytes": 441692160,
+            "processes": 10,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.1917028,
+            "cpuSeconds": 0.71875,
+            "cpuMachinePercent": 5.026071377304252,
+            "cpuOneCorePercent": 60.31285652765102,
+            "workingBytes": 768999424,
+            "privateBytes": 442888192,
+            "processes": 10,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.1866447,
+            "cpuSeconds": 0.5625,
+            "cpuMachinePercent": 3.950213572773721,
+            "cpuOneCorePercent": 47.40256287328465,
+            "workingBytes": 769978368,
+            "privateBytes": 438403072,
+            "processes": 10,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2046065000000001,
+            "cpuSeconds": 0.53125,
+            "cpuMachinePercent": 3.675128212684667,
+            "cpuOneCorePercent": 44.101538552216006,
+            "workingBytes": 771219456,
+            "privateBytes": 432218112,
+            "processes": 10,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2310413999999996,
+            "cpuSeconds": 0.65625,
+            "cpuMachinePercent": 4.442376998856417,
+            "cpuOneCorePercent": 53.308523986277,
+            "workingBytes": 772575232,
+            "privateBytes": 432295936,
+            "processes": 10,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2531673999999997,
+            "cpuSeconds": 0.609375,
+            "cpuMachinePercent": 4.052231968370707,
+            "cpuOneCorePercent": 48.626783620448485,
+            "workingBytes": 765853696,
+            "privateBytes": 425304064,
+            "processes": 10,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2100218000000007,
+            "cpuSeconds": 0.546875,
+            "cpuMachinePercent": 3.766288893858494,
+            "cpuOneCorePercent": 45.19546672630193,
+            "workingBytes": 766939136,
+            "privateBytes": 426020864,
+            "processes": 10,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2267177,
+            "cpuSeconds": 0.6875,
+            "cpuMachinePercent": 4.67032200372316,
+            "cpuOneCorePercent": 56.043864044677925,
+            "workingBytes": 767426560,
+            "privateBytes": 426500096,
+            "processes": 10,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2445462999999997,
+            "cpuSeconds": 0.59375,
+            "cpuMachinePercent": 3.975679062053913,
+            "cpuOneCorePercent": 47.708148744646955,
+            "workingBytes": 768425984,
+            "privateBytes": 425795584,
+            "processes": 10,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2043625000000002,
+            "cpuSeconds": 0.515625,
+            "cpuMachinePercent": 3.5677588765840844,
+            "cpuOneCorePercent": 42.81310651900901,
+            "workingBytes": 769572864,
+            "privateBytes": 427806720,
+            "processes": 10,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.222718799999999,
+            "cpuSeconds": 0.578125,
+            "cpuMachinePercent": 3.9401605122398844,
+            "cpuOneCorePercent": 47.28192614687861,
+            "workingBytes": 770781184,
+            "privateBytes": 429015040,
+            "processes": 10,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2375395999999999,
+            "cpuSeconds": 0.71875,
+            "cpuMachinePercent": 4.839912462868528,
+            "cpuOneCorePercent": 58.078949554422344,
+            "workingBytes": 771203072,
+            "privateBytes": 429473792,
+            "processes": 10,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2314833000000007,
+            "cpuSeconds": 0.8125,
+            "cpuMachinePercent": 5.498112181735091,
+            "cpuOneCorePercent": 65.97734618082109,
+            "workingBytes": 765906944,
+            "privateBytes": 424202240,
+            "processes": 10,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.241824300000001,
+            "cpuSeconds": 0.640625,
+            "cpuMachinePercent": 4.298950879497737,
+            "cpuOneCorePercent": 51.587410553972845,
+            "workingBytes": 766918656,
+            "privateBytes": 425062400,
+            "processes": 10,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2151622999999994,
+            "cpuSeconds": 0.578125,
+            "cpuMachinePercent": 3.9646624433076436,
+            "cpuOneCorePercent": 47.57594931969172,
+            "workingBytes": 767012864,
+            "privateBytes": 425140224,
+            "processes": 10,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2372470999999976,
+            "cpuSeconds": 0.59375,
+            "cpuMachinePercent": 3.9991337758372407,
+            "cpuOneCorePercent": 47.98960531004689,
+            "workingBytes": 768278528,
+            "privateBytes": 426590208,
+            "processes": 10,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "candidate": {
+    "sha256": "261be77ca4e68d0bf355612ba98c5034b2215bd3bb90ce37476bed42c7733bb7",
+    "scenarios": {
+      "idle": {
+        "durationSeconds": 19.4757991,
+        "cpuMachinePercent": 4.572983092642397,
+        "cpuOneCorePercent": 54.875797111708756,
+        "meanWorkingMiB": 520.074951171875,
+        "meanPrivateMiB": 291.575927734375,
+        "maxWorkingMiB": 548.5234375,
+        "processes": 8,
+        "names": [
+          "woods-island",
+          "msedgewebview2"
+        ],
+        "jsTaskSeconds": 2.6832190000000002,
+        "jsHeapMiB": 14.370445251464844,
+        "events": {
+          "media:bands": 255,
+          "media:level": 255,
+          "downloads:update": 0,
+          "agents:update": 0,
+          "controls:changed": 0
+        },
+        "samples": [
+          {
+            "seconds": 1.2425728,
+            "cpuSeconds": 0.734375,
+            "cpuMachinePercent": 4.925097078148393,
+            "cpuOneCorePercent": 59.10116493778071,
+            "workingBytes": 517582848,
+            "privateBytes": 280100864,
+            "processes": 8,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2445115999999998,
+            "cpuSeconds": 0.640625,
+            "cpuMachinePercent": 4.2896680646983665,
+            "cpuOneCorePercent": 51.4760167763804,
+            "workingBytes": 527630336,
+            "privateBytes": 290025472,
+            "processes": 8,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2007675999999998,
+            "cpuSeconds": 0.78125,
+            "cpuMachinePercent": 5.421879026937991,
+            "cpuOneCorePercent": 65.0625483232559,
+            "workingBytes": 531648512,
+            "privateBytes": 293740544,
+            "processes": 8,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2241451000000003,
+            "cpuSeconds": 0.65625,
+            "cpuMachinePercent": 4.467403414840282,
+            "cpuOneCorePercent": 53.608840978083386,
+            "workingBytes": 533606400,
+            "privateBytes": 294985728,
+            "processes": 8,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.1965662999999997,
+            "cpuSeconds": 0.78125,
+            "cpuMachinePercent": 5.440915949802922,
+            "cpuOneCorePercent": 65.29099139763507,
+            "workingBytes": 535535616,
+            "privateBytes": 296697856,
+            "processes": 8,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2036866999999996,
+            "cpuSeconds": 0.625,
+            "cpuMachinePercent": 4.326984200567586,
+            "cpuOneCorePercent": 51.92381040681103,
+            "workingBytes": 539082752,
+            "privateBytes": 298803200,
+            "processes": 8,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2171872000000006,
+            "cpuSeconds": 0.65625,
+            "cpuMachinePercent": 4.492940773613128,
+            "cpuOneCorePercent": 53.91528928335754,
+            "workingBytes": 540938240,
+            "privateBytes": 300965888,
+            "processes": 8,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.1964390999999992,
+            "cpuSeconds": 0.59375,
+            "cpuMachinePercent": 4.135535746588915,
+            "cpuOneCorePercent": 49.626428959066985,
+            "workingBytes": 543301632,
+            "privateBytes": 302936064,
+            "processes": 8,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.1953694000000006,
+            "cpuSeconds": 0.671875,
+            "cpuMachinePercent": 4.683872895971179,
+            "cpuOneCorePercent": 56.20647475165415,
+            "workingBytes": 545734656,
+            "privateBytes": 305451008,
+            "processes": 8,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.1943500999999994,
+            "cpuSeconds": 0.609375,
+            "cpuMachinePercent": 4.251789320401114,
+            "cpuOneCorePercent": 51.02147184481337,
+            "workingBytes": 548929536,
+            "privateBytes": 308416512,
+            "processes": 8,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2017530999999995,
+            "cpuSeconds": 0.625,
+            "cpuMachinePercent": 4.333946243478245,
+            "cpuOneCorePercent": 52.00735492173894,
+            "workingBytes": 551813120,
+            "privateBytes": 311447552,
+            "processes": 8,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2873311000000012,
+            "cpuSeconds": 0.703125,
+            "cpuMachinePercent": 4.551567968799942,
+            "cpuOneCorePercent": 54.618815625599304,
+            "workingBytes": 553586688,
+            "privateBytes": 313446400,
+            "processes": 8,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2318202000000014,
+            "cpuSeconds": 0.71875,
+            "cpuMachinePercent": 4.862384407507952,
+            "cpuOneCorePercent": 58.348612890095424,
+            "workingBytes": 555995136,
+            "privateBytes": 315670528,
+            "processes": 8,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2248934999999967,
+            "cpuSeconds": 0.65625,
+            "cpuMachinePercent": 4.464673867564825,
+            "cpuOneCorePercent": 53.5760864107779,
+            "workingBytes": 558206976,
+            "privateBytes": 317657088,
+            "processes": 8,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2040788000000013,
+            "cpuSeconds": 0.609375,
+            "cpuMachinePercent": 4.217435769153974,
+            "cpuOneCorePercent": 50.60922922984769,
+            "workingBytes": 566648832,
+            "privateBytes": 326426624,
+            "processes": 8,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2103265000000007,
+            "cpuSeconds": 0.625,
+            "cpuMachinePercent": 4.303246548211024,
+            "cpuOneCorePercent": 51.63895857853229,
+            "workingBytes": 575168512,
+            "privateBytes": 335060992,
+            "processes": 8,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          }
+        ]
+      },
+      "music": {
+        "durationSeconds": 19.417740099999996,
+        "cpuMachinePercent": 4.519599923302438,
+        "cpuOneCorePercent": 54.23519907962926,
+        "meanWorkingMiB": 564.697509765625,
+        "meanPrivateMiB": 318.259765625,
+        "maxWorkingMiB": 568.046875,
+        "processes": 8,
+        "names": [
+          "woods-island",
+          "msedgewebview2"
+        ],
+        "jsTaskSeconds": 2.7286220000000005,
+        "jsHeapMiB": 12.946823120117188,
+        "events": {
+          "media:bands": 256,
+          "media:level": 256,
+          "downloads:update": 0,
+          "agents:update": 0,
+          "controls:changed": 0
+        },
+        "samples": [
+          {
+            "seconds": 1.2322638000000001,
+            "cpuSeconds": 0.71875,
+            "cpuMachinePercent": 4.86063400818342,
+            "cpuOneCorePercent": 58.32760809820105,
+            "workingBytes": 589971456,
+            "privateBytes": 332103680,
+            "processes": 8,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2128353,
+            "cpuSeconds": 0.65625,
+            "cpuMachinePercent": 4.509062359909874,
+            "cpuOneCorePercent": 54.10874831891849,
+            "workingBytes": 590819328,
+            "privateBytes": 332963840,
+            "processes": 8,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.208161,
+            "cpuSeconds": 0.59375,
+            "cpuMachinePercent": 4.095411676644641,
+            "cpuOneCorePercent": 49.14494011973569,
+            "workingBytes": 591613952,
+            "privateBytes": 333758464,
+            "processes": 8,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2012114999999994,
+            "cpuSeconds": 0.609375,
+            "cpuMachinePercent": 4.227502816947726,
+            "cpuOneCorePercent": 50.730033803372706,
+            "workingBytes": 592723968,
+            "privateBytes": 334589952,
+            "processes": 8,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2113525000000003,
+            "cpuSeconds": 0.703125,
+            "cpuMachinePercent": 4.837051972898061,
+            "cpuOneCorePercent": 58.04462367477674,
+            "workingBytes": 594182144,
+            "privateBytes": 336039936,
+            "processes": 8,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2130029999999996,
+            "cpuSeconds": 0.71875,
+            "cpuMachinePercent": 4.937814113677654,
+            "cpuOneCorePercent": 59.25376936413185,
+            "workingBytes": 595329024,
+            "privateBytes": 336883712,
+            "processes": 8,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2542804000000007,
+            "cpuSeconds": 0.65625,
+            "cpuMachinePercent": 4.360069726035738,
+            "cpuOneCorePercent": 52.320836712428864,
+            "workingBytes": 590671872,
+            "privateBytes": 332677120,
+            "processes": 8,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2132955999999986,
+            "cpuSeconds": 0.765625,
+            "cpuMachinePercent": 5.258576997504434,
+            "cpuOneCorePercent": 63.10292397005321,
+            "workingBytes": 590352384,
+            "privateBytes": 332210176,
+            "processes": 8,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.1961830000000013,
+            "cpuSeconds": 0.671875,
+            "cpuMachinePercent": 4.680687096651037,
+            "cpuOneCorePercent": 56.16824515981244,
+            "workingBytes": 591077376,
+            "privateBytes": 332570624,
+            "processes": 8,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.1922017999999994,
+            "cpuSeconds": 0.625,
+            "cpuMachinePercent": 4.368667563942057,
+            "cpuOneCorePercent": 52.42401076730469,
+            "workingBytes": 592052224,
+            "privateBytes": 333545472,
+            "processes": 8,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.1932083999999996,
+            "cpuSeconds": 0.59375,
+            "cpuMachinePercent": 4.146733015512352,
+            "cpuOneCorePercent": 49.76079618614822,
+            "workingBytes": 593375232,
+            "privateBytes": 334802944,
+            "processes": 8,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2072178000000005,
+            "cpuSeconds": 0.671875,
+            "cpuMachinePercent": 4.637902401151914,
+            "cpuOneCorePercent": 55.65482881382297,
+            "workingBytes": 594354176,
+            "privateBytes": 335781888,
+            "processes": 8,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2221596000000012,
+            "cpuSeconds": 0.65625,
+            "cpuMachinePercent": 4.47466108354424,
+            "cpuOneCorePercent": 53.69593300253088,
+            "workingBytes": 595640320,
+            "privateBytes": 337063936,
+            "processes": 8,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2233819999999973,
+            "cpuSeconds": 0.6875,
+            "cpuMachinePercent": 4.683056205393474,
+            "cpuOneCorePercent": 56.19667446472169,
+            "workingBytes": 589807616,
+            "privateBytes": 330702848,
+            "processes": 8,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.1958334000000015,
+            "cpuSeconds": 0.546875,
+            "cpuMachinePercent": 3.810975397297534,
+            "cpuOneCorePercent": 45.731704767570406,
+            "workingBytes": 590585856,
+            "privateBytes": 331415552,
+            "processes": 8,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          },
+          {
+            "seconds": 1.2411509999999986,
+            "cpuSeconds": 0.65625,
+            "cpuMachinePercent": 4.40619231664802,
+            "cpuOneCorePercent": 52.87430779977624,
+            "workingBytes": 591495168,
+            "privateBytes": 332402688,
+            "processes": 8,
+            "names": [
+              "woods-island",
+              "msedgewebview2"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "frontendExceptions": []
+}

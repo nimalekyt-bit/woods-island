@@ -1,0 +1,1195 @@
+{
+  "date": "2026-11-12",
+  "task": "TASK-1417",
+  "scope": "Static current runtime/Rust binding inventory. Property and literal references include dynamic settings keys; declarations and vendor files are excluded. This is wiring evidence, not proof of every hardware or network behavior.",
+  "fields": [
+    {
+      "key": "autostart",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hoverDelayMs",
+      "type": "number",
+      "consumerFiles": [
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "openOnHover",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "collapseDelayMs",
+      "type": "number",
+      "consumerFiles": [
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "style",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/island-store.js",
+        "runtime/compat/island.js",
+        "runtime/compat/overlay.js",
+        "runtime/compat/settings.js",
+        "runtime/compat/shared.js",
+        "runtime/compat/stage.js",
+        "src-tauri/src/win.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hideInFullscreen",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "captureVisible",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "autoHide",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js",
+        "runtime/compat/shared.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "showOnDesktop",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js",
+        "runtime/compat/shared.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "through",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js",
+        "runtime/compat/stage.js",
+        "src-tauri/src/lib.rs",
+        "src-tauri/src/win.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "opacityThrough",
+      "type": "number",
+      "consumerFiles": [
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js",
+        "runtime/compat/stage.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "offsetX",
+      "type": "number",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "runtime/compat/stage.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "underTaskbar",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "monitor",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/island-store.js",
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "liquidSpectrum",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/island-store.js",
+        "runtime/compat/settings.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "opacityRest",
+      "type": "number",
+      "consumerFiles": [
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js",
+        "runtime/compat/stage.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "opacityOpen",
+      "type": "number",
+      "consumerFiles": [
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js",
+        "runtime/compat/stage.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "scale",
+      "type": "number",
+      "consumerFiles": [
+        "runtime/compat/island.js",
+        "runtime/compat/markup.js",
+        "runtime/compat/settings.js",
+        "runtime/compat/stage.js",
+        "src-tauri/src/lib.rs",
+        "src-tauri/src/win.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "theme",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js",
+        "runtime/compat/stage.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "islandColor",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js",
+        "runtime/compat/stage.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "shotDraw",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/overlay.js",
+        "runtime/compat/settings.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "showClock",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js",
+        "runtime/compat/stage.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "clockSeconds",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js",
+        "runtime/compat/stage.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "clockFormat",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "runtime/compat/shared.js",
+        "runtime/compat/stage.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "showBattery",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js",
+        "runtime/compat/stage.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "mediaPill",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js",
+        "runtime/compat/stage.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "lyrics",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js",
+        "runtime/compat/shared.js",
+        "runtime/compat/stage.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "lyricsInPlayer",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/island.js",
+        "runtime/compat/stage.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "lyricsInHome",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "homePlayer",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "alertSound",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "downloadsInPill",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "gpuAcceleration",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "pasteOnClick",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/settings.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyToggle",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyArea",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyScreen",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyOcr",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyClipboard",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyPlainPaste",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyMic",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyColor",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyQr",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyPalette",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyRecord",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyChat",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyDictate",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyThrough",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyVpn",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyMediaPill",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyTheme",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hotkeyWebAi",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "cardTime",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/island-store.js",
+        "runtime/compat/settings.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "homeHidden",
+      "type": "array",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "tabsHidden",
+      "type": "array",
+      "consumerFiles": [
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "liquidWith",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js",
+        "runtime/compat/stage.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "recordFormat",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/overlay.js",
+        "runtime/compat/settings.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "recordingFps",
+      "type": "number",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/recorder.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "recordingSound",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/recorder.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "recordingQuality",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/recorder.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "clipLimit",
+      "type": "number",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/clipboard.rs",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "clipExcludedApps",
+      "type": "array",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/clipboard.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "screenshotDir",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/capture.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "recordingDir",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/capture.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "uploadService",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "uploadKey",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "showNotifications",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js",
+        "src-tauri/src/notifications.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "notifyMuted",
+      "type": "array",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/notifications.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "paletteFiles",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "paletteFolders",
+      "type": "array",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hideForApps",
+      "type": "array",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "keepForApps",
+      "type": "array",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "hideForAppsMode",
+      "type": "string",
+      "consumerFiles": [],
+      "binding": "unused"
+    },
+    {
+      "key": "searchEngine",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "searchUrl",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "moduleMedia",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/island-store.js",
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js",
+        "runtime/compat/stage.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "moduleShelf",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "moduleLauncher",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "moduleControls",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "controlsNet",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "vpnCustomName",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/network.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "vpnCustomOn",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/network.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "vpnCustomOff",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/network.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "vpnCustomAdmin",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/network.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "audioOutput",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/audio.rs",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "audioInput",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/audio.rs",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "showVolume",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "showLayout",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "layoutInPill",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js",
+        "runtime/compat/stage.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "desktopInPill",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js",
+        "runtime/compat/stage.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "showCaps",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "showDownloads",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "steamDownloads",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/telemetry.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "obsStatus",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js",
+        "src-tauri/src/obs.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "obsPort",
+      "type": "number",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs",
+        "src-tauri/src/obs.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "agentsStatus",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "agentsAsk",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "showPrivacy",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "showVpn",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "vpnLookupIp",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "downloadsDir",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/telemetry.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "downloadsIgnore",
+      "type": "array",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/telemetry.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "checkUpdates",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "mascot",
+      "type": "boolean",
+      "consumerFiles": [],
+      "binding": "unused"
+    },
+    {
+      "key": "character",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/island-store.js",
+        "runtime/compat/settings.js",
+        "runtime/compat/shared.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "characterMusic",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/island-store.js",
+        "runtime/compat/settings.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "characterSize",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js",
+        "runtime/compat/stage.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "language",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "runtime/compat/shared.js",
+        "src-tauri/src/speech.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "aiBaseUrl",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/ai.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "aiModel",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js",
+        "src-tauri/src/ai.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "sttBaseUrl",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/speech.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "sttModel",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/speech.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "sttLanguage",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/speech.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "obsidianVaultPath",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/components/ObsidianVaultSettings.tsx",
+        "src-tauri/src/lib.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "dictatePaste",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/speech.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "moduleWeather",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js",
+        "runtime/compat/stage.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "weatherCity",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/island.js",
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs",
+        "src-tauri/src/weather.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "weatherLat",
+      "type": "number",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "src-tauri/src/weather.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "weatherLon",
+      "type": "number",
+      "consumerFiles": [
+        "src-tauri/src/lib.rs",
+        "src-tauri/src/weather.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "weatherUnits",
+      "type": "string",
+      "consumerFiles": [
+        "runtime/compat/settings.js",
+        "src-tauri/src/lib.rs",
+        "src-tauri/src/weather.rs"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "showWeather",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/settings.js",
+        "runtime/compat/stage.js"
+      ],
+      "binding": "runtime-reference"
+    },
+    {
+      "key": "weatherAlerts",
+      "type": "boolean",
+      "consumerFiles": [
+        "runtime/compat/home.js",
+        "runtime/compat/settings.js"
+      ],
+      "binding": "runtime-reference"
+    }
+  ],
+  "summary": {
+    "runtime-reference": 120,
+    "unused": 2
+  },
+  "notes": [
+    "Archived TASK-1416 inventory is unchanged.",
+    "Custom VPN fields now reach network.rs; onSource=command indicates the last successful command, not tunnel connectivity.",
+    "Rust Value payloads remain JsonValue; the compatibility layer is progressively typed."
+  ]
+}

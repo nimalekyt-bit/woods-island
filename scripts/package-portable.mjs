@@ -12,6 +12,11 @@ const assets = [
   ...['ffmpeg.exe', 'ffprobe.exe', 'LICENSE', 'FFMPEG_PROVENANCE.md'].map(name => [`bin/${name}`, join(source, name)]),
   ['RUNTIME.md', join(root, 'docs', 'RUNTIME.md')],
   ['FUNCTIONAL_ACCEPTANCE.md', join(root, 'docs', 'FUNCTIONAL_ACCEPTANCE.md')],
+  ['FEATURE_PARITY_20261112.md', join(root, 'docs', 'FEATURE_PARITY_20261112.md')],
+  ['settings-inventory-20261112.json', join(root, 'docs', 'settings-inventory-20261112.json')],
+  ...['RUNTIME_PARITY_PERFORMANCE_20261112.md', 'settings-runtime-inventory-20261112.json',
+    'acceptance-runtime-parity-20261112.json', 'performance-20261112.json'].map(name => [name, join(root, 'docs', name)]),
+  ...['MEDIA_PAUSE_CHARACTERS_20261112.md', 'acceptance-media-pause-20261112.json'].map(name => [name, join(root, 'docs', name)]),
   ['LICENSE', join(root, 'LICENSE')],
   ['THIRD_PARTY_NOTICES.md', join(root, 'THIRD_PARTY_NOTICES.md')],
 ];

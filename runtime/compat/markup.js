@@ -1,0 +1,120 @@
+// Compatibility application source; migrate components incrementally.
+import { n as e } from "./shared.js";
+var t = {
+  name: `grid-3x3`,
+  size: 24,
+  node: [
+    [`rect`, { width: `18`, height: `18`, x: `3`, y: `3`, rx: `2`, key: `afitv7` }],
+    [`path`, { d: `M3 9h18`, key: `1pudct` }],
+    [`path`, { d: `M3 15h18`, key: `5xshup` }],
+    [`path`, { d: `M9 3v18`, key: `fh3hqa` }],
+    [`path`, { d: `M15 3v18`, key: `14nvp0` }],
+  ],
+  aliases: [`grid`, `grid-3-x-3`],
+};
+t.node;
+var n = e(t),
+  r = {
+    name: `redo-2`,
+    size: 24,
+    node: [
+      [`path`, { d: `m15 14 5-5-5-5`, key: `12vg1m` }],
+      [`path`, { d: `M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13`, key: `6uklza` }],
+    ],
+  };
+r.node;
+var i = e(r),
+  a = [`#ff453a`, `#ffd60a`, `#32d74b`, `#0a84ff`, `#ffffff`, `#000000`],
+  o = [3, 6, 10];
+function s(e, t) {
+  return { x: Math.min(e.x, t.x), y: Math.min(e.y, t.y), w: Math.abs(e.x - t.x), h: Math.abs(e.y - t.y) };
+}
+function c(e) {
+  return e.t === `pen` || e.t === `marker`
+    ? e.pts.length < 2
+    : e.t === `text`
+      ? !e.text.trim()
+      : Math.hypot(e.a.x - e.b.x, e.a.y - e.b.y) < 4;
+}
+function l(e, t, n, r, i) {
+  for (let a of t) {
+    if ((e.save(), (e.lineCap = `round`), (e.lineJoin = `round`), a.t === `blur`)) {
+      let t = s(a.a, a.b);
+      if (t.w < 2 || t.h < 2) {
+        e.restore();
+        continue;
+      }
+      if (i) {
+        let r = Math.max(6, Math.round(Math.min(t.w, t.h) / 10)),
+          a = Math.max(1, Math.round(t.w / r)),
+          o = Math.max(1, Math.round(t.h / r)),
+          s = document.createElement(`canvas`);
+        ((s.width = a),
+          (s.height = o),
+          s
+            .getContext(`2d`)
+            .drawImage(
+              i.img,
+              (t.x + i.dx) * i.scale,
+              (t.y + i.dy) * i.scale,
+              t.w * i.scale,
+              t.h * i.scale,
+              0,
+              0,
+              a,
+              o,
+            ),
+          (e.imageSmoothingEnabled = !1),
+          e.drawImage(s, 0, 0, a, o, t.x * n, t.y * n, t.w * n, t.h * n));
+      } else ((e.fillStyle = `#1a1a1d`), e.fillRect(t.x * n, t.y * n, t.w * n, t.h * n));
+    } else if (a.t === `rect`) {
+      let t = s(a.a, a.b);
+      ((e.strokeStyle = a.color),
+        (e.lineWidth = a.w * r),
+        e.beginPath(),
+        e.roundRect(t.x * n, t.y * n, t.w * n, t.h * n, 4 * r),
+        e.stroke());
+    } else if (a.t === `pen` || a.t === `marker`)
+      ((e.strokeStyle = a.color),
+        (e.lineWidth = (a.t === `marker` ? a.w * 3 + 6 : a.w) * r),
+        a.t === `marker` && ((e.globalAlpha = 0.38), (e.lineCap = `butt`)),
+        e.beginPath(),
+        a.pts.forEach((t, r) => (r ? e.lineTo(t.x * n, t.y * n) : e.moveTo(t.x * n, t.y * n))),
+        e.stroke());
+    else if (a.t === `arrow`) {
+      let [t, i, o, s] = [a.a.x * n, a.a.y * n, a.b.x * n, a.b.y * n],
+        c = Math.atan2(s - i, o - t),
+        l = (8 + a.w * 2.2) * r;
+      ((e.strokeStyle = a.color),
+        (e.fillStyle = a.color),
+        (e.lineWidth = a.w * r),
+        e.beginPath(),
+        e.moveTo(t, i),
+        e.lineTo(o - Math.cos(c) * l * 0.6, s - Math.sin(c) * l * 0.6),
+        e.stroke(),
+        e.beginPath(),
+        e.moveTo(o, s),
+        e.lineTo(o - l * Math.cos(c - 0.45), s - l * Math.sin(c - 0.45)),
+        e.lineTo(o - l * Math.cos(c + 0.45), s - l * Math.sin(c + 0.45)),
+        e.closePath(),
+        e.fill());
+    } else
+      a.t === `text` &&
+        ((e.font = `600 ${a.size * r}px "Segoe UI Variable Text", "Segoe UI", sans-serif`),
+        (e.textBaseline = `top`),
+        (e.lineWidth = Math.max(2, a.size * 0.18) * r),
+        (e.strokeStyle = a.color === `#000000` ? `#fff` : `rgb(0 0 0 / 0.75)`),
+        (e.fillStyle = a.color),
+        a.text
+          .split(
+            `
+`,
+          )
+          .forEach((t, i) => {
+            let o = a.at.y * n + i * a.size * 1.25 * r;
+            (e.strokeText(t, a.at.x * n, o), e.fillText(t, a.at.x * n, o));
+          }));
+    e.restore();
+  }
+}
+export { i as a, c as i, o as n, n as o, l as r, a as t };

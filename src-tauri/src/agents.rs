@@ -129,23 +129,80 @@ pub fn connect(agent:&str,on:bool,beside:bool)->Result<Value,String>{
 
 pub fn current()->Vec<Value>{LIVE.lock().map(|live|live.clone()).unwrap_or_default()}
 fn valid_request_id(id:&str)->bool{!id.is_empty()&&id.len()<=80&&id.chars().all(|c|c.is_ascii_alphanumeric()||c=='-')}
+fn question_answers(questions: &Value, answers: &Value) -> Result<Value, String> {
+    let questions = questions.as_array().filter(|questions| !questions.is_empty() && questions.len() <= 4).ok_or("Invalid agent questions")?;
+    let answers = answers.as_object().ok_or("Question answers must be an object")?;
+    if answers.len() != questions.len() { return Err("Every question must have exactly one answer entry".into()); }
+    let mut normalized = serde_json::Map::new();
+    for question in questions {
+        let key = question["question"].as_str().filter(|key| !key.is_empty()).ok_or("Question text is missing")?;
+        if normalized.contains_key(key) { return Err("Duplicate question text".into()); }
+        let options = question["options"].as_array().filter(|options| !options.is_empty()).ok_or("Question options are missing")?;
+        let labels = options.iter().map(|option| option["label"].as_str().filter(|label| !label.is_empty()).ok_or("Invalid question option")).collect::<Result<Vec<_>, _>>()?;
+        let multi = match question.get("multiSelect") { None => false, Some(value) => value.as_bool().ok_or("Invalid multiSelect flag")? };
+        let value = answers.get(key).ok_or("An expected question answer is missing")?;
+        let selections = match value {
+            Value::Array(values) => values.iter().map(|value| value.as_str().ok_or("Selected options must be strings")).collect::<Result<Vec<_>, _>>()?,
+            Value::String(value) if labels.contains(&value.as_str()) => vec![value.as_str()],
+            Value::String(value) if multi => value.split(", ").collect(),
+            _ => return Err("Question answer must contain selected options".into()),
+        };
+        if selections.is_empty() || (!multi && selections.len() != 1) { return Err("Invalid number of selected options".into()); }
+        let mut unique = HashSet::new();
+        for selection in &selections {
+            if !labels.contains(selection) || !unique.insert(*selection) { return Err("Unknown or duplicate selected option".into()); }
+        }
+        normalized.insert(key.to_owned(), json!(selections));
+    }
+    Ok(Value::Object(normalized))
+}
+
+fn prepare_answer(pending: &Value, verdict: &str, answers: Option<Value>, at: u64) -> Result<Value, String> {
+    if pending["until"].as_u64().unwrap_or(0) <= at { return Err("The agent request has expired".into()); }
+    let normalized = if verdict == "answer" {
+        if pending["kind"] != "question" { return Err("This request does not accept question answers".into()); }
+        Some(question_answers(&pending["questions"], &answers.ok_or("Question answers are required")?)?)
+    } else {
+        if answers.as_ref().is_some_and(|value| !value.is_null()) { return Err("Permission replies cannot contain answers".into()); }
+        if verdict == "allow" && pending["kind"] == "question" { return Err("Select an answer or continue in the terminal".into()); }
+        None
+    };
+    Ok(json!({"verdict":verdict,"answers":normalized,"at":at}))
+}
+
 pub fn answer(id:&str,verdict:&str,answers:Option<Value>)->Result<bool,String>{
     if !valid_request_id(id){return Err("Invalid request ID".into());}
     if !["allow","deny","terminal","answer"].contains(&verdict){return Err("Invalid verdict".into());}
     let live=LIVE.lock().map_err(|_|"Agent state lock poisoned")?;
     let pending=live.iter().find_map(|event|event.get("ask").filter(|ask|ask["id"].as_str()==Some(id))).ok_or("The agent request has expired")?;
-    if pending["until"].as_u64().unwrap_or(0)<now(){return Err("The agent request has expired".into());}
-    if verdict=="answer"{return Err("This bridge supports permission replies; answer questions in the agent terminal".into());}
-    write_json(&event_dir().join("answers").join(format!("{id}.json")),&json!({"verdict":verdict,"answers":answers,"at":now()}))?;
+    let value = prepare_answer(pending, verdict, answers, now())?;
+    let destination = event_dir().join("answers").join(format!("{id}.json"));
+    if destination.exists() { return Err("The agent request was already answered".into()); }
+    write_json(&destination, &value)?;
     Ok(true)
 }
 
 pub fn start(app:AppHandle){std::thread::spawn(move||{
     let directory=event_dir();let _=fs::create_dir_all(&directory);let mut seen_asks=HashSet::new();let mut finished_asks=HashSet::new();let mut seen_cards=HashSet::new();let mut previous=Vec::<Value>::new();
+    let mut cache = HashMap::<PathBuf, (SystemTime, u64, Option<Value>)>::new();
+    let mut heartbeat_at = 0u64;
     loop {
-        let _=write_json(&directory.join("heartbeat.json"),&json!({"at":now()}));
+        let at = now();
+        if at.saturating_sub(heartbeat_at) >= 1000 { let _=write_json(&directory.join("heartbeat.json"),&json!({"at":at})); heartbeat_at=at; }
         let mut live=Vec::new();
-        if let Ok(entries)=fs::read_dir(&directory){for entry in entries.flatten().take(1000){let path=entry.path();if path.file_name().and_then(|name|name.to_str())==Some("heartbeat.json")||path.extension().and_then(|ext|ext.to_str())!=Some("json"){continue;}if entry.metadata().is_ok_and(|meta|meta.len()>65536){continue;}if let Ok(event)=config_json(&path){let age=now().saturating_sub(event["at"].as_u64().unwrap_or(0));let ttl=if event["state"]=="done"{15000}else{600000};if age<=ttl&&["claude","codex","opencode"].contains(&event["agent"].as_str().unwrap_or("")){live.push(event);}}}}
+        let mut present = HashSet::new();
+        if let Ok(entries)=fs::read_dir(&directory){for entry in entries.flatten().take(1000){
+            let path=entry.path();if path.file_name().and_then(|name|name.to_str())==Some("heartbeat.json")||path.extension().and_then(|ext|ext.to_str())!=Some("json"){continue;}
+            let Ok(metadata)=entry.metadata() else {continue;}; if metadata.len()>65536 {continue;}
+            let stamp=metadata.modified().unwrap_or(UNIX_EPOCH);
+            present.insert(path.clone());
+            let changed=cache.get(&path).is_none_or(|(modified,size,_)|*modified!=stamp||*size!=metadata.len());
+            if changed {cache.insert(path.clone(), (stamp,metadata.len(),config_json(&path).ok()));}
+            if let Some(event)=cache.get(&path).and_then(|(_,_,event)|event.as_ref()){
+                let age=at.saturating_sub(event["at"].as_u64().unwrap_or(0));let ttl=if event["state"]=="done"{15000}else{600000};if age<=ttl&&["claude","codex","opencode"].contains(&event["agent"].as_str().unwrap_or("")){live.push(event.clone());}
+            }
+        }}
+        cache.retain(|path,_|present.contains(path));
         live.sort_by_key(|event|event["at"].as_u64().unwrap_or(0));
         for event in &live {
             if let Some(ask)=event.get("ask"){if let Some(id)=ask["id"].as_str().filter(|id|valid_request_id(id)){let finished=directory.join("answers").join(format!("{id}.json")).exists()||ask["until"].as_u64().unwrap_or(0)<=now();if finished{if finished_asks.insert(id.to_owned()){let _=app.emit("agents:ask-done",id);}}else if seen_asks.insert(id.to_owned()){let _=app.emit("agents:ask",ask);}}}
@@ -153,13 +210,37 @@ pub fn start(app:AppHandle){std::thread::spawn(move||{
         }
         if live!=previous{if let Ok(mut state)=LIVE.lock(){*state=live.clone();}let _=app.emit("agents:update",&live);previous=live;}
         if seen_cards.len()>1000{seen_cards.clear();}if seen_asks.len()>1000{seen_asks.clear();}if finished_asks.len()>1000{finished_asks.clear();}
-        std::thread::sleep(Duration::from_millis(400));
+        let pending=previous.iter().any(|event|event.get("ask").is_some_and(|ask|ask["until"].as_u64().unwrap_or(0)>at&&!finished_asks.contains(ask["id"].as_str().unwrap_or(""))));
+        std::thread::sleep(Duration::from_millis(if pending {400} else {1000}));
     }
 });}
 
 #[cfg(test)]
 mod tests{
     use super::*;
+    fn questions() -> Value { json!([
+        {"question":"Какой режим?","options":[{"label":"Быстро"},{"label":"Качественно"}],"multiSelect":false},
+        {"question":"Что включить?","options":[{"label":"A, B"},{"label":"C"},{"label":"D"}],"multiSelect":true}
+    ]) }
+    #[test] fn question_answers_preserve_unicode_comma_labels_and_multiselect() {
+        assert_eq!(question_answers(&questions(), &json!({"Какой режим?":"Качественно","Что включить?":["A, B","C"]})).unwrap(), json!({"Какой режим?":["Качественно"],"Что включить?":["A, B","C"]}));
+        assert_eq!(question_answers(&questions(), &json!({"Какой режим?":"Быстро","Что включить?":"C, D"})).unwrap()["Что включить?"], json!(["C","D"]));
+    }
+    #[test] fn question_answers_reject_missing_foreign_duplicate_wrong_type_and_single_multi_values() {
+        for answers in [json!({"Какой режим?":"Быстро"}), json!({"Какой режим?":"Быстро","Другой":"C"}), json!({"Какой режим?":["Быстро","Качественно"],"Что включить?":["C"]}), json!({"Какой режим?":"Быстро","Что включить?":["C","C"]}), json!({"Какой режим?":"Быстро","Что включить?":["missing"]}), json!({"Какой режим?":"Быстро","Что включить?":[]}), json!({"Какой режим?":true,"Что включить?":["C"]}), json!({"Какой режим?":"Быстро","Что включить?":["C"],"extra":"D"})] {
+            assert!(question_answers(&questions(), &answers).is_err(), "{answers}");
+        }
+    }
+    #[test] fn answer_contract_enforces_request_kind_and_expiry() {
+        let permission = json!({"kind":"permission","until":100});
+        assert_eq!(prepare_answer(&permission,"allow",None,99).unwrap()["verdict"], "allow");
+        assert!(prepare_answer(&permission,"allow",None,100).is_err());
+        assert!(prepare_answer(&permission,"answer",Some(json!({})),99).is_err());
+        assert!(prepare_answer(&permission,"deny",Some(json!({"extra":true})),99).is_err());
+        let question = json!({"kind":"question","until":100,"questions":questions()});
+        assert!(prepare_answer(&question,"allow",None,99).is_err());
+        assert!(prepare_answer(&question,"answer",Some(json!({"Какой режим?":"Быстро","Что включить?":["C"]})),99).is_ok());
+    }
     #[test]fn permission_ids_cannot_escape_the_answer_directory(){
         assert!(valid_request_id("01a1cb92-4ea1-7620-bdca-79aa122878ff"));
         for id in ["", "../outside", "..\\outside", "C:\\outside", "request.json", "request/other"] {assert!(!valid_request_id(id));}

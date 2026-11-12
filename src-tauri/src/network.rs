@@ -4,6 +4,26 @@ use windows::{core::{GUID, PCWSTR}, Win32::{Foundation::{HANDLE, BOOL}, NetworkM
 use std::{path::PathBuf, process::Stdio, sync::Mutex, time::{Duration,Instant}};
 
 static VPN_CACHE: Mutex<Option<(Instant,Vec<Value>)>> = Mutex::new(None);
+static CUSTOM_VPN: Mutex<Option<CustomVpn>> = Mutex::new(None);
+static CUSTOM_VPN_ON: Mutex<bool> = Mutex::new(false);
+static VPN_ACTION: Mutex<()> = Mutex::new(());
+
+#[derive(Clone, PartialEq)]
+struct CustomVpn { name: String, connect: String, disconnect: String, elevated: bool }
+
+fn custom_vpn(settings: &Value) -> Option<CustomVpn> {
+    let name = settings["vpnCustomName"].as_str()?.trim().to_owned();
+    let connect = settings["vpnCustomOn"].as_str()?.trim().to_owned();
+    let disconnect = settings["vpnCustomOff"].as_str()?.trim().to_owned();
+    if name.is_empty() || name.len() > 100 || [connect.as_str(),disconnect.as_str()].iter().any(|s|s.is_empty() || s.len() > 16384 || s.contains('\0')) { return None; }
+    Some(CustomVpn { name, connect, disconnect, elevated:settings["vpnCustomAdmin"].as_bool().unwrap_or(false) })
+}
+
+pub fn configure_vpn(settings: &Value) {
+    let next = custom_vpn(settings);
+    let mut saved = CUSTOM_VPN.lock().unwrap_or_else(|e|e.into_inner());
+    if *saved != next { *saved = next; *CUSTOM_VPN_ON.lock().unwrap_or_else(|e|e.into_inner()) = false; vpn_refresh(); }
+}
 
 struct Wlan(HANDLE);
 impl Wlan {
@@ -179,10 +199,96 @@ fn warp_path()->Option<PathBuf>{
     let program=std::env::var_os("ProgramFiles").map(PathBuf::from).map(|p|p.join("Cloudflare/Cloudflare WARP/warp-cli.exe"));
     program.filter(|p|p.is_file()).or_else(||std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()).map(|p|p.join("warp-cli.exe")).find(|p|p.is_file()))
 }
+
+fn tunnel_service(name: &str) -> Option<(&'static str, &str)> {
+    let (prefix, profile) = name.split_once('$')?;
+    let brand = if prefix.eq_ignore_ascii_case("AmneziaWGTunnel") { "AmneziaWG" } else if prefix.eq_ignore_ascii_case("WireGuardTunnel") { "WireGuard" } else { return None; };
+    if profile.is_empty() || profile.len() > 200 || profile.contains(['\0','/','\\']) { return None; }
+    Some((brand,profile))
+}
+
+fn tunnel_names() -> Vec<String> {
+    use windows::{core::{w, PWSTR}, Win32::System::Registry::*};
+    unsafe {
+        let mut key = HKEY::default();
+        if RegOpenKeyExW(HKEY_LOCAL_MACHINE,w!("SYSTEM\\CurrentControlSet\\Services"),0,KEY_READ,&mut key).is_err() { return Vec::new(); }
+        let mut names = Vec::new();
+        for index in 0..8192 {
+            let mut buffer = [0u16;512];
+            let mut len = buffer.len() as u32;
+            let result = RegEnumKeyExW(key,index,PWSTR(buffer.as_mut_ptr()),&mut len,None,PWSTR::null(),None,None);
+            if result.0 == 259 { break; }
+            if result.is_ok() { let name=String::from_utf16_lossy(&buffer[..len as usize]); if tunnel_service(&name).is_some() { names.push(name); } }
+        }
+        let _ = RegCloseKey(key);
+        names
+    }
+}
+
+struct ServiceHandle(windows::Win32::System::Services::SC_HANDLE);
+impl Drop for ServiceHandle { fn drop(&mut self) { unsafe { let _ = windows::Win32::System::Services::CloseServiceHandle(self.0); } } }
+fn service_handle(name: &str, access: u32) -> Result<ServiceHandle,String> {
+    use windows::Win32::System::Services::*;
+    let manager = ServiceHandle(unsafe { OpenSCManagerW(PCWSTR::null(),PCWSTR::null(),SC_MANAGER_CONNECT) }.map_err(|e|e.to_string())?);
+    let name = wide(name);
+    unsafe { OpenServiceW(manager.0,PCWSTR(name.as_ptr()),access) }.map(ServiceHandle).map_err(|e|format!("Windows denied VPN service access; run Woods Island as administrator: {e}"))
+}
+fn service_state(service: &ServiceHandle) -> Result<windows::Win32::System::Services::SERVICE_STATUS_CURRENT_STATE,String> {
+    use windows::Win32::System::Services::*;
+    let mut status = SERVICE_STATUS::default();
+    unsafe { QueryServiceStatus(service.0,&mut status) }.map_err(|e|e.to_string())?;
+    Ok(status.dwCurrentState)
+}
+fn tunnel_profiles() -> Vec<Value> {
+    use windows::Win32::System::Services::*;
+    tunnel_names().into_iter().filter_map(|name| {
+        let (brand,profile) = tunnel_service(&name)?;
+        let service = service_handle(&name,SERVICE_QUERY_STATUS).ok()?;
+        let status = service_state(&service).ok()?;
+        Some(json!({"id":format!("service:{name}"),"name":format!("{brand} · {profile}"),"on":status==SERVICE_RUNNING,"ready":true,"via":brand,"onSource":"service","busy":status==SERVICE_START_PENDING || status==SERVICE_STOP_PENDING}))
+    }).collect()
+}
+
+fn installed_vpn_clients() -> Vec<Value> {
+    let definitions = [
+        ("amneziawg","AmneziaWG","AmneziaWG/amneziawg.exe"),
+        ("hiddify","Hiddify","Hiddify/Hiddify.exe"),
+        ("proton","Proton VPN","Proton/VPN/ProtonVPN.Launcher.exe"),
+        ("radmin","Radmin VPN","Radmin VPN/RvRvpnGui.exe"),
+        ("v2raytun","v2RayTun","v2RayTun/v2RayTun.exe"),
+        ("wireguard","WireGuard","WireGuard/wireguard.exe"),
+    ];
+    definitions.iter().filter_map(|(id,name,relative)| {
+        let path = ["ProgramFiles","ProgramFiles(x86)","LOCALAPPDATA"].iter().filter_map(std::env::var_os).map(PathBuf::from).map(|base|base.join(relative)).find(|path|path.is_file())?;
+        Some(json!({"id":format!("app:{id}"),"name":name,"on":false,"ready":false,"launchPath":path.to_string_lossy(),"reason":if ["amneziawg","wireguard"].contains(id){"Откройте клиент и установите туннель как службу для управления из Woods Island"}else{"Откройте клиент или настройте команды VPN в Woods Island"}}))
+    }).collect()
+}
+
+fn warp_connected(output: &str) -> bool {
+    output.lines().any(|line| { let value = line.trim().trim_start_matches("Status update:").trim(); value == "Connected" || value.starts_with("Connected to ") })
+}
+fn warp_status(path: &std::path::Path) -> Option<bool> {
+    use std::io::Read;
+    let mut child = crate::system::command(path.to_string_lossy().as_ref()).arg("status").stdout(Stdio::piped()).spawn().ok()?;
+    let at = Instant::now();
+    loop {
+        if let Some(status) = child.try_wait().ok()? {
+            if !status.success() { return None; }
+            let mut output = String::new();
+            child.stdout.take()?.take(65536).read_to_string(&mut output).ok()?;
+            return Some(warp_connected(&output));
+        }
+        if at.elapsed() >= Duration::from_secs(2) { let _=child.kill(); let _=child.wait(); return None; }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
 pub fn vpn_profiles()->Vec<Value>{
     if let Some((at,profiles))=VPN_CACHE.lock().unwrap().as_ref(){if at.elapsed()<Duration::from_secs(15){return profiles.clone();}}
     let mut profiles=ras_profiles();
-    if let Some(path)=warp_path(){let output=crate::system::command(path.to_string_lossy().as_ref()).arg("status").stdout(Stdio::piped()).output().ok();let on=output.filter(|o|o.status.success()).map(|o|String::from_utf8_lossy(&o.stdout).contains("Connected")).unwrap_or(false);profiles.push(json!({"id":"app:warp","name":"Cloudflare WARP","on":on,"ready":true}));}
+    profiles.extend(tunnel_profiles());
+    profiles.extend(installed_vpn_clients());
+    if let Some(path)=warp_path(){let on=warp_status(&path);profiles.push(json!({"id":"app:warp","name":"Cloudflare WARP","on":on.unwrap_or(false),"ready":on.is_some(),"onSource":"client","launchPath":path.parent().map(|p|p.join("Cloudflare WARP.exe")).map(|p|p.to_string_lossy().into_owned())}));}
+    if let Some(custom)=CUSTOM_VPN.lock().unwrap_or_else(|e|e.into_inner()).as_ref(){profiles.push(json!({"id":"app:custom","name":custom.name,"on":*CUSTOM_VPN_ON.lock().unwrap_or_else(|e|e.into_inner()),"ready":true,"onSource":"command"}));}
     *VPN_CACHE.lock().unwrap()=Some((Instant::now(),profiles.clone()));profiles
 }
 pub fn vpn_refresh(){*VPN_CACHE.lock().unwrap()=None;}
@@ -203,6 +309,30 @@ pub fn start_controls_monitor(app: tauri::AppHandle, state: std::sync::Arc<crate
     });
 }
 pub fn vpn_toggle(id:&str,on:bool)->Result<(),String>{
+    let _action = VPN_ACTION.try_lock().map_err(|_|"A VPN action is already running")?;
+    if id == "app:custom" {
+        let custom = CUSTOM_VPN.lock().unwrap_or_else(|e|e.into_inner()).clone().ok_or("Configure both custom VPN commands first")?;
+        crate::system::run_vpn_command(if on{&custom.connect}else{&custom.disconnect},custom.elevated)?;
+        *CUSTOM_VPN_ON.lock().unwrap_or_else(|e|e.into_inner()) = on;
+        vpn_refresh();
+        return Ok(());
+    }
+    if let Some(name) = id.strip_prefix("service:") {
+        use windows::Win32::System::Services::*;
+        if tunnel_service(name).is_none() { return Err("Unsupported VPN service".into()); }
+        let service = service_handle(name,SERVICE_QUERY_STATUS | if on{SERVICE_START}else{SERVICE_STOP})?;
+        let target = if on{SERVICE_RUNNING}else{SERVICE_STOPPED};
+        if service_state(&service)? != target {
+            unsafe { if on{StartServiceW(service.0,None)}else{ControlService(service.0,SERVICE_CONTROL_STOP,&mut SERVICE_STATUS::default())} }.map_err(|e|e.to_string())?;
+            let at = Instant::now();
+            while service_state(&service)? != target {
+                if at.elapsed() >= Duration::from_secs(15) { vpn_refresh(); return Err("VPN tunnel did not reach the requested state within 15 seconds".into()); }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        }
+        vpn_refresh();
+        return Ok(());
+    }
     let status=if id=="app:warp"{let path=warp_path().ok_or("Cloudflare WARP is not installed")?;crate::system::command(path.to_string_lossy().as_ref()).arg(if on{"connect"}else{"disconnect"}).status().map_err(|e|e.to_string())?}
     else if let Some(name)=id.strip_prefix("ras:"){let mut command=crate::system::command("rasdial.exe");command.arg(name);if !on{command.arg("/disconnect");}command.status().map_err(|e|e.to_string())?}
     else{return Err("VPN profile is unavailable".into());};
@@ -212,6 +342,22 @@ pub fn vpn_toggle(id:&str,on:bool)->Result<(),String>{
 
 #[cfg(test)]mod tests{
     use super::*;
+    #[test]fn custom_commands_require_both_actions_and_reject_nulls(){
+        let valid=json!({"vpnCustomName":"Local VPN","vpnCustomOn":"& 'C:\\VPN Client\\vpn.exe' connect","vpnCustomOff":"& 'C:\\VPN Client\\vpn.exe' disconnect","vpnCustomAdmin":true});
+        let parsed=custom_vpn(&valid).unwrap();assert_eq!(parsed.name,"Local VPN");assert!(parsed.elevated);
+        for field in ["vpnCustomName","vpnCustomOn","vpnCustomOff"]{let mut invalid=valid.clone();invalid[field]=json!("");assert!(custom_vpn(&invalid).is_none());}
+        let mut invalid=valid.clone();invalid["vpnCustomOn"]=json!("connect\0hidden");assert!(custom_vpn(&invalid).is_none());
+        invalid["vpnCustomOn"]=json!("x".repeat(16385));assert!(custom_vpn(&invalid).is_none());
+    }
+    #[test]fn warp_status_does_not_treat_disconnected_or_error_as_connected(){
+        assert!(warp_connected("Status update: Connected\n"));assert!(warp_connected("Connected to Example\r\n"));
+        for text in ["Disconnected","Not Connected","Error: Connected service missing","Status update: Disconnected","Connecting"]{assert!(!warp_connected(text),"{text}");}
+    }
+    #[test]fn tunnel_services_are_restricted_to_registered_vpn_prefixes(){
+        assert_eq!(tunnel_service("AmneziaWGTunnel$home"),Some(("AmneziaWG","home")));
+        assert_eq!(tunnel_service("WireGuardTunnel$Office"),Some(("WireGuard","Office")));
+        for name in ["ProtonVPN Service","Spooler","AmneziaWGTunnel$","WireGuardTunnel$../other","WireGuardTunnel$other\\path"]{assert!(tunnel_service(name).is_none());}
+    }
     #[test]fn wifi_xml_encodes_literal_characters(){assert_eq!(xml_escape("a&<\"'"),"a&amp;&lt;&quot;&apos;");}
     #[test]fn utf16_stops_at_null(){assert_eq!(string(&[65,66,0,67]),"AB");}
     #[test]fn virtual_ethernet_and_wifi_cannot_replace_the_physical_adapter(){

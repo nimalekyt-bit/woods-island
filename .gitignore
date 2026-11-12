@@ -2,6 +2,8 @@ node_modules/
 dist/
 dist-prototype/
 dist-portable/
+Woods-Island-*-windows-x64.zip
+Woods-Island-*-windows-x64.zip.sha256
 src-tauri/target/
 src-tauri/gen/
 *.exe
