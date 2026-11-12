@@ -1,0 +1,199 @@
+{
+  "date": "2026-11-12",
+  "task": "TASK-1415",
+  "passiveQa": true,
+  "sha256": "9f77eabb0e957f14740dbae97848fb70846c5b9b428e92cade54f1e660b06392",
+  "baseline": {
+    "baseline": true,
+    "passiveQa": true,
+    "sha256": "c2ec1214c04c9491189026022b72983e5d4841324568ed70f53675aac9864fbc",
+    "startupMs": 965,
+    "controlsGetMs": [
+      1480.2,
+      23.4,
+      23.1,
+      29.3,
+      48.4,
+      27.6
+    ],
+    "panelReadyMs": 72,
+    "ethernet": null,
+    "physicalAdapter": false,
+    "tileOn": "none",
+    "focused": false,
+    "frontendErrors": []
+  },
+  "controls": {
+    "baseline": false,
+    "passiveQa": true,
+    "sha256": "9f77eabb0e957f14740dbae97848fb70846c5b9b428e92cade54f1e660b06392",
+    "startupMs": 1643,
+    "controlsGetMs": [
+      56.9,
+      80.2,
+      5.3,
+      118,
+      77.4,
+      14.5
+    ],
+    "panelReadyMs": 125,
+    "ethernet": true,
+    "physicalAdapter": true,
+    "tileOn": "true",
+    "focused": false,
+    "frontendErrors": []
+  },
+  "native": {
+    "sha256": "9f77eabb0e957f14740dbae97848fb70846c5b9b428e92cade54f1e660b06392",
+    "passed": 35,
+    "skipped": 1,
+    "frontendErrors": 0,
+    "results": [
+      {
+        "name": "Main UI mounts",
+        "ok": true
+      },
+      {
+        "name": "No Windows caption; DPI bounds match canvas",
+        "ok": true
+      },
+      {
+        "name": "Bootstrap uses real audio device",
+        "ok": true
+      },
+      {
+        "name": "Chosen audio endpoint changes monitoring without rerouting sound",
+        "ok": true
+      },
+      {
+        "name": "Capture visibility setting changes native display protection",
+        "ok": true
+      },
+      {
+        "name": "Chosen microphone remains readable without recording or mute changes",
+        "ok": true
+      },
+      {
+        "name": "Native notification and network reads return usable contracts",
+        "ok": true
+      },
+      {
+        "name": "Settings merge + persist, toggles do not crash",
+        "ok": true
+      },
+      {
+        "name": "Island scale changes physical size, viewport and clip bounds together",
+        "ok": true
+      },
+      {
+        "name": "Weather search works offline for Брянск",
+        "ok": true
+      },
+      {
+        "name": "Media source and playback contracts",
+        "ok": true
+      },
+      {
+        "name": "Weather opens, switches hours/week and units, and rejects legacy data",
+        "ok": true
+      },
+      {
+        "name": "Live Yandex connector reaches the rendered pill with cover and advancing time",
+        "ok": true,
+        "skipped": true
+      },
+      {
+        "name": "LRCLIB milliseconds highlight, advance, pause and seek the rendered lyrics",
+        "ok": true
+      },
+      {
+        "name": "WASAPI follows the active player output and animates the liquid spectrum",
+        "ok": true
+      },
+      {
+        "name": "Repeated hover keeps the folded pill visible and native styles unchanged",
+        "ok": true
+      },
+      {
+        "name": "Click expands, Escape collapses",
+        "ok": true
+      },
+      {
+        "name": "Native desktop pixels outside collapsed and expanded island have no glass tint",
+        "ok": true
+      },
+      {
+        "name": "Notes/chat/timer/launcher groups round-trip",
+        "ok": true
+      },
+      {
+        "name": "Launcher link and shelf persist",
+        "ok": true
+      },
+      {
+        "name": "Agents state and config ownership are read without changing fixtures",
+        "ok": true
+      },
+      {
+        "name": "Web AI read contract and invalid service rejection",
+        "ok": true
+      },
+      {
+        "name": "Attachments return document/image contracts and missing-file errors",
+        "ok": true
+      },
+      {
+        "name": "AI models, UTF-8 streaming, attachment resolution and HTTP error events",
+        "ok": true
+      },
+      {
+        "name": "OBS v5 handshake authenticates, reads state and rejects bad password",
+        "ok": true
+      },
+      {
+        "name": "Native screen capture produces real PNG and dimensions",
+        "ok": true
+      },
+      {
+        "name": "Windows OCR recognizes actual rendered text from a PNG",
+        "ok": true
+      },
+      {
+        "name": "MP4 screen recording contains video and WASAPI system audio",
+        "ok": true
+      },
+      {
+        "name": "Image editor loads and saves its isolated fixture without clipboard writes",
+        "ok": true
+      },
+      {
+        "name": "Settings UI renders after repeated harmless toggles",
+        "ok": true
+      },
+      {
+        "name": "Notes button exports Markdown to Obsidian without overwriting files",
+        "ok": true
+      },
+      {
+        "name": "Steam progress and completion use actual manifest changes",
+        "ok": true
+      },
+      {
+        "name": "Virtual desktop telemetry reaches the real frontend store",
+        "ok": true
+      },
+      {
+        "name": "Restart restores settings, notes, chat, timer, launcher and shelf",
+        "ok": true
+      },
+      {
+        "name": "No unhandled frontend exceptions",
+        "ok": true
+      },
+      {
+        "name": "Explicit quit exits the application",
+        "ok": true
+      }
+    ]
+  }
+}

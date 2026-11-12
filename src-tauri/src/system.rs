@@ -140,13 +140,18 @@ pub fn autostart(enabled: bool) -> Result<(), String> {
     }
 }
 
-pub fn radio_state(kind: windows::Devices::Radios::RadioKind) -> Option<bool> {
-    let _apartment = crate::audio::WinRtApartment::new().ok()?;
-    let radios = windows::Devices::Radios::Radio::GetRadiosAsync().ok()?.get().ok()?;
+fn radio_states() -> (Option<bool>, Option<bool>) {
+    let mut states = (None, None);
+    let Ok(_apartment) = crate::audio::WinRtApartment::new() else { return states; };
+    let Ok(radios) = windows::Devices::Radios::Radio::GetRadiosAsync().and_then(|op| op.get()) else { return states; };
+    use windows::Devices::Radios::{RadioKind, RadioState};
     for radio in &radios {
-        if radio.Kind().ok()? == kind { return Some(radio.State().ok()? == windows::Devices::Radios::RadioState::On); }
+        let (Ok(kind), Ok(state)) = (radio.Kind(), radio.State()) else { continue; };
+        let slot = if kind == RadioKind::WiFi { &mut states.0 }
+            else if kind == RadioKind::Bluetooth { &mut states.1 } else { continue; };
+        *slot = Some(slot.unwrap_or(false) || state == RadioState::On);
     }
-    None
+    states
 }
 
 pub fn radio_set(kind: windows::Devices::Radios::RadioKind, on: bool) -> Result<(), String> {
@@ -167,7 +172,9 @@ pub fn controls() -> Value {
     let mut light = 0u32;
     let mut size = 4u32;
     let dark = unsafe { RegGetValueW(HKEY_CURRENT_USER, w!("Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"), w!("AppsUseLightTheme"), RRF_RT_REG_DWORD, None, Some(&mut light as *mut _ as _), Some(&mut size)).is_ok() }.then_some(light == 0);
-    json!({"wifi":radio_state(windows::Devices::Radios::RadioKind::WiFi),"bluetooth":radio_state(windows::Devices::Radios::RadioKind::Bluetooth),"ethernet":null,"dark":dark,"canSleep":unsafe{windows::Win32::System::Power::IsPwrSuspendAllowed().as_bool()},"vpns":[]})
+    let (wifi, bluetooth) = radio_states();
+    let ethernet = crate::network::ethernet_adapter();
+    json!({"wifi":wifi,"bluetooth":bluetooth,"ethernet":ethernet.as_ref().map(|a|a["connected"].as_bool().unwrap_or(false)),"ethernetAdapter":ethernet,"dark":dark,"canSleep":unsafe{windows::Win32::System::Power::IsPwrSuspendAllowed().as_bool()},"vpns":[]})
 }
 
 #[cfg(test)]
