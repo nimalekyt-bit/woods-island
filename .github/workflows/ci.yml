@@ -28,7 +28,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Verify owner-only history
-        run: pnpm check:authors
+        env:
+          WOODS_OWNER_HISTORY_REF: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/check-commit-owners.mjs $env:WOODS_OWNER_HISTORY_REF
       - name: Verify runtime and hooks
         run: |
           pnpm build
