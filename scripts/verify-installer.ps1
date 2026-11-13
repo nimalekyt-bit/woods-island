@@ -334,7 +334,15 @@ function Uninstall-Application([string]$ExpectedRunValue,[bool]$ShouldRemoveRunV
   Assert-True (Test-Path -LiteralPath $uninstaller -PathType Leaf) 'NSIS uninstall.exe missing'
   $taskResults.Add((Invoke-CheckedProcess $uninstaller @('/S') $Label))
   $deadline=[DateTime]::UtcNow.AddSeconds(45)
-  while ((Test-Path -LiteralPath $taskInstalledExe) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 250 }
+  # NSIS relocates its uninstaller to a temporary process. Removing the main
+  # EXE happens before shortcuts, registration and our final Run-value hook.
+  # Wait for the entire cleanup, then retain every independent assertion.
+  do {
+    $runValue=(Get-ItemProperty -LiteralPath $taskRunKey -Name $taskRunValueName -ErrorAction SilentlyContinue).$taskRunValueName
+    $runCleanupPending=if ($ShouldRemoveRunValue) { -not [string]::IsNullOrEmpty($runValue) } else { $runValue -ne $ExpectedRunValue }
+    $cleanupPending=(Test-Path -LiteralPath $taskInstalledExe) -or (Woods-Registrations).Count -ne 0 -or (Shortcut-Paths).Count -ne 0 -or $runCleanupPending
+    if ($cleanupPending) { Start-Sleep -Milliseconds 250 }
+  } while ($cleanupPending -and [DateTime]::UtcNow -lt $deadline)
   Assert-True (-not (Test-Path -LiteralPath $taskInstalledExe)) 'Uninstall left the application executable'
   Assert-True ((Woods-Registrations).Count -eq 0) 'Uninstall left application registration'
   Assert-True ((Shortcut-Paths).Count -eq 0) 'Uninstall left application shortcuts'
