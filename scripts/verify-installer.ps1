@@ -38,11 +38,11 @@ function File-Proof([string]$Path) {
   $item=Get-Item -LiteralPath $Path
   [pscustomobject]@{Path=$item.FullName;Bytes=$item.Length;SHA256=(Get-FileHash -Algorithm SHA256 -LiteralPath $item.FullName).Hash.ToLowerInvariant()}
 }
-function Invoke-CheckedProcess([string]$File,[string[]]$Arguments,[string]$Label,[int]$TimeoutSeconds=600) {
+function Invoke-CheckedProcess([string]$File,[string[]]$Arguments,[string]$Label,[int]$TimeoutSeconds=600,[int[]]$AllowedExitCodes=@(0)) {
   $process=Start-Process -FilePath $File -ArgumentList $Arguments -PassThru -WindowStyle Hidden
   if (-not $process.WaitForExit($TimeoutSeconds*1000)) { $process.Kill(); throw "$Label timed out" }
   $process.Refresh()
-  Assert-True ($process.ExitCode -eq 0) "$Label returned $($process.ExitCode)"
+  Assert-True ($process.ExitCode -in $AllowedExitCodes) "$Label returned $($process.ExitCode)"
   [pscustomobject]@{Label=$Label;ExitCode=$process.ExitCode}
 }
 function Woods-Registrations {
@@ -165,7 +165,10 @@ function Remove-RunnerWebViewRuntime {
       if (-not (Test-Path -LiteralPath $setup)) { continue }
       $arguments=@('--uninstall','--msedgewebview','--force-uninstall','--verbose-logging')
       if ($runtimeRoot.System) { $arguments+='--system-level' }
-      $taskResults.Add((Invoke-CheckedProcess $setup $arguments 'Official WebView2 uninstall on disposable runner'))
+      # Chromium installer status 19 means UNINSTALL_SUCCESSFUL. Keep this
+      # exception scoped to Microsoft's runtime remover; our Setup must return 0.
+      # The WebView2 API absence assertion below still validates the precondition.
+      $taskResults.Add((Invoke-CheckedProcess $setup $arguments 'Official WebView2 uninstall on disposable runner' 600 @(0,19)))
     }
   }
   $deadline=[DateTime]::UtcNow.AddSeconds(45)
@@ -224,6 +227,11 @@ function Installed-Smoke([bool]$Legacy=$false,[string]$Executable=$taskInstalled
     $output=@(& node $adapter $Executable 2>&1); $nativeExit=$LASTEXITCODE
     $log=Join-Path $taskRoot ('installed-smoke-'+[guid]::NewGuid().ToString('N')+'.log')
     $output | ForEach-Object { $_.ToString() } | Set-Content -LiteralPath $log -Encoding utf8
+    if ($nativeExit -ne 0) {
+      $detail=($output | ForEach-Object { $_.ToString() } | Select-Object -Last 14) -join "`n"
+      $detail=$detail.Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
+      Write-Output ('::error title=Installed native smoke output::'+$detail)
+    }
     Assert-True ($nativeExit -eq 0) "Installed-location native smoke failed; see $log"
     $line=@($output | ForEach-Object { $_.ToString() } | Where-Object { $_ -like 'REPORT *' })
     Assert-True ($line.Count -eq 1) 'Native smoke did not produce exactly one raw report'
