@@ -240,6 +240,7 @@ $policy=@(foreach ($key in @('HKLM:\SOFTWARE\Policies\Microsoft\Edge','HKCU:\SOF
   Assert-True ($LASTEXITCODE -eq 0) 'Installed-location harness adapter has a syntax error'
   $keys=@('WOODS_TEST_FILTER','WOODS_TEST_EXPECT_CODEX','WOODS_TEST_EXPECT_AUDIO','WOODS_INSTALLER_QA_ROOT','WOODS_INSTALLER_QA_DATA','WOODS_INSTALLER_QA_APPDATA','WOODS_INSTALLER_QA_EXPECT_SETTINGS','WOODS_INSTALLER_QA_TRANSPORT_SCRIPT','TEMP','TMP')
   $saved=@{}; foreach ($key in $keys) { $saved[$key]=[Environment]::GetEnvironmentVariable($key,'Process') }
+  $policySnapshots=[Collections.Generic.List[object]]::new()
   try {
     $env:WOODS_INSTALLER_QA_ROOT=$taskRoot; $env:WOODS_INSTALLER_QA_DATA=$taskDataDir; $env:WOODS_INSTALLER_QA_APPDATA=$taskAppData
     $env:WOODS_INSTALLER_QA_EXPECT_SETTINGS=$taskPortableMigrationSettings
@@ -247,6 +248,27 @@ $policy=@(foreach ($key in @('HKLM:\SOFTWARE\Policies\Microsoft\Edge','HKCU:\SOF
     $env:TEMP=$taskRoot; $env:TMP=$taskRoot
     $env:WOODS_TEST_EXPECT_CODEX=$null; $env:WOODS_TEST_EXPECT_AUDIO=$null
     $env:WOODS_TEST_FILTER=if ($Legacy) { '^Main UI mounts$' } else { '^(Main UI mounts|Settings and image editor renderers are absent until requested|Settings UI renders after repeated harmless toggles)$' }
+    # Hosted Windows runs elevated. WebView2 ignores WEBVIEW2_* environment
+    # overrides for elevated hosts, but honors exact-app HKLM policies.
+    # https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/security#for-an-elevated-host-app-use-appropriate-override-flags
+    Assert-HostedWindowsRunner
+    $qaPort=if ($env:WOODS_TEST_CDP_PORT) { [int]$env:WOODS_TEST_CDP_PORT } else { 9334 }
+    Assert-True ($qaPort -ge 1024 -and $qaPort -lt 65535 -and $qaPort -ne 3003 -and ($qaPort+1) -ne 3003) 'Invalid isolated QA debugging port'
+    $policyRoot='HKLM:\SOFTWARE\Policies\Microsoft\Edge\WebView2'
+    $policyValues=@{
+      AdditionalBrowserArguments="--remote-debugging-port=$qaPort"
+      UserDataFolder=(Join-Path $taskRoot ('policy-webview-'+[guid]::NewGuid().ToString('N')))
+    }
+    foreach ($kind in $policyValues.Keys) {
+      $policyKey=Join-Path $policyRoot $kind
+      foreach ($appId in @('woods-island.exe','com.woods.island')) {
+        $existingKey=Get-Item -LiteralPath $policyKey -ErrorAction SilentlyContinue
+        $existed=$existingKey -and $appId -in $existingKey.GetValueNames()
+        $policySnapshots.Add([pscustomobject]@{Key=$policyKey;Name=$appId;Existed=[bool]$existed;Value=if ($existed) { $existingKey.GetValue($appId) } else { $null };Kind=if ($existed) { $existingKey.GetValueKind($appId).ToString() } else { 'String' }})
+        New-Item -Path $policyKey -Force | Out-Null
+        New-ItemProperty -LiteralPath $policyKey -Name $appId -Value $policyValues[$kind] -PropertyType String -Force | Out-Null
+      }
+    }
     $output=@(& node $adapter $Executable 2>&1); $nativeExit=$LASTEXITCODE
     $log=Join-Path $taskRoot ('installed-smoke-'+[guid]::NewGuid().ToString('N')+'.log')
     $output | ForEach-Object { $_.ToString() } | Set-Content -LiteralPath $log -Encoding utf8
@@ -274,7 +296,14 @@ $policy=@(foreach ($key in @('HKLM:\SOFTWARE\Policies\Microsoft\Edge','HKCU:\SOF
     Assert-True ($native.sha256 -eq (File-Proof $Executable).SHA256) 'Native smoke fingerprint differs from the intended executable'
     Assert-True (@($native.results | Where-Object { -not $_.ok }).Count -eq 0) 'Native report contains failures'
     $taskResults.Add([pscustomobject]@{Label=if ($Legacy) { 'Published portable migration baseline' } else { 'Installed-location launch/settings/quit' };Executable=$Executable;Legacy=$Legacy;ExitCode=$nativeExit;Raw=File-Proof $raw;Log=File-Proof $log;Passed=@($native.results | Where-Object { $_.ok -and -not $_.skipped }).Count;Skipped=@($native.results | Where-Object { $_.skipped }).Count;FullNativeSuite=$false;HarnessOrigin=File-Proof $origin;Adapter=File-Proof $adapter})
-  } finally { foreach ($key in $keys) { [Environment]::SetEnvironmentVariable($key,$saved[$key],'Process') } }
+  } finally {
+    foreach ($entry in $policySnapshots) {
+      Assert-HostedWindowsRunner
+      if ($entry.Existed) { New-ItemProperty -LiteralPath $entry.Key -Name $entry.Name -Value $entry.Value -PropertyType $entry.Kind -Force | Out-Null }
+      else { Remove-ItemProperty -LiteralPath $entry.Key -Name $entry.Name -ErrorAction SilentlyContinue }
+    }
+    foreach ($key in $keys) { [Environment]::SetEnvironmentVariable($key,$saved[$key],'Process') }
+  }
 }
 function Uninstall-Application([string]$ExpectedRunValue,[bool]$ShouldRemoveRunValue,[string]$Label) {
   $before=Profile-Proofs
