@@ -199,6 +199,24 @@ function Install-Payload([string]$Setup,[string]$Version,[string]$ExpectedSha,[s
 }
 
 function Installed-Smoke([bool]$Legacy=$false,[string]$Executable=$taskInstalledExe) {
+  $transportScript=Join-Path $taskRoot 'live-cdp-diagnostic.ps1'
+  $transportSource=@'
+param([int]$MainPid,[int]$Port)
+$processes=@(Get-CimInstance Win32_Process | Where-Object { $_.Name -in @('woods-island.exe','msedgewebview2.exe') } | ForEach-Object {
+  $command=$_.CommandLine
+  $debugPort=if ($command -match '--remote-debugging-port[= ](\d+)') { $matches[1] } else { '' }
+  $kind=if ($command -match '--type=([^\s]+)') { $matches[1] } else { 'browser' }
+  @{pid=$_.ProcessId;parent=$_.ParentProcessId;name=$_.Name;kind=$kind;debugPort=$debugPort;commandReadable=[bool]$command;userDataOverride=$command -match '--user-data-dir='}
+})
+$listeners=@(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -in @($Port,($Port+1)) } | Select-Object LocalAddress,LocalPort,OwningProcess)
+$window=Get-Process -Id $MainPid -ErrorAction SilentlyContinue | Select-Object Id,SessionId,MainWindowHandle,Responding
+$policy=@(foreach ($key in @('HKLM:\SOFTWARE\Policies\Microsoft\Edge','HKCU:\SOFTWARE\Policies\Microsoft\Edge')) {
+  $value=Get-ItemProperty -LiteralPath $key -Name RemoteDebuggingAllowed -ErrorAction SilentlyContinue
+  if ($value) { @{scope=$key;allowed=$value.RemoteDebuggingAllowed} }
+})
+@{mainPid=$MainPid;port=$Port;window=$window;processes=$processes;listeners=$listeners;debugPolicy=$policy}|ConvertTo-Json -Depth 5 -Compress
+'@
+  [IO.File]::WriteAllText($transportScript,$transportSource,[Text.UTF8Encoding]::new($false))
   # Keep the accepted harness and its assertions intact. Generate an ignored adapter
   # that runs the INSTALLED binary directly and shares only the isolated QA data.
   $origin=Join-Path $taskRepoRoot 'scripts\verify-runtime.cjs'
@@ -209,7 +227,8 @@ function Installed-Smoke([bool]$Legacy=$false,[string]$Executable=$taskInstalled
     @('(?m)^  const dataDir = path\.join\(directory, ''data''\);\r?\n  await fs\.mkdir\(dataDir\);','  const dataDir = process.env.WOODS_INSTALLER_QA_DATA; assert(dataDir); await fs.mkdir(dataDir,{recursive:true});'),
     @('APPDATA: path\.join\(directory, ''appdata''\)','APPDATA: process.env.WOODS_INSTALLER_QA_APPDATA'),
     @('const tempRoot = path\.join\(root, ''src-tauri'', ''target'', ''qa-temp'', ''woodscorp_obs''\);','const tempRoot = path.join(process.env.WOODS_INSTALLER_QA_ROOT, "native");'),
-    @('const persisted = new Map\(\);','const persisted = new Map(); const expectedInstallSettings=JSON.parse(process.env.WOODS_INSTALLER_QA_EXPECT_SETTINGS||"{}"); const actualInstallSettings=await main.invoke("settings_get"); for(const [key,value] of Object.entries(expectedInstallSettings))assert.deepEqual(actualInstallSettings[key],value,"Preserved installer setting: "+key);')
+    @('const persisted = new Map\(\);','const persisted = new Map(); const expectedInstallSettings=JSON.parse(process.env.WOODS_INSTALLER_QA_EXPECT_SETTINGS||"{}"); const actualInstallSettings=await main.invoke("settings_get"); for(const [key,value] of Object.entries(expectedInstallSettings))assert.deepEqual(actualInstallSettings[key],value,"Preserved installer setting: "+key);'),
+    @('(?m)^  throw new Error\(`WebView2 page did not initialize: \$\{last\}`\);\r?$','  const transport=spawnSync("powershell.exe",["-NoProfile","-NonInteractive","-File",process.env.WOODS_INSTALLER_QA_TRANSPORT_SCRIPT,"-MainPid",String(proc.pid),"-Port",String(port)],{encoding:"utf8",windowsHide:true}); console.error("HOSTED_LIVE_CDP "+transport.stdout.trim()); throw new Error(`WebView2 page did not initialize: ${last}`);')
   )
   foreach ($replacement in $replacements) {
     Assert-True ([regex]::Matches($source,$replacement[0]).Count -eq 1) 'Accepted harness layout changed; inspect adapter instead of silently copying/running another binary'
@@ -219,11 +238,12 @@ function Installed-Smoke([bool]$Legacy=$false,[string]$Executable=$taskInstalled
   [IO.File]::WriteAllText($adapter,$source,[Text.UTF8Encoding]::new($false))
   & node --check $adapter
   Assert-True ($LASTEXITCODE -eq 0) 'Installed-location harness adapter has a syntax error'
-  $keys=@('WOODS_TEST_FILTER','WOODS_TEST_EXPECT_CODEX','WOODS_TEST_EXPECT_AUDIO','WOODS_INSTALLER_QA_ROOT','WOODS_INSTALLER_QA_DATA','WOODS_INSTALLER_QA_APPDATA','WOODS_INSTALLER_QA_EXPECT_SETTINGS','TEMP','TMP')
+  $keys=@('WOODS_TEST_FILTER','WOODS_TEST_EXPECT_CODEX','WOODS_TEST_EXPECT_AUDIO','WOODS_INSTALLER_QA_ROOT','WOODS_INSTALLER_QA_DATA','WOODS_INSTALLER_QA_APPDATA','WOODS_INSTALLER_QA_EXPECT_SETTINGS','WOODS_INSTALLER_QA_TRANSPORT_SCRIPT','TEMP','TMP')
   $saved=@{}; foreach ($key in $keys) { $saved[$key]=[Environment]::GetEnvironmentVariable($key,'Process') }
   try {
     $env:WOODS_INSTALLER_QA_ROOT=$taskRoot; $env:WOODS_INSTALLER_QA_DATA=$taskDataDir; $env:WOODS_INSTALLER_QA_APPDATA=$taskAppData
     $env:WOODS_INSTALLER_QA_EXPECT_SETTINGS=$taskPortableMigrationSettings
+    $env:WOODS_INSTALLER_QA_TRANSPORT_SCRIPT=$transportScript
     $env:TEMP=$taskRoot; $env:TMP=$taskRoot
     $env:WOODS_TEST_EXPECT_CODEX=$null; $env:WOODS_TEST_EXPECT_AUDIO=$null
     $env:WOODS_TEST_FILTER=if ($Legacy) { '^Main UI mounts$' } else { '^(Main UI mounts|Settings and image editor renderers are absent until requested|Settings UI renders after repeated harmless toggles)$' }
