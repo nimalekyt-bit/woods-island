@@ -27,8 +27,8 @@ try {
 } catch { Write-Output 'Upstream download unavailable; checking the pinned Woods Island distribution.' }
 if (-not (Test-Path -LiteralPath $archive) -or (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) {
     $archive = Join-Path $toolTemp 'verified-portable.zip'
-    $expected = 'dc63390264dcaebc3a98ef77a741c84e89112aaa1e5931a296edc3fccd88b682'
-    Invoke-WebRequest -Uri 'https://github.com/nimalekyt-bit/woods-island/releases/download/v1.1.0/Woods-Island-1.1.0-windows-x64.zip' -OutFile $archive -TimeoutSec 180
+    $expected = 'ffe1577debb1390dfb51f6b065277d0fa8d04e673951d38069d84eee8f766d61'
+    Invoke-WebRequest -Uri 'https://github.com/nimalekyt-bit/woods-island/releases/download/v1.1.1/Woods-Island-1.1.1-windows-x64-portable.zip' -OutFile $archive -TimeoutSec 180
 }
 if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) {
     throw 'Archive checksum differs from verified FFmpeg 9.0.2. Review upstream version and provenance before updating the pinned checksum.'

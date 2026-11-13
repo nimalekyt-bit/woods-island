@@ -373,16 +373,12 @@ try {
     Assert-ProfileUnchanged $before 'Version upgrade'
     $taskReport.VersionUpgrade='passed-actual-previous-version'
   } else {
-    if ($Scenario -eq 'ExistingRuntime') {
+    if ($Scenario -eq 'ExistingRuntime' -and $PublishedPortablePath) {
       $legacyDir=Join-Path $taskRoot 'PublishedPortable-1.1.0'; New-Item -ItemType Directory -Path $legacyDir | Out-Null
       $legacyExe=Join-Path $legacyDir 'woods-island.exe'
-      if ($PublishedPortablePath) { Copy-Item -LiteralPath (Resolve-Path -LiteralPath $PublishedPortablePath).Path -Destination $legacyExe }
-      else {
-        $release=Invoke-RestMethod -Uri 'https://api.github.com/repos/nimalekyt-bit/woods-island/releases/tags/v1.1.0'
-        $asset=@($release.assets | Where-Object { $_.name -like '*.exe' -and $_.digest -eq 'sha256:12fd56dd985c28ad499b3e6caa6373ad24bf60e37ec005739c16d946792c7b4a' })
-        Assert-True ($asset.Count -eq 1) 'Published 1.1.0 EXE/digest not found; supply the verified public asset'
-        Invoke-WebRequest -Uri $asset[0].browser_download_url -OutFile $legacyExe
-      }
+      # The obsolete public binary has been retired. Supply its verified
+      # private fixture explicitly when repeating the historical migration.
+      Copy-Item -LiteralPath (Resolve-Path -LiteralPath $PublishedPortablePath).Path -Destination $legacyExe
       $legacyProof=File-Proof $legacyExe
       Assert-True ($legacyProof.SHA256 -eq '12fd56dd985c28ad499b3e6caa6373ad24bf60e37ec005739c16d946792c7b4a') 'Published portable 1.1.0 SHA mismatch'
       Installed-Smoke $true $legacyExe
