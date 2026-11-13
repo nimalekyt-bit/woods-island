@@ -1,12 +1,12 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
-const { execFileSync } = require('node:child_process');
+const { readFileSync } = require('node:fs');
+const path = require('node:path');
 const { loadTypeScript } = require('./load-runtime-typescript.cjs');
 const { mountLiquidIsland, measureLiquidIslands } = loadTypeScript('runtime/characters/liquid.ts');
 const { createEnvelope, updateEnvelope, smoothLiquidPath, liquidBottomAt } = loadTypeScript('runtime/characters/liquid-geometry.ts');
-const baseline = execFileSync('git', ['show', '98838df:runtime/compat/island-store.js'], { encoding: 'utf8', windowsHide: true });
-const oldRegion = baseline.slice(baseline.indexOf('var rr = () =>'), baseline.lastIndexOf('export {'));
+const oldRegion = readFileSync(path.join(__dirname, 'fixtures/liquid-baseline.js'), 'utf8');
 const moods = ['idle', 'music', 'think', 'happy', 'eat', 'attn', 'sad', 'sleep'];
 
 // DOM-independent SVG trace: preserve every attribute/path/transform/style and

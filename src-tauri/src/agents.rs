@@ -253,9 +253,9 @@ mod tests{
         claude_hooks(&mut config,false,&commands).unwrap();assert_eq!(config["permissions"]["allow"],json!(["Read"]));assert_eq!(config["hooks"]["Stop"][0]["hooks"][0]["command"],"original-notify.exe");
     }
     #[test]fn codex_notify_preserves_other_sections_comments_and_multiline_arrays(){
-        let original="# user settings\nmodel = 'example'\nnotify = [\n  'other.exe',\n  '--flag',\n]\n[projects.'<WORKSPACE>']\ntrust_level = 'trusted'\n";
+        let original="# user settings\nmodel = 'example'\nnotify = [\n  'other.exe',\n  '--flag',\n]\n[projects.'C:\\Projects']\ntrust_level = 'trusted'\n";
         let mut doc=original.parse::<DocumentMut>().unwrap();let old=notify(&doc).unwrap().unwrap();assert_eq!(old,vec!["other.exe","--flag"]);
         set_notify(&mut doc,Some(&["node.exe".into(),"island-notify.cjs".into()]));assert!(doc.to_string().contains("# user settings"));assert_eq!(doc["model"].as_str(),Some("example"));
-        set_notify(&mut doc,Some(&old));assert_eq!(notify(&doc).unwrap(),Some(old));assert_eq!(doc["projects"]["<WORKSPACE>"]["trust_level"].as_str(),Some("trusted"));
+        set_notify(&mut doc,Some(&old));assert_eq!(notify(&doc).unwrap(),Some(old));assert_eq!(doc["projects"]["C:\\Projects"]["trust_level"].as_str(),Some("trusted"));
     }
 }

@@ -1239,7 +1239,7 @@ async function quit(client) {
     assert(Math.abs(capture.width-160)<=1&&Math.abs(capture.height-90)<=1);return {path:capture.path,width:capture.width,height:capture.height};
   });
   await check('Windows OCR recognizes actual rendered text from a PNG',async()=>{
-    const text=await main.invoke('ocr_file',{path:path.join(root,'docs','qa','ocr-fixture.png')});
+    const text=await main.invoke('ocr_file',{path:path.join(root,'tests','fixtures','ocr-fixture.png')});
     assert.match(text,/Woods\s+Island\s+2048/i);return {text:text.trim()};
   });
   await check('MP4 screen recording contains video and WASAPI system audio',async()=>{

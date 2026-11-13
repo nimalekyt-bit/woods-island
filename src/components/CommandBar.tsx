@@ -104,7 +104,7 @@ export const CommandBar: React.FC<CommandBarProps> = ({
           <div className="mt-2.5 space-y-1">
             {[
               { title: 'Запустить OBS Studio', desc: 'Стриминг и видеозапись', icon: <Compass className="h-4 w-4 text-blue-400" /> },
-              { title: 'Открыть Obsidian Vault', desc: 'База знаний <OBSIDIAN_VAULT>', icon: <FileText className="h-4 w-4 text-purple-400" /> },
+              { title: 'Открыть Obsidian Vault', desc: 'Папка заметок, выбранная в настройках', icon: <FileText className="h-4 w-4 text-purple-400" /> },
               { title: 'Центр управления', desc: 'Wi-Fi, Bluetooth, питание', icon: <Sliders className="h-4 w-4 text-emerald-400" /> },
               { title: 'Спросить ИИ (Claude / Gemini)', desc: 'Мгновенный ответ модели', icon: <Sparkles className="h-4 w-4 text-amber-400" /> },
             ].map((item, idx) => (

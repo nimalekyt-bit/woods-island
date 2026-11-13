@@ -187,7 +187,7 @@ fn default_settings() -> Value {
     "sttBaseUrl": "https://api.groq.com/openai/v1",
     "sttModel": "whisper-large-v3-turbo",
     "sttLanguage": "",
-    "obsidianVaultPath": "<OBSIDIAN_VAULT>",
+    "obsidianVaultPath": "",
     "dictatePaste": false,
     "moduleWeather": true,
     "weatherCity": "",
@@ -854,7 +854,7 @@ fn note_export(id:Option<String>,title:Option<String>,text:Option<String>,state:
  let folders=state.note_folders_data.lock().unwrap().clone();
  let current=state.note_data.lock().unwrap().clone();
  let (title,text)=notes::selected(id.as_deref(),title,text,&folders,&current)?;
- let vault=state.settings.lock().unwrap()["obsidianVaultPath"].as_str().unwrap_or("<OBSIDIAN_VAULT>").to_owned();
+ let vault=state.settings.lock().unwrap()["obsidianVaultPath"].as_str().unwrap_or("").to_owned();
  notes::export(std::path::Path::new(&vault),&title,&text)
 }
 

@@ -9,7 +9,6 @@
 [![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-18181b)](https://github.com/nimalekyt-bit/woods-island/releases)
 [![Version](https://img.shields.io/badge/version-1.1.0-18181b)](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.1.0)
 ![RU / EN](https://img.shields.io/badge/interface-RU%20%7C%20EN-18181b)
-![Private](https://img.shields.io/badge/access-private-33483b)
 
 
 [**Скачать сборку**](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.1.0) · [**Сообщить об ошибке**](https://github.com/nimalekyt-bit/woods-island/issues/new/choose) · [**Woods**](https://t.me/woodskilla)
@@ -110,10 +109,10 @@ MET Norway не требует ключа. Старый кэш и некорре
 ## Установка
 
 Скачай **Woods-Island-1.1.0-windows-x64.zip** из
-[приватного релиза](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.1.0),
+[релиза](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.1.0),
 распакуй и запусти `woods-island.exe`. Папка `bin` нужна рядом с EXE
 для MP4/GIF. Требуются **Windows 10/11 x64** и WebView2 Runtime.
-Скачивание требует доступа к репозиторию. Переносимый комплект обновляется вручную.
+Переносимый комплект обновляется вручную. Контрольные суммы находятся в выпуске.
 
 В **Настройки → ИИ** укажи свой ключ/адрес или локальную модель;
 в настройках заметок — путь к Obsidian. На другом ПК для Яндекс Музыки Mod
@@ -136,18 +135,9 @@ MET Norway не требует ключа. Старый кэш и некорре
 ### Приватность и ограничения
 
 Настройки, SQLite и заметки находятся в `%APPDATA%\woods-island`.
-Ключи защищает Windows DPAPI. Сетевые источники описаны в
-[аудите](docs/RECOVERY_AUDIT.md). Экспорт в Obsidian запускается кнопкой.
-Яндекс bridge слушает только `127.0.0.1:3003`; порт меняется через
-`WOODS_ISLAND_MUSIC_PORT`. Connector v3 не умеет перемотку;
-отдельный OBS Scrobbler может занять тот же порт.
+Ключи защищает Windows DPAPI. Экспорт в Obsidian запускается кнопкой.
+Для Яндекс Музыки Mod нужен отдельный Woods connector; версия 3 не умеет перемотку.
 Неизвестные города используют UTC или ручной часовой пояс.
-Подписанного автоматического установщика пока нет.
-
-Приёмка включает production build, Rust-регрессии, hooks, IPC, геометрию,
-персонажей и настоящее окно WebView2. Отчёты сохраняют SHA256 проверенного EXE
-и пропущенные внешние сценарии. Полный аппаратный и облачный паритет не заявляется.
-[Матрица приёмки →](docs/FUNCTIONAL_ACCEPTANCE.md)
 
 </details>
 
@@ -189,7 +179,7 @@ Choose your city; no weather API key is required. Old caches and invalid data
 are rejected without crashing the panel. Missing data is marked unavailable.
 
 <div align="center">
-<img src="assets/readme/en/weather.png" width="760" alt="Woods Island weather, rendered with a MET protocol test response">
+<img src="assets/readme/en/weather.png" width="760" alt="Woods Island weather before choosing a city">
 </div>
 
 This screenshot shows the empty state before a city is selected.
@@ -219,64 +209,37 @@ The launcher, command bar, dictation and OBS/Steam/terminal-agent events are ava
 ## Install
 
 Download **Woods-Island-1.1.0-windows-x64.zip** from the
-[private release](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.1.0).
+[release](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.1.0).
 Extract and run `woods-island.exe`; keep `bin` alongside it for recording.
-Requires **Windows 10/11 x64** and WebView2. Repository access is required;
-updates are installed manually. Use your own AI key or local model.
+Requires **Windows 10/11 x64** and WebView2. Install portable updates manually;
+checksums are provided in the release. Use your own AI key or local model.
 
 Settings/SQLite stay in `%APPDATA%\woods-island`, keys use Windows DPAPI,
 and Obsidian export is explicit. The Yandex connector needs separate installation
 on other PCs and v3 has no seek support. Unknown cities use UTC or a manual offset.
 
-Acceptance covers the production build, Rust regressions, hooks, IPC, geometry,
-characters and the real WebView2 window. Reports retain the tested EXE SHA256
-and skipped external scenarios. Complete hardware and cloud-provider parity
-has not been verified. [Acceptance matrix →](docs/FUNCTIONAL_ACCEPTANCE.md)
-
 </details>
 
-## Разработка
+## Разработка / Development
 
 Windows, Node.js 22, pnpm 10.33.0, Rust 1.98.1 и Visual Studio Build Tools
 с Desktop development with C++.
+Use Windows, Node.js 22, pnpm 10.33.0, Rust 1.98.1 and Visual Studio Build Tools
+with Desktop development with C++.
 
 ```powershell
 pnpm install --frozen-lockfile
 pnpm build
-pnpm test:hooks
-pnpm test:runtime-state
-pnpm test:ipc
-pnpm test:characters
-cargo test --locked --manifest-path src-tauri/Cargo.toml
 cargo build --release --locked --manifest-path src-tauri/Cargo.toml --bin woods-island
-powershell -NoProfile -File scripts/prepare-recording-tools.ps1
-pnpm package:portable
 ```
-
-Runtime: `runtime`, четыре окна; типизированный IPC-контракт генерируется из Rust.
-Питомцы хранятся в `runtime/characters`: 11 встроенных bitmap-наборов и metadata
-для девяти локально импортируемых Codex-атласов. Количество ресурсов и IPC-команд
-проверяет `pnpm build`.
-Прототип в `src` собирается отдельно через `build:prototype`.
-`pnpm test:native` использует временный профиль и `WOODS_ISLAND_PASSIVE_QA=1`,
-без аппаратного ввода, фокуса и хоткеев. Нет живого плеера — SKIP.
-При заполненном Cargo-кэше доступна сборка `--offline`.
-
-[CI](https://github.com/nimalekyt-bit/woods-island/actions) проверяет сборку,
-Rust/hooks и авторство. Коммиты — только от
-[nimalekyt-bit](https://github.com/nimalekyt-bit).
-Задачи ведутся в `<WORKSPACE>` и Obsidian.
 
 ## Проект и сайт
 
-Владелец: Никита Кузнецов / Woods. Исходники и сборки пока приватные.
+Автор: Никита Кузнецов / Woods.
 Условия использования компонентов: [LICENSE](LICENSE) и
 [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md).
 
-Сайт находится отдельно в `02_WEB_&_COMMERCE/woods-island-web` и публикуется на
-[woods-island.tuz032.workers.dev](https://woods-island.tuz032.workers.dev/).
-Установочный архив остаётся в приватном GitHub-релизе; для скачивания нужен доступ.
-[Состояние сайта →](docs/WEBSITE.md)
+[Сайт Woods Island](https://woods-island.tuz032.workers.dev/).
 
 <div align="center">
 <br>

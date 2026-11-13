@@ -1,7 +1,8 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
-const { execFileSync } = require('node:child_process');
+const { readFileSync } = require('node:fs');
+const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { loadTypeScript } = require('./load-runtime-typescript.cjs');
 const { createCharacterCatalog } = loadTypeScript('runtime/characters/catalog.ts');
@@ -12,7 +13,7 @@ const { createCharacterPose, genericMotion } = loadTypeScript('runtime/character
 const { createCharacterScheduler, animationInterval, STILL_INTERVAL_MS } = loadTypeScript('runtime/characters/scheduler.ts');
 const { createCursorTracker, normalizedLook } = loadTypeScript('runtime/characters/cursor.ts');
 const pixels = loadTypeScript('runtime/characters/pixel-layout.ts');
-const baseline = execFileSync('git', ['show', '98838df:runtime/compat/island-store.js'], { encoding: 'utf8', windowsHide: true });
+const baseline = readFileSync(path.join(__dirname, 'fixtures/character-drawings-baseline.js'), 'utf8');
 
 function fixture() {
   let allocations = 0, seed = 17;
@@ -28,7 +29,7 @@ function fixture() {
 }
 function legacyDrawings(f) {
   const math = Object.create(Math); math.random = f.random;
-  return vm.runInNewContext(baseline.slice(baseline.indexOf('var z = `http://www.w3.org/2000/svg`'), baseline.indexOf('var jt =')) +
+  return vm.runInNewContext(baseline +
     '\n({spark:ct,eyes:lt,bot:ut,cat:dt,blob:ft,jelly:ht,sloth:gt,astro:_t,sprout:vt,swarm:yt,kao:bt,...Object.fromEntries([...xt,...St].map(d=>[d.id,d]))})',
     { document: f.document, Math: math, performance: { now: () => 1000 }, createCharacterCatalog: () => ({}), e: () => 'ru' });
 }
@@ -77,7 +78,7 @@ test('Catalog preserves all 25 selections, translation, geometry and safe fallba
 test('Pose and generic motion preserve mood transitions, blink, cursor and long-frame clamping', () => {
   let point = null, still = false;
   const math = Object.create(Math); math.random = () => .5;
-  const region = baseline.slice(baseline.indexOf('function Nn('), baseline.indexOf('var In ='));
+  const region = readFileSync(path.join(__dirname, 'fixtures/character-pose-baseline.js'), 'utf8');
   const old = vm.runInNewContext(region + '\n({Nn,Fn})', { Math: math, Mn: (value, min, max) => Math.max(min, Math.min(max, value)), Lt: () => point, Nt: normalizedLook, gn: mood => mood === 'happy' || mood === 'eat' ? 'done' : mood === 'sad' ? 'attn' : mood,
     at: { idle:'#F1EFE8', music:'#F0997B', think:'#AFA9EC', done:'#97C459', attn:'#EF9F27', sleep:'#5F5E5A' }, Pn:9 });
   const legacy = old.Nn(() => still), next = createCharacterPose(() => still, { cursor: () => point, random: () => .5 });

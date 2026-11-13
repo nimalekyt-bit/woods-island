@@ -7,10 +7,10 @@ const { spawn } = require('node:child_process');
 const { agentRecord, questionAnswers, decisionFor } = require('./island-notify.cjs');
 
 test('Codex completion and OpenCode idle preserve real session and project fields', () => {
-  const record = agentRecord({ 'thread-id':'abc', cwd:'<WORKSPACE>', 'last-assistant-message':'готово' }, 'codex', 'agent-turn-complete');
+  const record = agentRecord({ 'thread-id':'abc', cwd:'C:\\Projects\\sample-app', 'last-assistant-message':'готово' }, 'codex', 'agent-turn-complete');
   assert.equal(record.agent, 'codex');
   assert.equal(record.state, 'done');
-  assert.equal(record.project, 'woods-island');
+  assert.equal(record.project, 'sample-app');
   assert.equal(record.message, 'готово');
   assert.equal(agentRecord({ sessionID:'abc',status:{type:'idle'} },'opencode','session.status').state,'done');
 });

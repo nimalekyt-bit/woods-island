@@ -71,7 +71,9 @@ async function run(label,source) {
   assert(baseline,'Provide the preserved baseline executable');
   const previous=await run('baseline',baseline),current=await run('candidate',candidate);
   const report={date:new Date().toISOString(),logicalProcessors:os.cpus().length,method:'Sequential isolated profiles. CPU sums the native app and every descendant including hidden WebView2 windows. Music uses a loopback metadata fixture; the existing Windows audio output is observed without changing playback or volume.',baseline:previous,candidate:current,frontendExceptions:exceptions};
-  await fs.writeFile(path.join(root,'docs/performance-20261112.json'),JSON.stringify(report,null,2)+'\n');
+  const reportPath = path.join(root,'.qa-temp','performance.json');
+  await fs.mkdir(path.dirname(reportPath), { recursive:true });
+  await fs.writeFile(reportPath,JSON.stringify(report,null,2)+'\n');
   assert.equal(exceptions.length,0,'No frontend exceptions');
   for(const scenario of ['idle','music']) {
     const a=previous.scenarios[scenario],b=current.scenarios[scenario];
@@ -80,5 +82,5 @@ async function run(label,source) {
     assert(b.cpuMachinePercent<5,`${scenario} CPU budget`);
     assert.equal(b.events['downloads:update'],0,'No repeating unchanged download events');
   }
-  console.log('PASS process tree performance budgets; docs/performance-20261112.json');
+  console.log('PASS process tree performance budgets; report saved in .qa-temp/performance.json');
 })().catch(error=>{console.error(error);process.exitCode=1;}).finally(()=>{clearInterval(fixtureTimer);ws?.close();if(proc)proc.kill();});
