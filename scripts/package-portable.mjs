@@ -3,6 +3,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { verifyWindowsIcons } from './verify-windows-icons.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const output = join(root, 'dist-portable');
@@ -16,6 +17,7 @@ const versionCheck = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive
 if (versionCheck.status !== 0 || versionCheck.stdout.trim() !== version) {
   throw new Error(`Executable version ${versionCheck.stdout.trim() || 'unavailable'} does not match package ${version}; rebuild before packaging`);
 }
+await verifyWindowsIcons(executable, join(root, 'src-tauri', 'icons', 'icon.ico'));
 const assets = [
   ['woods-island.exe', executable],
   ...['ffmpeg.exe', 'ffprobe.exe', 'LICENSE', 'FFMPEG_PROVENANCE.md'].map(name => [`bin/${name}`, join(source, name)]),

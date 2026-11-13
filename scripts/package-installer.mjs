@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { verifyWindowsIcons } from './verify-windows-icons.mjs';
 
 const root = await realpath(resolve(dirname(fileURLToPath(import.meta.url)), '..'));
 const tauriRoot = join(root, 'src-tauri');
@@ -171,6 +172,8 @@ const buildInputs = [join(root, 'package.json'), join(tauriRoot, 'Cargo.toml'), 
   overlayPath, resolve(tauriRoot, config.bundle.windows.nsis.installerHooks), resolve(tauriRoot, 'icons/icon.ico')];
 const inputsBefore = await Promise.all(buildInputs.map(source => fingerprint(relative(root, source), source)));
 requireThat(before[0].sha256 === expectedSha256, `EXE SHA256 ${before[0].sha256} != accepted ${expectedSha256}`);
+const nativeIconProofs = await Promise.all(components.slice(0, 1 + binaryNames.length)
+  .map(([, source]) => verifyWindowsIcons(source, join(tauriRoot, 'icons', 'icon.ico'))));
 if (checkOnly) {
   console.log(`Installer preflight verified: ${version}, ${before.length} payload files, EXE ${expectedSha256}; no bundle was run`);
   process.exit(0);
@@ -196,6 +199,7 @@ verifyNsisPayload(await readFile(nsisSource, 'utf8'), components);
 const bundled = join(release, 'bundle', 'nsis', `Woods Island_${version}_x64-setup.exe`);
 await safeProjectPath(bundled);
 requireThat((await stat(bundled)).mtimeMs >= buildStarted - 2000, 'Bundler output is stale');
+const installerIconProof = await verifyWindowsIcons(bundled, join(tauriRoot, 'icons', 'icon.ico'));
 const artifactName = `Woods-Island-${version}-windows-x64-Setup.exe`;
 const artifact = await fingerprint(artifactName, bundled);
 await mkdir(await safeProjectPath(output), { recursive: true });
@@ -214,6 +218,8 @@ await writeFile(join(runOutput, `Woods-Island-${version}-windows-x64-Setup.manif
   installMode: 'currentUser', webviewInstallMode: 'downloadBootstrapper',
   webviewNetworkRequiredIfMissing: true, signed: false, binaryPatching: false,
   generatedNsisPayloadVerified: true,
+  nativeAndInstallerIconsVerified: true,
+  iconProofs: [...nativeIconProofs, installerIconProof].map(({ executable, ...proof }) => proof),
   cliVersion: JSON.parse(await readFile(join(dirname(cliPath), 'package.json'), 'utf8')).version,
   acceptance: 'Packaging integrity only; installation/native acceptance is recorded separately',
 }, null, 2) + '\n', { flag: 'wx' });
