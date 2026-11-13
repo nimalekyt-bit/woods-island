@@ -4,13 +4,21 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      artifact_run_id:
+        description: 'Reuse a prior installer artifact for diagnostics; leave empty for a complete build'
+        required: false
+        default: ''
+        type: string
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: windows-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   windows:
+    if: github.event_name != 'workflow_dispatch' || inputs.artifact_run_id == ''
     runs-on: windows-latest
     timeout-minutes: 35
     steps:
@@ -83,7 +91,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   installer:
-    if: github.event_name == 'workflow_dispatch'
+    if: always() && github.event_name == 'workflow_dispatch' && (needs.windows.result == 'success' || inputs.artifact_run_id != '')
     needs: windows
     runs-on: windows-latest
     timeout-minutes: 20
@@ -103,11 +111,15 @@ jobs:
         with:
           name: woods-island-installer
           path: dist-installer
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.artifact_run_id || github.run_id }}
       - name: Download application
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: woods-island-windows-exe
           path: dist-installer/application
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.artifact_run_id || github.run_id }}
       - name: Verify installation and removal
         shell: pwsh
         run: |

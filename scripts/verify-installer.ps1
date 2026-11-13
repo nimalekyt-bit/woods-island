@@ -15,6 +15,13 @@ param(
   [string[]]$ToolRelativePaths=@('bin\ffmpeg.exe','bin\ffprobe.exe')
 )
 $ErrorActionPreference='Stop'
+trap {
+  if ($env:GITHUB_ACTIONS -eq 'true') {
+    $diagnosticMessage=$_.Exception.Message.Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
+    Write-Output ('::error title=Installer acceptance::'+$diagnosticMessage)
+  }
+  throw
+}
 
 function Assert-HostedWindowsRunner {
   if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or $env:RUNNER_OS -ne 'Windows' -or [string]::IsNullOrWhiteSpace($env:RUNNER_TEMP) -or [string]::IsNullOrWhiteSpace($env:RUNNER_TRACKING_ID) -or $env:GITHUB_REPOSITORY -ne 'nimalekyt-bit/woods-island') {
