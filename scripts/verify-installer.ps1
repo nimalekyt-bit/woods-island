@@ -226,6 +226,7 @@ $policy=@(foreach ($key in @('HKLM:\SOFTWARE\Policies\Microsoft\Edge','HKCU:\SOF
     @('(?m)^  const exe = path\.join\(directory, ''woods-island\.exe''\);\r?\n  await fs\.copyFile\(suppliedExe, exe\);','  const exe = path.resolve(suppliedExe);'),
     @('(?m)^  const dataDir = path\.join\(directory, ''data''\);\r?\n  await fs\.mkdir\(dataDir\);','  const dataDir = process.env.WOODS_INSTALLER_QA_DATA; assert(dataDir); await fs.mkdir(dataDir,{recursive:true});'),
     @('APPDATA: path\.join\(directory, ''appdata''\)','APPDATA: process.env.WOODS_INSTALLER_QA_APPDATA'),
+    @(', WEBVIEW2_USER_DATA_FOLDER:path\.join\(directory,''webview''\), WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=\$\{port\}`',''),
     @('const tempRoot = path\.join\(root, ''src-tauri'', ''target'', ''qa-temp'', ''woodscorp_obs''\);','const tempRoot = path.join(process.env.WOODS_INSTALLER_QA_ROOT, "native");'),
     @('const persisted = new Map\(\);','const persisted = new Map(); const expectedInstallSettings=JSON.parse(process.env.WOODS_INSTALLER_QA_EXPECT_SETTINGS||"{}"); const actualInstallSettings=await main.invoke("settings_get"); for(const [key,value] of Object.entries(expectedInstallSettings))assert.deepEqual(actualInstallSettings[key],value,"Preserved installer setting: "+key);'),
     @('(?m)^  throw new Error\(`WebView2 page did not initialize: \$\{last\}`\);\r?$','  const transport=spawnSync("powershell.exe",["-NoProfile","-NonInteractive","-File",process.env.WOODS_INSTALLER_QA_TRANSPORT_SCRIPT,"-MainPid",String(proc.pid),"-Port",String(port)],{encoding:"utf8",windowsHide:true}); console.error("HOSTED_LIVE_CDP "+transport.stdout.trim()); throw new Error(`WebView2 page did not initialize: ${last}`);')
@@ -238,7 +239,7 @@ $policy=@(foreach ($key in @('HKLM:\SOFTWARE\Policies\Microsoft\Edge','HKCU:\SOF
   [IO.File]::WriteAllText($adapter,$source,[Text.UTF8Encoding]::new($false))
   & node --check $adapter
   Assert-True ($LASTEXITCODE -eq 0) 'Installed-location harness adapter has a syntax error'
-  $keys=@('WOODS_TEST_FILTER','WOODS_TEST_EXPECT_CODEX','WOODS_TEST_EXPECT_AUDIO','WOODS_INSTALLER_QA_ROOT','WOODS_INSTALLER_QA_DATA','WOODS_INSTALLER_QA_APPDATA','WOODS_INSTALLER_QA_EXPECT_SETTINGS','WOODS_INSTALLER_QA_TRANSPORT_SCRIPT','TEMP','TMP')
+  $keys=@('WOODS_TEST_FILTER','WOODS_TEST_EXPECT_CODEX','WOODS_TEST_EXPECT_AUDIO','WOODS_INSTALLER_QA_ROOT','WOODS_INSTALLER_QA_DATA','WOODS_INSTALLER_QA_APPDATA','WOODS_INSTALLER_QA_EXPECT_SETTINGS','WOODS_INSTALLER_QA_TRANSPORT_SCRIPT','WEBVIEW2_USER_DATA_FOLDER','WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS','TEMP','TMP')
   $saved=@{}; foreach ($key in $keys) { $saved[$key]=[Environment]::GetEnvironmentVariable($key,'Process') }
   $policySnapshots=[Collections.Generic.List[object]]::new()
   try {
@@ -247,6 +248,9 @@ $policy=@(foreach ($key in @('HKLM:\SOFTWARE\Policies\Microsoft\Edge','HKCU:\SOF
     $env:WOODS_INSTALLER_QA_TRANSPORT_SCRIPT=$transportScript
     $env:TEMP=$taskRoot; $env:TMP=$taskRoot
     $env:WOODS_TEST_EXPECT_CODEX=$null; $env:WOODS_TEST_EXPECT_AUDIO=$null
+    # The loader examines environment overrides before registry overrides.
+    # Use only the supported HKLM route for this elevated guest process.
+    $env:WEBVIEW2_USER_DATA_FOLDER=$null; $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=$null
     $env:WOODS_TEST_FILTER=if ($Legacy) { '^Main UI mounts$' } else { '^(Main UI mounts|Settings and image editor renderers are absent until requested|Settings UI renders after repeated harmless toggles)$' }
     # Hosted Windows runs elevated. WebView2 ignores WEBVIEW2_* environment
     # overrides for elevated hosts, but honors exact-app HKLM policies.
@@ -261,7 +265,7 @@ $policy=@(foreach ($key in @('HKLM:\SOFTWARE\Policies\Microsoft\Edge','HKCU:\SOF
     }
     foreach ($kind in $policyValues.Keys) {
       $policyKey=Join-Path $policyRoot $kind
-      foreach ($appId in @('woods-island.exe','com.woods.island')) {
+      foreach ($appId in @('woods-island.exe','woods-island','Woods Island','com.woods.island',$Executable)) {
         $existingKey=Get-Item -LiteralPath $policyKey -ErrorAction SilentlyContinue
         $existed=$existingKey -and $appId -in $existingKey.GetValueNames()
         $policySnapshots.Add([pscustomobject]@{Key=$policyKey;Name=$appId;Existed=[bool]$existed;Value=if ($existed) { $existingKey.GetValue($appId) } else { $null };Kind=if ($existed) { $existingKey.GetValueKind($appId).ToString() } else { 'String' }})
