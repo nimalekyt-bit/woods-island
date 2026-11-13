@@ -268,9 +268,14 @@ $policy=@(foreach ($key in @('HKLM:\SOFTWARE\Policies\Microsoft\Edge','HKCU:\SOF
       foreach ($appId in @('woods-island.exe','woods-island','Woods Island','com.woods.island',$Executable)) {
         $existingKey=Get-Item -LiteralPath $policyKey -ErrorAction SilentlyContinue
         $existed=$existingKey -and $appId -in $existingKey.GetValueNames()
-        $policySnapshots.Add([pscustomobject]@{Key=$policyKey;Name=$appId;Existed=[bool]$existed;Value=if ($existed) { $existingKey.GetValue($appId) } else { $null };Kind=if ($existed) { $existingKey.GetValueKind($appId).ToString() } else { 'String' }})
-        New-Item -Path $policyKey -Force | Out-Null
+        $policySnapshots.Add([pscustomobject]@{Key=$policyKey;Name=$appId;Existed=[bool]$existed;Value=if ($existed) { $existingKey.GetValue($appId,$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames) } else { $null };Kind=if ($existed) { $existingKey.GetValueKind($appId).ToString() } else { 'String' }})
+        # New-Item -Force on an existing registry key clears all its values.
+        if (-not $existingKey) { New-Item -Path $policyKey -Force | Out-Null }
         New-ItemProperty -LiteralPath $policyKey -Name $appId -Value $policyValues[$kind] -PropertyType String -Force | Out-Null
+      }
+      $writtenKey=Get-Item -LiteralPath $policyKey
+      foreach ($appId in @('woods-island.exe','woods-island','Woods Island','com.woods.island',$Executable)) {
+        Assert-True ($writtenKey.GetValue($appId) -eq $policyValues[$kind]) 'Exact-app WebView2 policies were not retained before launch'
       }
     }
     $output=@(& node $adapter $Executable 2>&1); $nativeExit=$LASTEXITCODE
