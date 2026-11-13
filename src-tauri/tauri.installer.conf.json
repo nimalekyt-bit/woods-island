@@ -1,0 +1,37 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "createUpdaterArtifacts": false,
+    "publisher": "Nikita Kuznetsov (Woods)",
+    "useLocalToolsDir": true,
+    "icon": ["icons/icon.ico"],
+    "licenseFile": "../LICENSE",
+    "resources": {
+      "resources/bin/ffmpeg.exe": "bin/ffmpeg.exe",
+      "resources/bin/ffprobe.exe": "bin/ffprobe.exe",
+      "resources/bin/LICENSE": "bin/LICENSE",
+      "resources/bin/FFMPEG_PROVENANCE.md": "bin/FFMPEG_PROVENANCE.md",
+      "../LICENSE": "LICENSE",
+      "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md"
+    },
+    "windows": {
+      "allowDowngrades": false,
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["Russian", "English"],
+        "displayLanguageSelector": true,
+        "compression": "lzma",
+        "startMenuFolder": "Woods Island",
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico",
+        "installerHooks": "windows/installer-hooks.nsh"
+      }
+    }
+  }
+}

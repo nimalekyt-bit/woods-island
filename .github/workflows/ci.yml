@@ -49,13 +49,78 @@ jobs:
         with:
           workspaces: src-tauri -> target
       - name: Rust regression tests
-        run: cargo +1.98.1 test --release --locked -j 3 --manifest-path src-tauri/Cargo.toml
+        run: cargo +1.98.1 test --release --locked -j 1 --manifest-path src-tauri/Cargo.toml
       - name: Build Windows executable
-        run: cargo +1.98.1 build --release --locked -j 3 --manifest-path src-tauri/Cargo.toml
-      - name: Upload private executable
+        run: cargo +1.98.1 build --release --locked -j 1 --manifest-path src-tauri/Cargo.toml
+      - name: Prepare recording tools
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: ./scripts/prepare-recording-tools.ps1
+      - name: Package Windows installer
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: |
+          $exe='src-tauri/target/release/woods-island.exe'
+          $sha=(Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          node scripts/package-installer.mjs --expected-sha256 $sha
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $sdk=@(Get-ChildItem -Path "$env:USERPROFILE/.cargo/registry/src/*/webview2-com-sys-*/x64/WebView2Loader.dll" -File)
+          if ($sdk.Count -ne 1) { throw 'Expected one x64 WebView2 SDK loader' }
+          Copy-Item -LiteralPath $sdk[0].FullName -Destination dist-installer/WebView2Loader.dll
+      - name: Upload installer payload
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: woods-island-installer
+          path: dist-installer/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload Windows executable
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: woods-island-windows-exe
           path: src-tauri/target/release/woods-island.exe
           if-no-files-found: error
           retention-days: 14
+  installer:
+    if: github.event_name == 'workflow_dispatch'
+    needs: windows
+    runs-on: windows-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [ExistingRuntime, MissingRuntime]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Download installer
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: woods-island-installer
+          path: dist-installer
+      - name: Download application
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: woods-island-windows-exe
+          path: dist-installer/application
+      - name: Verify installation and removal
+        shell: pwsh
+        run: |
+          $setup=@(Get-ChildItem dist-installer -Recurse -File -Filter '*-Setup.exe')
+          $manifest=@(Get-ChildItem dist-installer -Recurse -File -Filter '*-Setup.manifest.json')
+          if ($setup.Count -ne 1 -or $manifest.Count -ne 1) { throw 'Installer artifacts are ambiguous' }
+          New-Item -ItemType Directory -Path .qa-temp -Force | Out-Null
+          ./scripts/verify-installer.ps1 -InstallerPath $setup[0].FullName -InstallerManifestPath $manifest[0].FullName -ExpectedExePath dist-installer/application/woods-island.exe -WebView2LoaderPath dist-installer/WebView2Loader.dll -Scenario '${{ matrix.scenario }}'
+      - name: Upload acceptance report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: installer-${{ matrix.scenario }}
+          path: ${{ runner.temp }}/woods-installer-qa-*/installer-acceptance.json
+          if-no-files-found: error
+          retention-days: 7

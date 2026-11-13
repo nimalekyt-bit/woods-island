@@ -1,6 +1,6 @@
 [package]
 name = "woods-island"
-version = "1.1.0"
+version = "1.1.1"
 default-run = "woods-island"
 description = "Dynamic Island HUD for Windows (Woods Personal Corp)"
 authors = ["Nikita Kuznetsov (Woods)"]

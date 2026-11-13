@@ -77,7 +77,7 @@ if (location.pathname.endsWith('/settings.html')) {
       label.className='text-[12px] text-white/85';
       label.textContent=english?'Obsidian vault for note exports':'Хранилище Obsidian для экспорта заметок';
       const input=document.createElement('input');
-      input.dataset.obsidianPath='';input.type='text';input.value=settings.obsidianVaultPath||'<OBSIDIAN_VAULT>';
+      input.dataset.obsidianPath='';input.type='text';input.value=settings.obsidianVaultPath||'';
       input.className='rounded-lg bg-black/40 p-2.5 font-mono text-[12px] text-white/85 outline-none';
       input.setAttribute('aria-label',label.textContent);input.spellcheck=false;
       label.append(input);
