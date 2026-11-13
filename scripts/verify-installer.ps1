@@ -115,7 +115,7 @@ New-Item -ItemType Directory -Path $taskDefaultProfile -Force | Out-Null
 $taskDefaultProfileSentinel=Join-Path $taskDefaultProfile 'installer-qa-default-profile.json'
 [IO.File]::WriteAllText($taskDefaultProfileSentinel,'{"fixture":"retain-default-profile-on-silent-uninstall"}',[Text.UTF8Encoding]::new($false))
 $taskDefaultProfileSentinelSha=(File-Proof $taskDefaultProfileSentinel).SHA256
-$taskPortableMigrationSettings='{"firstRun":false,"autostart":false,"opacityRest":93,"clockSeconds":false,"weatherCity":"QA City"}'
+$taskPortableMigrationSettings='{"autostart":false,"opacityRest":93,"clockSeconds":true,"weatherCity":"QA City"}'
 $taskResults=[Collections.Generic.List[object]]::new()
 $taskReport=[ordered]@{Scenario=$Scenario;Environment='Disposable GitHub-hosted Windows runner, not clean Windows';RunId=$env:GITHUB_RUN_ID;Commit=$env:GITHUB_SHA;Root=$taskRoot;Version=$taskVersion;Installer=$taskInstaller;ExpectedExe=$taskExpectedExe;Results=$taskResults;Errors=@();VersionUpgrade='not-tested-no-previous-installer'}
 $taskReport.PortableMigration='not-tested'; $taskReport.DeleteAppDataGuiOptIn='not-tested-silent-mode-does-not-control-checkbox'
