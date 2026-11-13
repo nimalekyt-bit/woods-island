@@ -90,6 +90,8 @@ $taskDataDir=Join-Path $taskAppData 'woods-island'
 $taskInstalledExe=Join-Path $taskInstallDir $ApplicationRelativePath
 $taskRunKey='HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 $taskRunValueName='WoodsIsland'
+$taskUnrelatedRunValueName='WoodsIslandInstallerQA-'+[guid]::NewGuid().ToString('N')
+$taskUnrelatedRunValue='"'+(Join-Path $taskRoot 'unrelated-startup\sentinel.exe')+'"'
 Assert-True ([IO.Path]::GetFullPath($taskInstalledExe).StartsWith($taskInstallDir+'\',[StringComparison]::OrdinalIgnoreCase)) 'ApplicationRelativePath escaped installation directory'
 Assert-True ((Woods-Registrations).Count -eq 0) 'Runner already has Woods Island; refusing to overwrite an existing installation'
 Assert-True ((Shortcut-Paths).Count -eq 0) 'Runner has Woods Island shortcuts before the test'
@@ -244,7 +246,16 @@ $policy=@(foreach ($key in @('HKLM:\SOFTWARE\Policies\Microsoft\Edge','HKCU:\SOF
   $policySnapshots=[Collections.Generic.List[object]]::new()
   try {
     $env:WOODS_INSTALLER_QA_ROOT=$taskRoot; $env:WOODS_INSTALLER_QA_DATA=$taskDataDir; $env:WOODS_INSTALLER_QA_APPDATA=$taskAppData
-    $env:WOODS_INSTALLER_QA_EXPECT_SETTINGS=$taskPortableMigrationSettings
+    # The accepted UI smoke deliberately toggles clockSeconds and saves it.
+    # Compare each launch with the profile as it exists before that launch;
+    # installation/reinstallation already checks the complete file's SHA256.
+    $profileSettings=Get-Content -LiteralPath (Join-Path $taskDataDir 'settings.json') -Raw | ConvertFrom-Json
+    $expectedSettings=[ordered]@{}
+    foreach ($key in @('autostart','opacityRest','clockSeconds','weatherCity')) {
+      Assert-True ($key -in $profileSettings.PSObject.Properties.Name) "Migration profile lacks setting $key"
+      $expectedSettings[$key]=$profileSettings.$key
+    }
+    $env:WOODS_INSTALLER_QA_EXPECT_SETTINGS=$expectedSettings | ConvertTo-Json -Compress
     $env:WOODS_INSTALLER_QA_TRANSPORT_SCRIPT=$transportScript
     $env:TEMP=$taskRoot; $env:TMP=$taskRoot
     $env:WOODS_TEST_EXPECT_CODEX=$null; $env:WOODS_TEST_EXPECT_AUDIO=$null
@@ -316,7 +327,8 @@ $policy=@(foreach ($key in @('HKLM:\SOFTWARE\Policies\Microsoft\Edge','HKCU:\SOF
 }
 function Uninstall-Application([string]$ExpectedRunValue,[bool]$ShouldRemoveRunValue,[string]$Label) {
   $before=Profile-Proofs
-  New-Item -Path $taskRunKey -Force | Out-Null
+  if (-not (Test-Path -LiteralPath $taskRunKey)) { New-Item -Path $taskRunKey -Force | Out-Null }
+  New-ItemProperty -LiteralPath $taskRunKey -Name $taskUnrelatedRunValueName -Value $taskUnrelatedRunValue -PropertyType String -Force | Out-Null
   New-ItemProperty -LiteralPath $taskRunKey -Name $taskRunValueName -Value $ExpectedRunValue -PropertyType String -Force | Out-Null
   $uninstaller=Join-Path $taskInstallDir 'uninstall.exe'
   Assert-True (Test-Path -LiteralPath $uninstaller -PathType Leaf) 'NSIS uninstall.exe missing'
@@ -329,6 +341,8 @@ function Uninstall-Application([string]$ExpectedRunValue,[bool]$ShouldRemoveRunV
   $runValue=(Get-ItemProperty -LiteralPath $taskRunKey -Name $taskRunValueName -ErrorAction SilentlyContinue).$taskRunValueName
   if ($ShouldRemoveRunValue) { Assert-True ([string]::IsNullOrEmpty($runValue)) 'Uninstall left its installed-path Run value' }
   else { Assert-True ($runValue -eq $ExpectedRunValue) 'Uninstall removed or changed an unrelated-path Run value' }
+  $otherRunValue=(Get-ItemProperty -LiteralPath $taskRunKey -Name $taskUnrelatedRunValueName -ErrorAction SilentlyContinue).$taskUnrelatedRunValueName
+  Assert-True ($otherRunValue -eq $taskUnrelatedRunValue) 'Uninstall changed an unrelated application startup entry'
   foreach ($relative in $ToolRelativePaths) { Assert-True (-not (Test-Path -LiteralPath (Join-Path $taskInstallDir $relative))) "Uninstall left recording tool $relative" }
   foreach ($entry in $taskManifest.files) { Assert-True (-not (Test-Path -LiteralPath (Join-Path $taskInstallDir $entry.name))) "Uninstall left manifest payload $($entry.name)" }
   Assert-ProfileUnchanged $before $Label
@@ -394,6 +408,7 @@ try {
   $taskReport.Errors=@($_.Exception.Message); $taskReport.Passed=$false
   throw
 } finally {
+  Remove-ItemProperty -LiteralPath $taskRunKey -Name $taskUnrelatedRunValueName -ErrorAction SilentlyContinue
   $taskReport | ConvertTo-Json -Depth 15 | Set-Content -LiteralPath $taskReportPath -Encoding utf8
   Write-Output "INSTALLER_REPORT $taskReportPath"
 }
