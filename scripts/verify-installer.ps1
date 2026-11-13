@@ -115,11 +115,11 @@ New-Item -ItemType Directory -Path $taskDefaultProfile -Force | Out-Null
 $taskDefaultProfileSentinel=Join-Path $taskDefaultProfile 'installer-qa-default-profile.json'
 [IO.File]::WriteAllText($taskDefaultProfileSentinel,'{"fixture":"retain-default-profile-on-silent-uninstall"}',[Text.UTF8Encoding]::new($false))
 $taskDefaultProfileSentinelSha=(File-Proof $taskDefaultProfileSentinel).SHA256
-$taskPortableMigrationSettings='{"firstRun":false,"autostart":false,"opacityRest":93,"clockSeconds":false,"weatherCity":"QA City","gpuAcceleration":false}'
+$taskPortableMigrationSettings='{"firstRun":false,"autostart":false,"opacityRest":93,"clockSeconds":false,"weatherCity":"QA City"}'
 $taskResults=[Collections.Generic.List[object]]::new()
 $taskReport=[ordered]@{Scenario=$Scenario;Environment='Disposable GitHub-hosted Windows runner, not clean Windows';RunId=$env:GITHUB_RUN_ID;Commit=$env:GITHUB_SHA;Root=$taskRoot;Version=$taskVersion;Installer=$taskInstaller;ExpectedExe=$taskExpectedExe;Results=$taskResults;Errors=@();VersionUpgrade='not-tested-no-previous-installer'}
 $taskReport.PortableMigration='not-tested'; $taskReport.DeleteAppDataGuiOptIn='not-tested-silent-mode-does-not-control-checkbox'
-$taskReport.RendererMode='Application software-rendering setting on disposable hosted guest'
+$taskReport.RendererMode='Default application renderer on disposable hosted guest'
 $taskReportPath=Join-Path $taskRoot 'installer-acceptance.json'
 Write-Output "INSTALLER_QA_ROOT $taskRoot"
 
@@ -237,6 +237,14 @@ function Installed-Smoke([bool]$Legacy=$false,[string]$Executable=$taskInstalled
       $processSummary=@(Get-Process woods-island,msedgewebview2 -ErrorAction SilentlyContinue | Select-Object Id,ProcessName,SessionId,MainWindowHandle)
       $environmentDetail=(@{userInteractive=[Environment]::UserInteractive;rendererMode=$taskReport.RendererMode;processes=$processSummary}|ConvertTo-Json -Depth 4 -Compress).Replace('%','%25')
       Write-Output ('::error title=Hosted native environment::'+$environmentDetail)
+      $browserProcesses=@(Get-CimInstance Win32_Process -Filter "Name='msedgewebview2.exe'" | ForEach-Object {
+        $debugPort=if ($_.CommandLine -match '--remote-debugging-port[= ](\d+)') { $matches[1] } else { '' }
+        $kind=if ($_.CommandLine -match '--type=([^\s]+)') { $matches[1] } else { 'browser' }
+        @{pid=$_.ProcessId;parent=$_.ParentProcessId;kind=$kind;debugPort=$debugPort;software=$_.CommandLine -match '--disable-gpu'}
+      })
+      $listeners=@(Get-NetTCPConnection -LocalPort 9334,9335 -State Listen -ErrorAction SilentlyContinue | Select-Object LocalAddress,LocalPort,OwningProcess)
+      $browserDetail=(@{processes=$browserProcesses;listeners=$listeners}|ConvertTo-Json -Depth 4 -Compress).Replace('%','%25')
+      Write-Output ('::error title=Hosted WebView2 debug transport::'+$browserDetail)
     }
     Assert-True ($nativeExit -eq 0) "Installed-location native smoke failed; see $log"
     $line=@($output | ForEach-Object { $_.ToString() } | Where-Object { $_ -like 'REPORT *' })
