@@ -115,10 +115,11 @@ New-Item -ItemType Directory -Path $taskDefaultProfile -Force | Out-Null
 $taskDefaultProfileSentinel=Join-Path $taskDefaultProfile 'installer-qa-default-profile.json'
 [IO.File]::WriteAllText($taskDefaultProfileSentinel,'{"fixture":"retain-default-profile-on-silent-uninstall"}',[Text.UTF8Encoding]::new($false))
 $taskDefaultProfileSentinelSha=(File-Proof $taskDefaultProfileSentinel).SHA256
-$taskPortableMigrationSettings='{"firstRun":false,"autostart":false,"opacityRest":93,"clockSeconds":false,"weatherCity":"QA City"}'
+$taskPortableMigrationSettings='{"firstRun":false,"autostart":false,"opacityRest":93,"clockSeconds":false,"weatherCity":"QA City","gpuAcceleration":false}'
 $taskResults=[Collections.Generic.List[object]]::new()
 $taskReport=[ordered]@{Scenario=$Scenario;Environment='Disposable GitHub-hosted Windows runner, not clean Windows';RunId=$env:GITHUB_RUN_ID;Commit=$env:GITHUB_SHA;Root=$taskRoot;Version=$taskVersion;Installer=$taskInstaller;ExpectedExe=$taskExpectedExe;Results=$taskResults;Errors=@();VersionUpgrade='not-tested-no-previous-installer'}
 $taskReport.PortableMigration='not-tested'; $taskReport.DeleteAppDataGuiOptIn='not-tested-silent-mode-does-not-control-checkbox'
+$taskReport.RendererMode='Application software-rendering setting on disposable hosted guest'
 $taskReportPath=Join-Path $taskRoot 'installer-acceptance.json'
 Write-Output "INSTALLER_QA_ROOT $taskRoot"
 
@@ -185,7 +186,9 @@ function Install-Payload([string]$Setup,[string]$Version,[string]$ExpectedSha,[s
   Assert-True ($registrations.Count -eq 1) 'Expected exactly one Woods Island uninstall registration'
   Assert-True ($registrations[0].DisplayVersion -eq $Version) 'Uninstall registration version mismatch'
   if ($registrations[0].InstallLocation) {
-    Assert-True ([IO.Path]::GetFullPath($registrations[0].InstallLocation).TrimEnd('\') -eq $taskInstallDir) 'InstallLocation ignores /D isolation'
+    # Tauri NSIS writes this registry value as a quoted path.
+    $registeredLocation=[IO.Path]::GetFullPath($registrations[0].InstallLocation.Trim('"')).TrimEnd('\')
+    Assert-True ($registeredLocation -eq $taskInstallDir) "InstallLocation ignores /D isolation: $registeredLocation != $taskInstallDir"
   }
   Assert-True ($registrations[0].UninstallString -like ('*'+$taskInstallDir+'*')) 'Uninstaller registration points outside the test install directory'
   $taskReport.Registration=$registrations[0]
@@ -231,6 +234,9 @@ function Installed-Smoke([bool]$Legacy=$false,[string]$Executable=$taskInstalled
       $detail=($output | ForEach-Object { $_.ToString() } | Select-Object -Last 14) -join "`n"
       $detail=$detail.Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
       Write-Output ('::error title=Installed native smoke output::'+$detail)
+      $processSummary=@(Get-Process woods-island,msedgewebview2 -ErrorAction SilentlyContinue | Select-Object Id,ProcessName,SessionId,MainWindowHandle)
+      $environmentDetail=(@{userInteractive=[Environment]::UserInteractive;rendererMode=$taskReport.RendererMode;processes=$processSummary}|ConvertTo-Json -Depth 4 -Compress).Replace('%','%25')
+      Write-Output ('::error title=Hosted native environment::'+$environmentDetail)
     }
     Assert-True ($nativeExit -eq 0) "Installed-location native smoke failed; see $log"
     $line=@($output | ForEach-Object { $_.ToString() } | Where-Object { $_ -like 'REPORT *' })
