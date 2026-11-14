@@ -16,6 +16,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let expected_name=format!("Woods-Island-{version}-windows-x64-Setup.exe");
     if package_path.file_name().and_then(|s|s.to_str())!=Some(expected_name.as_str()) { return Err("Setup filename does not match the manifest version".into()); }
     let updater_configuration=configuration["plugins"]["updater"].clone();
+    if updater_configuration["windows"]["installMode"]!="quiet" {
+        return Err("Quiet update installation must bypass the NSIS language selector".into());
+    }
     if updater_configuration["requireSignedVersion"]!=true || updater_configuration["pubkey"].as_str().is_none_or(str::is_empty) {
         return Err("Production configuration must have a public key and require signed versions".into());
     }

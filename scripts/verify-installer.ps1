@@ -182,10 +182,14 @@ function Remove-RunnerWebViewRuntime {
 }
 
 function Install-Payload([string]$Setup,[string]$Version,[string]$ExpectedSha,[string]$Label,[bool]$UpdateMode=$false) {
-  # The updater uses passive NSIS update mode. Omit /R so the accepted smoke
+  # Match the production updater's quiet NSIS mode. Passive /P can block on
+  # the language selector when a previous silent installation saved no language.
+  # Omit /R so the accepted smoke
   # harness controls the only application launch and its isolated profile.
   # NSIS requires /D to be the final argument, including when the path has spaces.
-  $installArguments=if ($UpdateMode) { @('/UPDATE','/P',('/D='+$taskInstallDir)) } else { @('/S',('/D='+$taskInstallDir)) }
+  $updaterConfig=(Get-Content -LiteralPath (Join-Path $taskRepoRoot 'src-tauri/tauri.conf.json') -Raw | ConvertFrom-Json).plugins.updater
+  Assert-True ($updaterConfig.windows.installMode -eq 'quiet') 'Installer acceptance requires the production quiet update mode'
+  $installArguments=if ($UpdateMode) { @('/S','/UPDATE',('/D='+$taskInstallDir)) } else { @('/S',('/D='+$taskInstallDir)) }
   $taskResults.Add((Invoke-CheckedProcess $Setup $installArguments $Label))
   Assert-True (Test-Path -LiteralPath $taskInstalledExe -PathType Leaf) 'Installed executable missing'
   Assert-True ((File-Proof $taskInstalledExe).SHA256 -eq $ExpectedSha) 'Installed EXE differs from the corresponding packaged build'
@@ -378,7 +382,7 @@ try {
     Assert-ProfileUnchanged $before 'Version upgrade'
     $taskReport.VersionUpgrade='passed-actual-previous-version'
     $taskReport.NsisUpdateMode='passed-actual-previous-version'
-    $taskResults.Add([pscustomobject]@{Label='NSIS /UPDATE /P preserves previous-version profile';Passed=$true;PreviousVersion=$PreviousVersion;Version=$taskVersion;PreservedProfile=$before})
+    $taskResults.Add([pscustomobject]@{Label='NSIS /S /UPDATE preserves previous-version profile';Passed=$true;PreviousVersion=$PreviousVersion;Version=$taskVersion;PreservedProfile=$before})
   } else {
     if ($Scenario -eq 'ExistingRuntime' -and $PublishedPortablePath) {
       $legacyDir=Join-Path $taskRoot 'PublishedPortable-1.1.0'; New-Item -ItemType Directory -Path $legacyDir | Out-Null
@@ -402,7 +406,7 @@ try {
     Install-Payload $taskInstaller.Path $taskVersion $taskExpectedExe.SHA256 'NSIS update mode after ordinary installation' $true
     Assert-ProfileUnchanged $beforeUpdateMode 'NSIS update mode'
     $taskReport.NsisUpdateMode='passed-same-version-after-ordinary-install'
-    $taskResults.Add([pscustomobject]@{Label='NSIS /UPDATE /P preserves installed profile';Passed=$true;Version=$taskVersion;PreservedProfile=$beforeUpdateMode})
+    $taskResults.Add([pscustomobject]@{Label='NSIS /S /UPDATE preserves installed profile';Passed=$true;Version=$taskVersion;PreservedProfile=$beforeUpdateMode})
     $taskResults.Add([pscustomobject]@{Label='Installer-to-installer version upgrade';Skipped=$true;Reason='First installer release; published portable migration and same-version maintenance are recorded separately'})
   }
   Installed-Smoke

@@ -28,6 +28,8 @@ if (!signedText.split(/\r?\n/).some(line => line.startsWith('trusted comment:') 
   throw Error('The signature is not bound to the release version');
 const config = JSON.parse(await readFile(join(root, 'src-tauri/tauri.conf.json'), 'utf8'));
 if (config.plugins?.updater?.requireSignedVersion !== true) throw Error('Signed versions must be required');
+if (config.plugins?.updater?.windows?.installMode !== 'quiet')
+  throw Error('Quiet update installation is required to avoid a hidden language selector');
 const update = {
   version, notes: 'Обновления из приложения, восстановление профиля, оптимизация и диагностика. / In-app updates, profile recovery, performance and diagnostics.',
   pub_date: new Date().toISOString(),
