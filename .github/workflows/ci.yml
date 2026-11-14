@@ -50,6 +50,8 @@ jobs:
           pnpm test:ipc
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           pnpm test:characters
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --test scripts/reliability-ui.test.cjs
       - name: Install verified Rust toolchain
         run: rustup toolchain install 1.98.1 --profile minimal
       - name: Cache Rust dependencies
@@ -77,6 +79,20 @@ jobs:
           $sdk=@(Get-ChildItem -Path "$env:USERPROFILE/.cargo/registry/src/*/webview2-com-sys-*/x64/WebView2Loader.dll" -File)
           if ($sdk.Count -ne 1) { throw 'Expected one x64 WebView2 SDK loader' }
           Copy-Item -LiteralPath $sdk[0].FullName -Destination dist-installer/WebView2Loader.dll
+      - name: Sign and verify updater package
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
+        shell: pwsh
+        run: |
+          $setup=@(Get-ChildItem dist-installer -Recurse -File -Filter '*-Setup.exe')
+          if ($setup.Count -ne 1) { throw 'Installer signing input is ambiguous' }
+          node scripts/package-updater.mjs $setup[0].FullName
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $manifest=Join-Path $setup[0].DirectoryName 'latest.json'
+          cargo +1.98.1 run --release --locked -j 1 --manifest-path src-tauri/Cargo.toml --example verify-update-package -- $manifest $setup[0].FullName
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Upload installer payload
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -122,6 +138,32 @@ jobs:
           path: dist-installer/application
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ inputs.artifact_run_id || github.run_id }}
+      - name: Fetch accepted previous release for the real upgrade
+        if: matrix.scenario == 'ExistingRuntime'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or $env:RUNNER_OS -ne 'Windows' -or $env:GITHUB_REPOSITORY -ne 'nimalekyt-bit/woods-island' -or [string]::IsNullOrWhiteSpace($env:RUNNER_TEMP)) {
+            throw 'Previous installer fixtures may only be prepared on the disposable hosted Windows runner'
+          }
+          $previousRoot=Join-Path $env:RUNNER_TEMP ('woods-previous-release-'+[guid]::NewGuid().ToString('N'))
+          New-Item -ItemType Directory -Path $previousRoot | Out-Null
+          $setupName='Woods-Island-1.1.1-windows-x64-Setup.exe'
+          $portableName='Woods-Island-1.1.1-windows-x64-portable.zip'
+          gh release download v1.1.1 --repo $env:GITHUB_REPOSITORY --pattern $setupName --pattern $portableName --dir $previousRoot
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $previousSetup=Join-Path $previousRoot $setupName
+          $previousPortable=Join-Path $previousRoot $portableName
+          if ((Get-FileHash -LiteralPath $previousSetup -Algorithm SHA256).Hash.ToLowerInvariant() -ne '5d612fff066cb3ae5a7fc1880558ee84ff3e0f0413ce209a9f26976333f2a3ed') { throw 'Previous Setup differs from the accepted public 1.1.1 bytes' }
+          if ((Get-FileHash -LiteralPath $previousPortable -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'ffe1577debb1390dfb51f6b065277d0fa8d04e673951d38069d84eee8f766d61') { throw 'Previous portable differs from the accepted public 1.1.1 bytes' }
+          $portableRoot=Join-Path $previousRoot 'portable'
+          Expand-Archive -LiteralPath $previousPortable -DestinationPath $portableRoot
+          $previousExe=@(Get-ChildItem -LiteralPath $portableRoot -Recurse -File -Filter 'woods-island.exe')
+          if ($previousExe.Count -ne 1) { throw 'Previous portable executable is ambiguous' }
+          if ((Get-FileHash -LiteralPath $previousExe[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant() -ne '8050232c7913e585e5a0e1f364e220f3a4d629b7adbbd7262b747fd61805391b') { throw 'Previous portable EXE differs from the accepted public 1.1.1 build' }
+          "WOODS_PREVIOUS_SETUP=$previousSetup" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "WOODS_PREVIOUS_EXE=$($previousExe[0].FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Verify installation and removal
         shell: pwsh
         run: |
@@ -129,7 +171,12 @@ jobs:
           $manifest=@(Get-ChildItem dist-installer -Recurse -File -Filter '*-Setup.manifest.json')
           if ($setup.Count -ne 1 -or $manifest.Count -ne 1) { throw 'Installer artifacts are ambiguous' }
           New-Item -ItemType Directory -Path .qa-temp -Force | Out-Null
-          ./scripts/verify-installer.ps1 -InstallerPath $setup[0].FullName -InstallerManifestPath $manifest[0].FullName -ExpectedExePath dist-installer/application/woods-island.exe -WebView2LoaderPath dist-installer/WebView2Loader.dll -Scenario '${{ matrix.scenario }}'
+          $upgrade=@{}
+          if ('${{ matrix.scenario }}' -eq 'ExistingRuntime') {
+            if ([string]::IsNullOrWhiteSpace($env:WOODS_PREVIOUS_SETUP) -or [string]::IsNullOrWhiteSpace($env:WOODS_PREVIOUS_EXE)) { throw 'Previous release fixtures were not prepared' }
+            $upgrade=@{PreviousInstallerPath=$env:WOODS_PREVIOUS_SETUP;PreviousExePath=$env:WOODS_PREVIOUS_EXE;PreviousVersion='1.1.1'}
+          }
+          ./scripts/verify-installer.ps1 -InstallerPath $setup[0].FullName -InstallerManifestPath $manifest[0].FullName -ExpectedExePath dist-installer/application/woods-island.exe -WebView2LoaderPath dist-installer/WebView2Loader.dll -Scenario '${{ matrix.scenario }}' @upgrade
       - name: Upload acceptance report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

@@ -932,6 +932,55 @@ async function quit(client) {
       await pause(400);
     }
   });
+  await check('Reliability settings show connections updates and named switches without focus',async()=>{
+    const prior=await main.invoke('settings_get');
+    let settings;
+    try{
+      await main.invoke('settings_set',{settings:{language:'ru',onboardingCompleted:false,reducedMotion:'reduce'}});
+      await main.invoke('open_settings',{section:'connections'});
+      const pages=await pagesReady(p=>p.url.endsWith('/settings.html'));
+      settings=await attach(pages.find(p=>p.url.endsWith('/settings.html')));
+      await waitFor(settings,'!!document.querySelector("[data-connection-settings]")','Connections screen');
+      await waitFor(settings,'!!document.querySelector(".wi-connection")','Connection statuses');
+      assert.equal(await settings.invoke('plugin:window|is_focused',{label:'settings'}),false);
+      await waitFor(main,'document.documentElement.dataset.woodsReducedMotion==="true"','Main reduced motion');
+      await waitFor(settings,'document.documentElement.dataset.woodsReducedMotion==="true"','Settings reduced motion');
+      const labels=await settings.evaluate('Array.from(document.querySelectorAll("[role=switch]")).map(node=>node.getAttribute("aria-label"))');
+      assert(labels.length>30);assert(labels.every(label=>typeof label==='string'&&label.trim()),JSON.stringify(labels));
+      await settings.evaluate('Array.from(document.querySelectorAll("[data-connection-settings] button")).find(button=>button.textContent.trim()==="Сведения").click()');
+      await waitFor(settings,'!!document.querySelector(".wi-report")','Support details');
+      const report=await settings.evaluate('document.querySelector(".wi-report").textContent');
+      assert(report.includes('Woods Island 1.2.0'));assert(!report.includes('\\'));assert(!report.includes('://'));
+      const shot=await settings.command('Page.captureScreenshot',{format:'png'});
+      await fs.writeFile(path.join(directory,'reliability-connections.png'),Buffer.from(shot.data,'base64'));
+      await settings.evaluate('document.querySelector("[data-nav=updates]").click()');
+      await waitFor(settings,'!!document.querySelector("[data-update-settings]")','Update screen');
+      const status=await main.invoke('update_status');assert.equal(typeof status.canInstall,'boolean');
+      const actions=await settings.evaluate('Array.from(document.querySelector("[data-update-settings]").querySelectorAll("button")).map(button=>button.textContent)');
+      if(status.status!=='ready')assert(!actions.includes('Установить'));
+      await main.invoke('settings_set',{settings:{language:'en',reducedMotion:'full',onboardingCompleted:true}});
+      await waitFor(settings,'document.documentElement.lang==="en" && document.documentElement.dataset.woodsReducedMotion==="false"','English and full motion');
+      await waitFor(settings,'document.querySelector("[data-update-settings]")?.textContent.includes("Check for updates")','English update copy');
+      assert.equal(await settings.evaluate('document.documentElement.scrollWidth > innerWidth'),false);
+      return {namedSwitches:labels.length,connections:true,updater:true,languageSwitch:true,reducedMotion:true,focused:false,installInvoked:false};
+    }finally{
+      await main.invoke('settings_set',{settings:prior});
+      if(settings){await settings.invoke('plugin:window|close',{label:'settings'}).catch(()=>{});await waitForWindowClosed('/settings.html');}
+    }
+  });
+  await check('Weather IANA timezone refreshes without retaining the previous cached offset',async()=>{
+    const prior=await main.invoke('settings_get');
+    try{
+      await main.invoke('settings_set',{settings:{weatherTimezone:'Asia/Kolkata'}});
+      const data=await main.invoke('weather_get');
+      assert(data);assert.equal(data.timezone,'Asia/Kolkata');assert.equal(data.utcOffset,19800);
+      assert.equal(data.timezoneSource,'manual');assert.equal(data.timezoneWarning,false);
+      await main.invoke('settings_set',{settings:{weatherTimezone:'Europe/London'}});
+      const changed=await main.invoke('weather_get');assert.equal(changed.timezone,'Europe/London');
+      assert.notEqual(changed.utcOffset,19800);
+      return {manualIana:true,cacheInvalidated:true,halfHourOffset:true};
+    }finally{await main.invoke('settings_set',{settings:prior});}
+  });
   await check('Disabled download cards and agent questions suppress their UI events',async()=>{
     const prior=await main.invoke('settings_get');
     const peek=()=>main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");return ot.getState().peek?.kind??null;})()');
@@ -963,9 +1012,9 @@ async function quit(client) {
       return {clickDefault:true,hoverOptIn:true,delay:true};
     }finally{await reset();await main.invoke('settings_set',{settings:prior});}
   });
-  await check('Opening the releases page does not leave a fictitious download running',async()=>{
-    const result=await main.evaluate(`(async()=>{const {ot}=await import('/assets/runtime-debug.js'),{O:api}=await import('/assets/runtime-debug.js');const original=api.updateInstall;let requests=0;try{api.updateInstall=()=>{requests++;return Promise.resolve(true);};ot.setState({expanded:true,palette:false,peek:null,queue:[],updating:null});ot.getState().installUpdate();await new Promise(r=>setTimeout(r,150));return {requests,updating:ot.getState().updating,expanded:ot.getState().expanded};}finally{api.updateInstall=original;ot.setState({expanded:false,peek:null,queue:[],updating:null});}})()`);
-    assert.equal(result.requests,1);assert.equal(result.updating,null);assert.equal(result.expanded,false);return {...result,backendOpenMocked:true};
+  await check('Pill update action opens update settings without starting an installation',async()=>{
+    const result=await main.evaluate(`(async()=>{const {ot}=await import('/assets/runtime-debug.js'),{O:api}=await import('/assets/runtime-debug.js');const original=api.updateInstall,open=api.openSettings;let requests=0,section=null;try{api.updateInstall=()=>{requests++;return Promise.resolve(true);};api.openSettings=value=>{section=value;return Promise.resolve(true);};ot.setState({expanded:true,palette:false,peek:null,queue:[],updating:null});ot.getState().installUpdate();await new Promise(r=>setTimeout(r,150));return {requests,section,updating:ot.getState().updating,expanded:ot.getState().expanded};}finally{api.updateInstall=original;api.openSettings=open;ot.setState({expanded:false,peek:null,queue:[],updating:null});}})()`);
+    assert.equal(result.requests,0);assert.equal(result.section,'updates');assert.equal(result.updating,null);assert.equal(result.expanded,false);return {...result,backendOpenMocked:true};
   });
   await check('WASAPI follows the active player output and animates the liquid spectrum',async()=>{
     const prior=await main.invoke('settings_get');let timer;

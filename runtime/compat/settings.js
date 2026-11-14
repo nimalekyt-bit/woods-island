@@ -1,6 +1,10 @@
 import { ObsidianVaultSettings } from '../components/ObsidianVaultSettings';
+import { React as WoodsReact } from '../react';
+import { ConnectionSettings, UpdateSettings, UploadKeySettings } from '../components/ReliabilitySettings';
+import { WeatherTimezoneSettings, WeatherDataSources } from '../components/WeatherTimezoneSettings';
 import { PetLibrarySettings } from '../components/PetLibrarySettings';
 import { usePetLibrary } from '../characters/pet-library';
+const WoodsSettingLabel = WoodsReact.createContext('');
 // Compatibility application source; migrate components incrementally.
 import { woodsAbout, woodsContact, woodsInfoIcon } from "./../components/woods-extensions.js";
 
@@ -168,6 +172,32 @@ var L = `Woods Island 1.1.0`,
   z = `Woods Island 1.1.0`,
   He = `https://github.com/nimalekyt-bit`,
   Ue = {
+    "../../release-notes/1.2.0.md": `Woods Island 1.2.0
+
+- Проверенные обновления с прогрессом загрузки и установкой по кнопке.
+- Знакомство с островом, готовность подключений и сведения для отчёта об ошибке.
+- Восстановление локальных данных, приватность буфера и защищённый ключ загрузки изображений.
+- Доступные переключатели, уменьшение движения и часовые пояса IANA.
+
+---
+
+- Verified updates with download progress and installation when you choose it.
+- Quick introduction, connection readiness and safe details for bug reports.
+- Local data recovery, clipboard privacy and protected image-upload keys.
+- Accessible switches, reduced motion and IANA weather time zones.
+`,
+    "../../release-notes/1.1.1.md": `Woods Island 1.1.1
+
+- Установщик Windows с автоматической подготовкой WebView2 и FFmpeg.
+- Новый маскот Woods Island и системные иконки.
+- Публичные установщик, portable-архив и контрольные суммы.
+
+---
+
+- Windows installer with WebView2 setup and bundled FFmpeg.
+- New Woods Island mascot and app icons.
+- Public installer, portable archive and checksums.
+`,
     "../../release-notes/1.1.0.md": `Woods Island 1.1.0
 
 - 11 одобренных авторских bitmap-питомцев, включая рыжего котёнка Искорку.
@@ -848,7 +878,7 @@ function q({ since: e, className: t = `ml-2` }) {
 }
 function J({ title: e, hint: t, since: n, pro: r, stacked: i, preview: a, children: o }) {
   let s = (0, F.useContext)(ft);
-  return (0, U.jsxs)(`div`, {
+  return (0, U.jsx)(WoodsSettingLabel.Provider, { value: e, children: (0, U.jsxs)(`div`, {
     ...(a && s
       ? {
           onPointerEnter: () => s(a),
@@ -883,11 +913,13 @@ function J({ title: e, hint: t, since: n, pro: r, stacked: i, preview: a, childr
       }),
       o,
     ],
-  });
+  }) });
 }
-function Y({ value: e, onChange: t }) {
+function Y({ value: e, onChange: t, label }) {
+  const settingLabel = WoodsReact.useContext(WoodsSettingLabel);
   return (0, U.jsx)(`button`, {
     role: `switch`,
+    "aria-label": label || settingLabel,
     "aria-checked": e,
     onClick: () => t(!e),
     className: `group relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 ${e ? `bg-[#8ea2ff]` : `bg-white/15`}`,
@@ -897,13 +929,17 @@ function Y({ value: e, onChange: t }) {
   });
 }
 function X({ value: e, options: t, onChange: n }) {
+  const settingLabel = WoodsReact.useContext(WoodsSettingLabel);
   return (0, U.jsx)(`div`, {
+    role: `group`,
+    "aria-label": settingLabel || undefined,
     className: `flex rounded-lg bg-white/[0.07] p-0.5`,
     children: t.map((t) =>
       (0, U.jsx)(
         `button`,
         {
           onClick: () => n(t.value),
+          "aria-pressed": e === t.value,
           className: `rounded-md px-3 py-1 text-[12.5px] ${e === t.value ? `bg-white/15 text-white` : `text-white/55 hover:text-white`}`,
           children: t.label,
         },
@@ -1070,13 +1106,14 @@ function bt({ s: e, save: t }) {
               }),
             ],
           }),
-          (0, U.jsx)(Y, { value: e.vpnCustomAdmin === !0, onChange: (e) => t({ vpnCustomAdmin: e }) }),
+          (0, U.jsx)(Y, { label: n(`Запускать команды VPN от администратора`, `Run VPN commands as administrator`), value: e.vpnCustomAdmin === !0, onChange: (e) => t({ vpnCustomAdmin: e }) }),
         ],
       }),
     ],
   });
 }
 var xt = () => [
+  { id: `connections`, label: n(`Подключения`, `Connections`), icon: ke },
   { id: `pro`, label: n(`О приложении`, `About`), icon: WoodsInfo },
   { id: `character`, label: n(`Персонаж`, `Character`), icon: j, gap: !0 },
   { id: `general`, label: n(`Общее`, `General`), icon: m },
@@ -1800,10 +1837,8 @@ function $({ value: e, onChange: t }) {
         : (0, U.jsx)(`span`, { className: `text-white/40`, children: n(`не назначено`, `not set`) }),
   });
 }
-function Pt({ service: e, uploadKey: t, save: i }) {
-  let a = h(e),
-    [o, s] = (0, F.useState)(t);
-  (0, F.useEffect)(() => s(t), [t]);
+function Pt({ service: e, save: i }) {
+  let a = h(e);
   let c = (e) =>
     `flex h-8 items-center rounded-lg px-3 text-[12.5px] ${e ? `bg-[#8ea2ff]/20 text-white ring-1 ring-[#8ea2ff]/70` : `bg-white/[0.07] text-white/70 hover:bg-white/[0.12] hover:text-white`}`;
   return (0, U.jsxs)(`div`, {
@@ -1859,18 +1894,7 @@ function Pt({ service: e, uploadKey: t, save: i }) {
               }),
           ],
         }),
-      a?.needsKey &&
-        (0, U.jsx)(`input`, {
-          "data-upload-key": !0,
-          value: o,
-          onChange: (e) => s(e.target.value),
-          onBlur: () => o.trim() !== t && i({ uploadKey: o.trim() }),
-          onKeyDown: (e) => e.key === `Enter` && e.target.blur(),
-          placeholder: a.keyName,
-          autoComplete: `off`,
-          spellCheck: !1,
-          className: `h-9 rounded-lg bg-black/40 px-2.5 font-mono text-[12.5px] text-white/85 outline-none placeholder:text-white/30 focus:ring-1 focus:ring-white/20`,
-        }),
+      a?.needsKey && (0, U.jsx)(UploadKeySettings, { keyName: a.keyName }),
     ],
   });
 }
@@ -1994,6 +2018,7 @@ function Rt() {
 }
 function zt() {
   const petLibrary = usePetLibrary();
+  const [saveError, setSaveError] = WoodsReact.useState(``);
   let [e, t] = (0, F.useState)(null),
     i = (0, F.useRef)(null),
     a = (0, F.useRef)(0);
@@ -2084,6 +2109,7 @@ function zt() {
     }, []),
     (0, F.useEffect)(() => {
       (r.settingsGet().then((e) => {
+        if (e.onboardingCompleted === false) b(`connections`);
         ((i.current = e),
           t(e),
           h(
@@ -2203,13 +2229,15 @@ function zt() {
     };
   if (!e || !l) return null;
   let H = (n) => {
+    setSaveError(``);
     let o = { ...(i.current ?? e), ...n };
     ((i.current = o),
       t(o),
       (a.current += 1),
       r
         .settingsSet(o)
-        .then(f)
+        .then((warnings) => { f(warnings); if (warnings?.length) setSaveError(warnings.join(`\n`)); })
+        .catch((error) => { setSaveError(String(error)); void r.settingsGet().then((saved) => {i.current=saved; t(saved);}).catch(() => {}); })
         .finally(() => {
           --a.current;
         }));
@@ -2230,6 +2258,11 @@ function zt() {
               children: (0, U.jsxs)(`div`, {
                 className: `mx-auto flex max-w-[580px] flex-col gap-6 px-6 py-6`,
                 children: [
+                  saveError && (0, U.jsx)(`div`, { role: `alert`, className: `rounded-lg bg-white/[0.045] px-4 py-3 text-[12px] text-[#ff9b9b]`, children: saveError }),
+                  y === `connections` && (0, U.jsxs)(`section`, { id: `connections`, className: `flex flex-col gap-3`, children: [
+                    (0, U.jsx)(pt, { children: n(`Подключения`, `Connections`) }),
+                    (0, U.jsx)(ConnectionSettings, { Row: J, completed: e.onboardingCompleted !== false, save: H, navigate: b, hotkeyToggle: e.hotkeyToggle || ``, hotkeyPalette: e.hotkeyPalette || `` }),
+                  ] }),
                   (0, U.jsxs)(`div`, {
                     hidden: y !== `pro`,
                     className: `flex flex-col gap-4`,
@@ -2342,6 +2375,15 @@ function zt() {
                       (0, U.jsx)(J, {
                         title: n(`Запускать вместе с Windows`, `Start with Windows`),
                         children: (0, U.jsx)(Y, { value: e.autostart, onChange: (e) => H({ autostart: e }) }),
+                      }),
+                      (0, U.jsx)(J, {
+                        title: n(`Движение и анимации`, `Motion and animations`),
+                        hint: n(`Меньше движения сохраняет состояния и события, но убирает постоянную анимацию`, `Reduced motion keeps states and events while stopping continuous animation`),
+                        children: (0, U.jsx)(X, { value: e.reducedMotion || `auto`, onChange: (value) => H({ reducedMotion: value }), options: [
+                          { value: `auto`, label: n(`Как в Windows`, `Windows`) },
+                          { value: `reduce`, label: n(`Меньше`, `Reduced`) },
+                          { value: `full`, label: n(`Обычное`, `Full`) },
+                        ] }),
                       }),
                       M &&
                         (0, U.jsxs)(`div`, {
@@ -3309,19 +3351,20 @@ function zt() {
                           (0, U.jsx)(`div`, {
                             className: `text-[12px] leading-snug text-white/45`,
                             children: n(
-                              `Прогноз — Норвежский метеорологический институт (MET Norway), поиск городов — OpenStreetMap, часовые пояса — GeoNames. Ключ и регистрация не нужны. Город хранится только на этом компьютере; по адресу в сети он не определяется.`,
-                              `The forecast is from the Norwegian Meteorological Institute (MET Norway), the city search from OpenStreetMap, time zones from GeoNames. No key and no sign-up. The city is kept only on this computer; it is not guessed from your network address.`,
+                              `Найди город, чтобы видеть прогноз на острове.`,
+                              `Find a city to see its forecast on the island.`,
                             ),
                           }),
                           (0, U.jsx)(
                             ge,
                             {
-                              onPick: (e) => H({ weatherCity: e.name, weatherLat: e.lat, weatherLon: e.lon }),
+                              onPick: (e) => H({ weatherCity: e.name, weatherLat: e.lat, weatherLon: e.lon, weatherTimezone: `` }),
                             },
                             e.weatherCity,
                           ),
                         ],
                       }),
+                      y === `weather` && (0, U.jsx)(WeatherTimezoneSettings, { Row: J, value: e.weatherTimezone || ``, save: H }),
                       (0, U.jsx)(J, {
                         title: n(`Единицы`, `Units`),
                         children: (0, U.jsx)(X, {
@@ -3355,6 +3398,7 @@ function zt() {
                           onChange: (e) => H({ weatherAlerts: e }),
                         }),
                       }),
+                      (0, U.jsx)(WeatherDataSources, {}),
                     ],
                   }),
                   (0, U.jsxs)(K, {
@@ -3910,7 +3954,6 @@ function zt() {
                       }),
                       (0, U.jsx)(Pt, {
                         service: e.uploadService ?? ``,
-                        uploadKey: e.uploadKey ?? ``,
                         save: H,
                       }),
                     ],
@@ -4056,29 +4099,7 @@ function zt() {
                     id: `updates`,
                     title: n(`Обновления`, `Updates`),
                     children: [
-                      (0, U.jsx)(J, {
-                        title: n(`Версия ${x}`, `Version ${x}`),
-                        hint: n(
-                          `Проверять новые версии при запуске и раз в 6 часов`,
-                          `Check for new versions at startup and every 6 hours`,
-                        ),
-                        children: (0, U.jsx)(Y, {
-                          value: e.checkUpdates,
-                          onChange: (e) => H({ checkUpdates: e }),
-                        }),
-                      }),
-                      (0, U.jsxs)(`div`, {
-                        className: `flex items-center gap-3 px-4 py-3`,
-                        children: [
-                          (0, U.jsx)(`button`, {
-                            onClick: Ke,
-                            className: `h-8 shrink-0 rounded-lg bg-white/[0.08] px-3 text-[12.5px] hover:bg-white/[0.12]`,
-                            children: n(`Проверить сейчас`, `Check now`),
-                          }),
-                          fe &&
-                            (0, U.jsx)(`span`, { className: `text-[12.5px] text-white/55`, children: fe }),
-                        ],
-                      }),
+                      y === `updates` && (0, U.jsx)(UpdateSettings, { Row: J, Switch: Y, version: x, checkUpdates: e.checkUpdates !== false, autoDownload: e.autoDownloadUpdates !== false, save: H }),
                       (0, U.jsx)(Lt, { version: x }),
                     ],
                   }),

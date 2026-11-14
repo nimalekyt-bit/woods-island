@@ -121,6 +121,7 @@ $taskPortableMigrationSettings='{"autostart":false,"opacityRest":93,"clockSecond
 $taskResults=[Collections.Generic.List[object]]::new()
 $taskReport=[ordered]@{Scenario=$Scenario;Environment='Disposable GitHub-hosted Windows runner, not clean Windows';RunId=$env:GITHUB_RUN_ID;Commit=$env:GITHUB_SHA;Root=$taskRoot;Version=$taskVersion;Installer=$taskInstaller;ExpectedExe=$taskExpectedExe;Results=$taskResults;Errors=@();VersionUpgrade='not-tested-no-previous-installer'}
 $taskReport.PortableMigration='not-tested'; $taskReport.DeleteAppDataGuiOptIn='not-tested-silent-mode-does-not-control-checkbox'
+$taskReport.NsisUpdateMode='not-tested'
 $taskReport.RendererMode='Default application renderer on disposable hosted guest'
 $taskReportPath=Join-Path $taskRoot 'installer-acceptance.json'
 Write-Output "INSTALLER_QA_ROOT $taskRoot"
@@ -180,8 +181,12 @@ function Remove-RunnerWebViewRuntime {
   $taskResults.Add([pscustomobject]@{Label='Missing WebView2 API precondition';Passed=$true})
 }
 
-function Install-Payload([string]$Setup,[string]$Version,[string]$ExpectedSha,[string]$Label) {
-  $taskResults.Add((Invoke-CheckedProcess $Setup @('/S',('/D='+$taskInstallDir)) $Label))
+function Install-Payload([string]$Setup,[string]$Version,[string]$ExpectedSha,[string]$Label,[bool]$UpdateMode=$false) {
+  # The updater uses passive NSIS update mode. Omit /R so the accepted smoke
+  # harness controls the only application launch and its isolated profile.
+  # NSIS requires /D to be the final argument, including when the path has spaces.
+  $installArguments=if ($UpdateMode) { @('/UPDATE','/P',('/D='+$taskInstallDir)) } else { @('/S',('/D='+$taskInstallDir)) }
+  $taskResults.Add((Invoke-CheckedProcess $Setup $installArguments $Label))
   Assert-True (Test-Path -LiteralPath $taskInstalledExe -PathType Leaf) 'Installed executable missing'
   Assert-True ((File-Proof $taskInstalledExe).SHA256 -eq $ExpectedSha) 'Installed EXE differs from the corresponding packaged build'
   $registrations=@(Woods-Registrations)
@@ -315,7 +320,7 @@ $policy=@(foreach ($key in @('HKLM:\SOFTWARE\Policies\Microsoft\Edge','HKCU:\SOF
     Assert-True ([IO.Path]::GetFullPath($native.testedExe) -eq $Executable) 'Native smoke used a copied/unrelated EXE'
     Assert-True ($native.sha256 -eq (File-Proof $Executable).SHA256) 'Native smoke fingerprint differs from the intended executable'
     Assert-True (@($native.results | Where-Object { -not $_.ok }).Count -eq 0) 'Native report contains failures'
-    $taskResults.Add([pscustomobject]@{Label=if ($Legacy) { 'Published portable migration baseline' } else { 'Installed-location launch/settings/quit' };Executable=$Executable;Legacy=$Legacy;ExitCode=$nativeExit;Raw=File-Proof $raw;Log=File-Proof $log;Passed=@($native.results | Where-Object { $_.ok -and -not $_.skipped }).Count;Skipped=@($native.results | Where-Object { $_.skipped }).Count;FullNativeSuite=$false;HarnessOrigin=File-Proof $origin;Adapter=File-Proof $adapter})
+    $taskResults.Add([pscustomobject]@{Label=if ($Legacy) { 'Previous release launch/quit baseline' } else { 'Installed-location launch/settings/quit' };Executable=$Executable;Legacy=$Legacy;ExitCode=$nativeExit;Raw=File-Proof $raw;Log=File-Proof $log;Passed=@($native.results | Where-Object { $_.ok -and -not $_.skipped }).Count;Skipped=@($native.results | Where-Object { $_.skipped }).Count;FullNativeSuite=$false;HarnessOrigin=File-Proof $origin;Adapter=File-Proof $adapter})
   } finally {
     foreach ($entry in $policySnapshots) {
       Assert-HostedWindowsRunner
@@ -369,9 +374,11 @@ try {
     Install-Payload $previousSetup.Path $PreviousVersion $previousExe.SHA256 'Install actual previous version'
     Installed-Smoke $true
     $before=Profile-Proofs
-    Install-Payload $taskInstaller.Path $taskVersion $taskExpectedExe.SHA256 'Upgrade previous installer to candidate'
+    Install-Payload $taskInstaller.Path $taskVersion $taskExpectedExe.SHA256 'Upgrade previous installer to candidate through NSIS update mode' $true
     Assert-ProfileUnchanged $before 'Version upgrade'
     $taskReport.VersionUpgrade='passed-actual-previous-version'
+    $taskReport.NsisUpdateMode='passed-actual-previous-version'
+    $taskResults.Add([pscustomobject]@{Label='NSIS /UPDATE /P preserves previous-version profile';Passed=$true;PreviousVersion=$PreviousVersion;Version=$taskVersion;PreservedProfile=$before})
   } else {
     if ($Scenario -eq 'ExistingRuntime' -and $PublishedPortablePath) {
       $legacyDir=Join-Path $taskRoot 'PublishedPortable-1.1.0'; New-Item -ItemType Directory -Path $legacyDir | Out-Null
@@ -391,6 +398,11 @@ try {
     $before=Profile-Proofs
     Install-Payload $taskInstaller.Path $taskVersion $taskExpectedExe.SHA256 'Same-version maintenance reinstall'
     Assert-ProfileUnchanged $before 'Maintenance reinstall'
+    $beforeUpdateMode=Profile-Proofs
+    Install-Payload $taskInstaller.Path $taskVersion $taskExpectedExe.SHA256 'NSIS update mode after ordinary installation' $true
+    Assert-ProfileUnchanged $beforeUpdateMode 'NSIS update mode'
+    $taskReport.NsisUpdateMode='passed-same-version-after-ordinary-install'
+    $taskResults.Add([pscustomobject]@{Label='NSIS /UPDATE /P preserves installed profile';Passed=$true;Version=$taskVersion;PreservedProfile=$beforeUpdateMode})
     $taskResults.Add([pscustomobject]@{Label='Installer-to-installer version upgrade';Skipped=$true;Reason='First installer release; published portable migration and same-version maintenance are recorded separately'})
   }
   Installed-Smoke

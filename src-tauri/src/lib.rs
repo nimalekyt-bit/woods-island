@@ -1,3 +1,7 @@
+#[cfg(all(test, target_env = "msvc"))]
+#[link(name = "resource", kind = "static", modifiers = "-bundle")]
+extern "C" {}
+
 pub mod audio;
 pub mod speech;
 pub mod recorder;
@@ -21,6 +25,10 @@ pub mod storage;
 pub mod weather;
 pub mod win;
 pub mod pets;
+pub mod updates;
+pub mod diagnostics;
+#[cfg(test)]
+mod update_tests;
 
 use clipboard::ClipboardStore;
 use serde_json::{json, Value};
@@ -177,6 +185,10 @@ fn default_settings() -> Value {
     "downloadsDir": "",
     "downloadsIgnore": [],
     "checkUpdates": true,
+    "autoDownloadUpdates": true,
+    "onboardingCompleted": false,
+    "reducedMotion": "auto",
+    "weatherTimezone": "",
     "mascot": true,
     "character": "liquid",
     "characterMusic": "",
@@ -319,7 +331,7 @@ fn start_cursor_loop(app: AppHandle, state: Arc<AppState>) {
 
 /// Called on app startup to initialize the entire frontend Zustand store
 #[tauri::command]
-async fn bootstrap(state:tauri::State<'_, Arc<AppState>>)->Result<Value,String>{let state=state.inner().clone();tauri::async_runtime::spawn_blocking(move||{app_log("bootstrap worker entered");let result={let telemetry=telemetry::snapshot();json!({"settings":state.settings.lock().unwrap().clone(),"shelf":shelf_snapshot(&state),"launcher":state.launcher_items.lock().unwrap().clone(),"media":media::get_current_media(),"cover":media::get_current_cover(),"hotkeyErrors":state.hotkey_errors.lock().unwrap().clone(),"audio":audio::state().ok(),"privacy":telemetry["privacy"],"downloads":telemetry::downloads_snapshot(),"vpn":null,"update":null,"version":env!("CARGO_PKG_VERSION"),"capsLock":telemetry["capsLock"],"layout":telemetry["layout"],"license":license_status(),"trialOver":false,"news":news_get(),"battery":telemetry["battery"],"vdesk":telemetry["vdesk"]})};app_log("bootstrap worker completed");result}).await.map_err(|e|e.to_string())}
+async fn bootstrap(state:tauri::State<'_, Arc<AppState>>)->Result<Value,String>{let state=state.inner().clone();tauri::async_runtime::spawn_blocking(move||{app_log("bootstrap worker entered");let result={let telemetry=telemetry::snapshot();json!({"settings":state.settings.lock().unwrap().clone(),"shelf":shelf_snapshot(&state),"launcher":state.launcher_items.lock().unwrap().clone(),"media":media::get_current_media(),"cover":media::get_current_cover(),"hotkeyErrors":state.hotkey_errors.lock().unwrap().clone(),"audio":audio::state().ok(),"privacy":telemetry["privacy"],"downloads":telemetry::downloads_snapshot(),"vpn":null,"update":null,"version":env!("CARGO_PKG_VERSION"),"capsLock":telemetry["capsLock"],"layout":telemetry["layout"],"license":license_status(),"recoveryWarnings":storage::recovery_warnings(),"clipboardTemporary":state.clipboard_store.is_temporary(),"clipboardPreviewLimit":clipboard::PREVIEW_LIMIT,"trialOver":false,"news":news_get(),"battery":telemetry["battery"],"vdesk":telemetry["vdesk"]})};app_log("bootstrap worker completed");result}).await.map_err(|e|e.to_string())}
 
 #[tauri::command]
 async fn pets_catalog()->Result<Value,String>{tauri::async_runtime::spawn_blocking(||pets::import_profile(&storage::get_storage_dir(),false)).await.map_err(|e|e.to_string())}
@@ -446,7 +458,9 @@ fn settings_get(state: tauri::State<'_, Arc<AppState>>) -> Value {
 
 #[tauri::command]
 fn settings_set(settings:Option<Value>,app:AppHandle,state:tauri::State<'_, Arc<AppState>>)->Vec<String>{
- let Some(patch)=settings else{return Vec::new();};if !patch.is_object(){return vec!["Settings must be an object".into()];}
+ let Some(mut patch)=settings else{return Vec::new();};if !patch.is_object(){return vec!["Settings must be an object".into()];}
+ if let Some(key)=patch.get("uploadKey").and_then(Value::as_str){if let Err(error)=storage::save_secret("upload",key){return vec![error];}}
+ patch.as_object_mut().unwrap().remove("uploadKey");
  let mut warnings=Vec::new();let before=state.settings.lock().unwrap().clone();let updated={let mut value=before.clone();merge_settings(&mut value,&patch);value};
  if let Err(e)=storage::save_json_file("settings.json",&updated){return vec![e];}*state.settings.lock().unwrap()=updated.clone();
  if patch["audioOutput"].is_string() || patch["audioInput"].is_string() {audio::configure(&updated);}
@@ -456,9 +470,9 @@ fn settings_set(settings:Option<Value>,app:AppHandle,state:tauri::State<'_, Arc<
  if let Some(on)=patch["autostart"].as_bool(){if std::env::var_os("WOODS_ISLAND_DATA_DIR").is_none(){if let Err(e)=system::autostart(on){warnings.push(e);}}}
  if patch.as_object().unwrap().keys().any(|k|k.starts_with("hotkey")){warnings.extend(register_hotkeys(&app,&updated));}
  if patch["through"].is_boolean(){let on=updated["through"].as_bool().unwrap_or(false);state.click_through.store(on,Ordering::Relaxed);win::WindowManager::set_click_through(on);}
- if ["weatherCity","weatherLat","weatherLon","weatherUnits","weatherUtcOffset"].iter().any(|key|before[*key]!=updated[*key]){
+ if ["weatherCity","weatherLat","weatherLon","weatherUnits","weatherUtcOffset","weatherTimezone"].iter().any(|key|before[*key]!=updated[*key]){
    let weather_settings=updated.clone();let weather_app=app.clone();let weather_state=state.inner().clone();
-   tauri::async_runtime::spawn(async move{if !weather_settings["weatherCity"].as_str().unwrap_or_default().is_empty(){let result=weather::forecast(&weather_settings,false).await;let current=weather_state.settings.lock().unwrap().clone();if ["weatherCity","weatherLat","weatherLon","weatherUnits","weatherUtcOffset"].iter().any(|key|current[*key]!=weather_settings[*key]){return;}match result{Ok(data)=>{let _=weather_app.emit("weather:update",data);},Err(error)=>{let _=weather_app.emit("weather:error",error);}}}});
+   tauri::async_runtime::spawn(async move{if !weather_settings["weatherCity"].as_str().unwrap_or_default().is_empty(){let result=weather::forecast(&weather_settings,false).await;let current=weather_state.settings.lock().unwrap().clone();if ["weatherCity","weatherLat","weatherLon","weatherUnits","weatherUtcOffset","weatherTimezone"].iter().any(|key|current[*key]!=weather_settings[*key]){return;}match result{Ok(data)=>{let _=weather_app.emit("weather:update",data);},Err(error)=>{let _=weather_app.emit("weather:error",error);}}}});
  }
  *state.hotkey_errors.lock().unwrap()=warnings.clone();let _=app.emit("settings:changed",updated);warnings
 }
@@ -593,7 +607,7 @@ fn release_focus(app: AppHandle) {
 }
 
 #[tauri::command]
-fn clip_list(query:Option<String>,state:tauri::State<'_, Arc<AppState>>)->Vec<Value>{let limit=state.settings.lock().unwrap()["clipLimit"].as_u64().unwrap_or(200).clamp(1,5000) as usize;state.clipboard_store.get_items(limit).unwrap_or_default().into_iter().filter(|item|query.as_ref().map(|q|item.content.to_lowercase().contains(&q.to_lowercase())).unwrap_or(true)).map(|item|{let mut val=json!({"id":item.id,"text":item.content,"preview":item.content,"kind":item.item_type,"pinned":item.pinned,"time":item.created_at});if item.item_type=="files"{if let Ok(paths)=serde_json::from_str::<Vec<String>>(&item.content){val["preview"]=json!(paths.join("\n"));}}if item.item_type=="image"{use base64::Engine;if let Some(encoded)=item.content.split_once(',').map(|(_,data)|data){if let Ok(bytes)=base64::engine::general_purpose::STANDARD.decode(encoded){if let Ok(img)=image::load_from_memory(&bytes){let path=storage::get_storage_dir().join(format!("clipboard-{}.png",item.id));if !path.exists(){let _=std::fs::write(&path,&bytes);}val["imagePath"]=json!(path.to_string_lossy());val["thumb"]=json!(item.content);val["width"]=json!(img.width());val["height"]=json!(img.height());}}}}val}).collect()}
+async fn clip_list(query:Option<String>,state:tauri::State<'_,Arc<AppState>>)->Result<Vec<Value>,String>{let state=state.inner().clone();tauri::async_runtime::spawn_blocking(move||{let limit=state.settings.lock().unwrap()["clipLimit"].as_u64().unwrap_or(200).clamp(1,5000) as usize;state.clipboard_store.list_previews(limit,query.as_deref())}).await.map_err(|e|e.to_string())?}
 
 #[tauri::command]
 fn clip_paste(id:i64,paste:Option<bool>,state:tauri::State<'_, Arc<AppState>>)->Result<(),String>{let item=state.clipboard_store.get_item(id).map_err(|e|e.to_string())?;if item.item_type=="files"{let paths:Vec<String>=serde_json::from_str(&item.content).map_err(|e|e.to_string())?;clipboard::set_files(&paths)?;if paste.unwrap_or(true){clipboard::paste_current()?;}Ok(())}else if item.item_type=="image"{clipboard::set_png(&item.content)?;if paste.unwrap_or(true){clipboard::paste_current()?;}Ok(())}else if paste.unwrap_or(true){clipboard::paste_to_focused_window(&item.content)}else{clipboard::set_text(&item.content)}}
@@ -681,10 +695,10 @@ async fn bt_devices()->Vec<Value>{tauri::async_runtime::spawn_blocking(network::
 async fn bt_switch(id:Option<String>,on:Option<bool>)->Result<bool,String>{let id=id.ok_or("Bluetooth device ID is required")?;tauri::async_runtime::spawn_blocking(move||network::bt_switch(&id,on.unwrap_or(true))).await.map_err(|e|e.to_string())?.map(|_|true)}
 
 #[tauri::command]
-async fn vpn_chip(app:AppHandle)->Result<bool,String>{let profiles=tauri::async_runtime::spawn_blocking(network::vpn_profiles).await.map_err(|e|e.to_string())?;let available:Vec<_>=profiles.iter().filter(|p|p["ready"]==json!(true)).collect();if available.is_empty(){return Err("No supported VPN connection is installed".into());}if let Some(profile)=available.iter().find(|p|p["on"]==json!(true)){let id=profile["id"].as_str().unwrap_or_default().to_owned();tauri::async_runtime::spawn_blocking(move||network::vpn_toggle(&id,false)).await.map_err(|e|e.to_string())??;vpn_refresh(app).await?;return Ok(false);}if available.len()==1{let id=available[0]["id"].as_str().unwrap_or_default().to_owned();tauri::async_runtime::spawn_blocking(move||network::vpn_toggle(&id,true)).await.map_err(|e|e.to_string())??;vpn_refresh(app).await?;return Ok(false);}let _=app.emit("vpn:choose",());Ok(true)}
+async fn vpn_chip(app:AppHandle)->Result<bool,String>{let profiles=tauri::async_runtime::spawn_blocking(network::vpn_profiles).await.map_err(|e|e.to_string())?;let available:Vec<_>=profiles.iter().filter(|p|p["ready"]==json!(true)).collect();if available.is_empty(){return Err("No supported VPN connection is installed".into());}if let Some(profile)=available.iter().find(|p|p["on"]==json!(true)){let id=profile["id"].as_str().unwrap_or_default().to_owned();tauri::async_runtime::spawn_blocking(move||network::vpn_toggle(&id,false)).await.map_err(|e|e.to_string())??;vpn_refresh(app).await?;return Ok(false);}if available.len()==1 && available[0]["onSource"]!="command"{let id=available[0]["id"].as_str().unwrap_or_default().to_owned();tauri::async_runtime::spawn_blocking(move||network::vpn_toggle(&id,true)).await.map_err(|e|e.to_string())??;vpn_refresh(app).await?;return Ok(false);}let _=app.emit("vpn:choose",());Ok(true)}
 
 #[tauri::command]
-async fn vpn_refresh(app:AppHandle)->Result<Value,String>{let profiles=tauri::async_runtime::spawn_blocking(network::vpn_profiles).await.map_err(|e|e.to_string())?;let active=profiles.iter().find(|v|v["on"]==json!(true));let mut payload=json!({"active":active.is_some(),"via":active.and_then(|v|v["name"].as_str()),"ip":null,"country":null,"countryCode":null});let lookup=app.state::<Arc<AppState>>().settings.lock().unwrap()["vpnLookupIp"].as_bool().unwrap_or(true);if lookup{let client=reqwest::Client::builder().timeout(std::time::Duration::from_secs(5)).build().map_err(|e|e.to_string())?;if let Ok(response)=client.get("https://api.country.is").send().await{if let Ok(data)=response.json::<Value>().await{payload["ip"]=data["ip"].clone();payload["country"]=data["country"].clone();payload["countryCode"]=data["country"].clone();}}}let _=app.emit("vpn:update",&payload);Ok(payload)}
+async fn vpn_refresh(app:AppHandle)->Result<Value,String>{let profiles=tauri::async_runtime::spawn_blocking(network::vpn_profiles).await.map_err(|e|e.to_string())?;let mut payload=network::vpn_summary(&profiles);let lookup=app.state::<Arc<AppState>>().settings.lock().unwrap()["vpnLookupIp"].as_bool().unwrap_or(true);if lookup{let client=reqwest::Client::builder().timeout(std::time::Duration::from_secs(5)).build().map_err(|e|e.to_string())?;if let Ok(response)=client.get("https://api.country.is").send().await{if let Ok(data)=response.json::<Value>().await{payload["ip"]=data["ip"].clone();payload["country"]=data["country"].clone();payload["countryCode"]=data["country"].clone();}}}let _=app.emit("vpn:update",&payload);Ok(payload)}
 
 #[tauri::command]
 async fn vpn_toggle_now(app:AppHandle)->Result<bool,String>{vpn_chip(app).await}
@@ -795,16 +809,20 @@ fn finalize_background(app:&AppHandle){
 fn restart_island(app:AppHandle)->bool{finalize_background(&app);app.restart()}
 
 #[tauri::command]
-async fn update_check()->Result<Option<Value>,String>{let response=reqwest::Client::builder().user_agent("WoodsIsland").timeout(std::time::Duration::from_secs(8)).build().map_err(|e|e.to_string())?.get("https://api.github.com/repos/nimalekyt-bit/woods-island/releases/latest").send().await.map_err(|e|e.to_string())?.error_for_status().map_err(|e|e.to_string())?;let data:Value=response.json().await.map_err(|e|e.to_string())?;let version=data["tag_name"].as_str().ok_or("Release tag is missing")?.trim_start_matches('v');let parts=|version:&str|->Result<Vec<u64>,String>{let mut nums=version.split('.').map(|s|s.parse::<u64>().map_err(|_|"Invalid release version".to_owned())).collect::<Result<Vec<_>,_>>()?;nums.resize(3,0);Ok(nums)};if parts(version)?<=parts(env!("CARGO_PKG_VERSION"))?{return Ok(None);}let url=data["html_url"].as_str().ok_or("Release URL is missing")?;if !url.starts_with("https://github.com/nimalekyt-bit/woods-island/"){return Err("Invalid release URL".into());}Ok(Some(json!({"version":version,"current":env!("CARGO_PKG_VERSION"),"url":data["html_url"]})))}
+async fn update_check(app:AppHandle)->Result<Option<Value>,String>{updates::check(app).await}
 
 fn start_update_monitor(app: AppHandle, state: Arc<AppState>) {
     tauri::async_runtime::spawn(async move {
-        // The passive test process never contacts the owner's private repository.
+        // Isolated acceptance runs never check or install production updates.
         if win::WindowManager::passive_qa() { return; }
+        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
         loop {
             if state.settings.lock().unwrap()["checkUpdates"].as_bool().unwrap_or(true) {
-                match update_check().await {
-                    Ok(Some(info)) => { let _ = app.emit("update:available", info); }
+                match update_check(app.clone()).await {
+                    Ok(Some(_)) => {
+                        let download=state.settings.lock().unwrap()["autoDownloadUpdates"].as_bool().unwrap_or(true);
+                        if download && updates::status()["canInstall"]==true && updates::status()["status"]=="available" { let _=updates::download(app.clone()).await; }
+                    }
                     Ok(None) => {}
                     Err(error) => app_log(&format!("Update check: {error}")),
                 }
@@ -815,7 +833,23 @@ fn start_update_monitor(app: AppHandle, state: Arc<AppState>) {
 }
 
 #[tauri::command]
-fn update_install()->Result<bool,String>{system::open_path("https://github.com/nimalekyt-bit/woods-island/releases",false,false).map(|_|true)}
+async fn update_install(app:AppHandle)->Result<bool,String>{updates::install(app).await}
+
+#[tauri::command]
+async fn update_status(app:AppHandle)->Value{
+    let _=tauri::async_runtime::spawn_blocking(move || updates::restore(&app)).await;
+    updates::status()
+}
+#[tauri::command]
+async fn update_download(app:AppHandle)->Result<bool,String>{updates::download(app).await}
+#[tauri::command]
+fn update_cancel()->bool{updates::cancel()}
+#[tauri::command]
+fn upload_key_status()->bool{storage::load_secret("upload").is_some_and(|key|!key.is_empty())}
+#[tauri::command]
+fn upload_key_set(key:String)->Result<bool,String>{storage::save_secret("upload",key.trim())?;Ok(!key.trim().is_empty())}
+#[tauri::command]
+async fn diagnostics_summary(state:tauri::State<'_,Arc<AppState>>)->Result<Value,String>{let state=state.inner().clone();tauri::async_runtime::spawn_blocking(move||diagnostics::summary(&state)).await.map_err(|_|"Diagnostics unavailable".into())}
 
 #[tauri::command]
 fn timer_get(state: tauri::State<'_, Arc<AppState>>) -> String {
@@ -922,7 +956,7 @@ async fn ocr_file(path:Option<String>)->Result<String,String>{tauri::async_runti
 
 #[tauri::command]
 async fn upload_image(path:Option<String>,state:tauri::State<'_,Arc<AppState>>)->Result<String,String>{
- let path=path.ok_or("Image path is required")?;let settings=state.settings.lock().unwrap().clone();let service=settings["uploadService"].as_str().unwrap_or_default();let key=settings["uploadKey"].as_str().filter(|s|!s.is_empty()).ok_or("Set your image-upload API key in settings")?;
+ let path=path.ok_or("Image path is required")?;let settings=state.settings.lock().unwrap().clone();let service=settings["uploadService"].as_str().unwrap_or_default();let key=storage::load_secret("upload").filter(|s|!s.is_empty()).ok_or("Set your image-upload API key in settings")?;
  let bytes=std::fs::read(&path).map_err(|e|e.to_string())?;if bytes.len()>20*1024*1024{return Err("Image exceeds 20 MB".into());}image::load_from_memory(&bytes).map_err(|e|e.to_string())?;let name=std::path::Path::new(&path).file_name().unwrap_or_default().to_string_lossy().into_owned();
  let client=reqwest::Client::builder().timeout(std::time::Duration::from_secs(45)).build().map_err(|e|e.to_string())?;
  let request=match service{"imgur"=>{let form=reqwest::multipart::Form::new().part("image",reqwest::multipart::Part::bytes(bytes).file_name(name));client.post("https://api.imgur.com/3/image").header("Authorization",format!("Client-ID {key}")).multipart(form)},"imgbb"=>{let form=reqwest::multipart::Form::new().text("key",key.to_owned()).part("image",reqwest::multipart::Part::bytes(bytes).file_name(name));client.post("https://api.imgbb.com/1/upload").multipart(form)},_=>return Err("Choose a supported image-upload service in settings".into())};
@@ -1130,11 +1164,14 @@ pub fn app_log(msg: &str) {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis();
-    let app_dir = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|d| d.to_path_buf()))
-        .unwrap_or_else(|| std::path::PathBuf::from("."));
-    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(app_dir.join("app.log")) {
+    static LOG_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _guard = LOG_LOCK.lock().unwrap_or_else(|error| error.into_inner());
+    let app_dir = storage::get_storage_dir();
+    let log_path = app_dir.join("app.log");
+    if std::fs::metadata(&log_path).is_ok_and(|meta| meta.len() > 2 * 1024 * 1024) {
+        let _ = std::fs::rename(&log_path, app_dir.join("app.previous.log"));
+    }
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(log_path) {
         let _ = writeln!(f, "[+{}] {}", ts, msg);
     }
 }
@@ -1185,11 +1222,18 @@ pub fn run() {
     let db_path = storage::get_storage_dir().join("woods_island.db");
     let old_db = app_dir.join("woods_island.db");
     if !db_path.exists() && old_db.exists() && std::env::var_os("WOODS_ISLAND_DATA_DIR").is_none() { let _ = std::fs::copy(old_db, &db_path); }
-    let clipboard_store = ClipboardStore::new(db_path).expect("Failed to open clipboard SQLite db");
+    let clipboard_store = ClipboardStore::open_resilient(db_path).expect("Unable to initialize temporary clipboard");
     app_log("step 2: clipboard db OK");
 
     let mut loaded_settings = default_settings();
-    if let Some(saved) = storage::load_json_file("settings.json") { merge_settings(&mut loaded_settings, &saved); }
+    if let Some(saved) = storage::load_json_file("settings.json") {
+        loaded_settings["onboardingCompleted"]=json!(true);
+        merge_settings(&mut loaded_settings, &saved);
+    }
+    if storage::migrate_upload_key(&mut loaded_settings).is_err() {
+        storage::warn("Не удалось перенести ключ загрузки изображений. Исходные настройки сохранены.");
+        loaded_settings.as_object_mut().unwrap().remove("uploadKey");
+    }
     audio::configure(&loaded_settings);
     network::configure_vpn(&loaded_settings);
     if loaded_settings["gpuAcceleration"]==false {
@@ -1243,6 +1287,7 @@ pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_drag::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(state)
         .setup(move |app| {
             app_log("setup hook executing");
@@ -1398,6 +1443,12 @@ pub fn run() {
             restart_island,
             update_check,
             update_install,
+            update_status,
+            update_download,
+            update_cancel,
+            upload_key_status,
+            upload_key_set,
+            diagnostics_summary,
             timer_get,
             timer_set,
             reminders_get,

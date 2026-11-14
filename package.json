@@ -1,6 +1,6 @@
 {
   "name": "woods-island",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Dynamic Island HUD for Windows 10 & 11 (Woods Corp)",
   "private": true,
   "packageManager": "pnpm@10.33.0",

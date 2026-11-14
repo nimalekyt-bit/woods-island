@@ -104,6 +104,10 @@ export interface Settings {
   downloadsDir: string;
   downloadsIgnore: string[];
   checkUpdates: boolean;
+  autoDownloadUpdates: boolean;
+  onboardingCompleted: boolean;
+  reducedMotion: string;
+  weatherTimezone: string;
   mascot: boolean;
   character: string;
   characterMusic: string;
@@ -227,6 +231,12 @@ export interface RustCommands {
   restart_island: { args: {  }; result: boolean };
   update_check: { args: {  }; result: JsonValue | null };
   update_install: { args: {  }; result: boolean };
+  update_status: { args: {  }; result: JsonValue };
+  update_download: { args: {  }; result: boolean };
+  update_cancel: { args: {  }; result: boolean };
+  upload_key_status: { args: {  }; result: boolean };
+  upload_key_set: { args: { key: string }; result: boolean };
+  diagnostics_summary: { args: {  }; result: JsonValue };
   timer_get: { args: {  }; result: string };
   timer_set: { args: { json?: string | null }; result: boolean };
   reminders_get: { args: {  }; result: string };

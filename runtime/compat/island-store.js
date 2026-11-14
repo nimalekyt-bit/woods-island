@@ -383,16 +383,11 @@ var useIslandStore = ce((e, t) => ({
       t().palette && (e({ palette: !1 }), r.releaseFocus());
     },
     installUpdate: () => {
-      t().updating ||
-        (e({ peek: null }),
-        t().close(),
-        r.updateInstall().catch((r) => {
-          (e({ updating: null }),
-            t().pushPeek({
-              kind: `error`,
-              message: n(`Обновление не удалось: ${String(r)}`, `Update failed: ${String(r)}`),
-            }));
-        }));
+      e({ peek: null });
+      t().close();
+      r.openSettings(`updates`).catch((error) => t().pushPeek({
+        kind: `error`, message: n(`Не удалось открыть обновления: ${String(error)}`, `Could not open updates: ${String(error)}`),
+      }));
     },
   })),
   I = {

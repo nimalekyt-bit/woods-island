@@ -7,11 +7,11 @@
 **Dynamic Island для Windows · Woods Personal Corp**
 
 [![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-18181b)](https://github.com/nimalekyt-bit/woods-island/releases)
-[![Version](https://img.shields.io/badge/version-1.1.1-18181b)](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.1.1)
+[![Version](https://img.shields.io/badge/version-1.2.0-18181b)](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.2.0)
 ![RU / EN](https://img.shields.io/badge/interface-RU%20%7C%20EN-18181b)
 
 
-[**Скачать установщик**](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.1.1) · [**Сообщить об ошибке**](https://github.com/nimalekyt-bit/woods-island/issues/new/choose) · [**Woods**](https://t.me/woodskilla)
+[**Скачать установщик**](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.2.0) · [**Сообщить об ошибке**](https://github.com/nimalekyt-bit/woods-island/issues/new/choose) · [**Woods**](https://t.me/woodskilla)
 
 </div>
 
@@ -108,17 +108,21 @@ MET Norway не требует ключа. Старый кэш и некорре
 
 ## Установка
 
-Скачай **Woods-Island-1.1.1-windows-x64-Setup.exe** из
-[релиза](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.1.1),
+Скачай **Woods-Island-1.2.0-windows-x64-Setup.exe** из
+[релиза](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.2.0),
 пройди установку и запусти Woods Island через ярлык. Требуются **Windows 10/11 x64**.
 FFmpeg для MP4/GIF входит в комплект. Если WebView2 Runtime отсутствует,
 установщик скачает его у Microsoft — для этого нужен интернет.
 Rust, Node.js и инструменты разработки для запуска не нужны.
 
+Начиная с 1.2.0 установленное приложение проверяет и загружает обновления автоматически.
+После проверки подписи появится кнопка установки. Автозагрузку можно отключить в настройках.
+С версии 1.1.1 сначала установи этот выпуск через Setup — настройки сохранятся.
+
 Установщик пока без цифровой подписи, поэтому Windows SmartScreen может показать
 предупреждение. Перед запуском сравни SHA256 с **SHA256SUMS.txt** в выпуске.
 
-Для запуска без установки есть **Woods-Island-1.1.1-windows-x64-portable.zip**:
+Для запуска без установки есть **Woods-Island-1.2.0-windows-x64-portable.zip**:
 распакуй и запусти `woods-island.exe`, сохрани папку `bin` рядом с ним.
 Portable требует установленного WebView2 и обновляется вручную.
 
@@ -216,23 +220,28 @@ The launcher, command bar, dictation and OBS/Steam/terminal-agent events are ava
 
 ## Install
 
-Download **Woods-Island-1.1.1-windows-x64-Setup.exe** from the
-[release](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.1.1),
+Download **Woods-Island-1.2.0-windows-x64-Setup.exe** from the
+[release](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.2.0),
 complete installation and launch Woods Island from its shortcut.
 Requires **Windows 10/11 x64**. FFmpeg is included for recording.
 If WebView2 Runtime is missing, Setup downloads it from Microsoft and needs
 an internet connection. Rust, Node.js and development tools are not required.
 
+Starting with 1.2.0, the installed app checks for and downloads updates automatically.
+Once the signature is verified, you choose when to install. Automatic downloads can be disabled.
+To upgrade from 1.1.1, install this release with Setup first; your settings are preserved.
+
 Setup is currently unsigned, so Windows SmartScreen may display a warning.
 Compare its SHA256 with **SHA256SUMS.txt** in the release before running it.
 
-For use without installation, extract **Woods-Island-1.1.1-windows-x64-portable.zip**
+For use without installation, extract **Woods-Island-1.2.0-windows-x64-portable.zip**
 and run `woods-island.exe`; keep `bin` alongside it. Portable requires an installed
 WebView2 Runtime and is updated manually. Use your own AI key or local model.
 
 Settings/SQLite stay in `%APPDATA%\woods-island`, keys use Windows DPAPI,
 and Obsidian export is explicit. The Yandex connector needs separate installation
-on other PCs and v3 has no seek support. Unknown cities use UTC or a manual offset.
+on other PCs and v3 has no seek support. Weather uses the city's IANA timezone,
+including daylight saving changes; it can also be set manually.
 
 </details>
 

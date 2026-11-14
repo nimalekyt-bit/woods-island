@@ -107,8 +107,8 @@ export function woodsContact(jsx, t, open) {
           jsx.jsx("button", {
             "data-woods-github": true,
             className: "press h-9 rounded-lg bg-white/10 px-4 text-[13px] hover:bg-white/15",
-            onClick: () => void open("https://github.com/nimalekyt-bit"),
-            children: "GitHub",
+            onClick: () => void open("https://github.com/nimalekyt-bit/woods-island/issues/new/choose"),
+            children: t("Сообщить об ошибке", "Report a bug"),
           }),
         ],
       }),

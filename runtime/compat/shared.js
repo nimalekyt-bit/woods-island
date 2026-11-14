@@ -1,3 +1,4 @@
+import { applyMotionPreferences } from '../preferences/motion';
 import {
   characterRestWidth as Ne, characterSlotWidth as Pe, distributeFaceWidgets as We,
   timerTextWidth as et, idleSize as rt, snapWidth as it, normalMediaSize as ct,
@@ -393,6 +394,7 @@ function Bt({ children: e }) {
     (0, _.useEffect)(() => {
       let e = (e) => {
         (ne(b(e.language)), k(e.clockFormat));
+        applyMotionPreferences(e.reducedMotion);
       };
       Ce.settingsGet().then(e);
       let t = we(`settings:changed`, e);

@@ -1,0 +1,2 @@
+Woods Island updater test fixture 9.9.0
+This is test data, never an installer.
