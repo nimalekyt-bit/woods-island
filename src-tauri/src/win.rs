@@ -17,6 +17,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 const WM_ERASEBKGND: u32 = 0x0014;
+const WM_SHOWWINDOW: u32 = 0x0018;
 const WM_NCCALCSIZE: u32 = 0x0083;
 const WM_NCHITTEST: u32 = 0x0084;
 const WM_NCPAINT: u32 = 0x0085;
@@ -108,6 +109,7 @@ unsafe extern "system" fn island_subclass_proc(
     _ref_data: usize,
 ) -> LRESULT {
     match msg {
+        WM_SHOWWINDOW => { crate::audio::set_spectrum_visible(wparam.0 != 0); }
         WM_NCCALCSIZE => {
             // When wParam is TRUE, returning 0 removes all non-client frame (titlebar, borders).
             // Zero caption pixels will ever be drawn by DWM across all island states.
@@ -428,6 +430,7 @@ impl WindowManager {
                 None => None,
             };
             let visual = next.map(|hit| visual_bounds(hit, scale, (client.right.max(0), client.bottom.max(0)), right, bottom));
+            crate::audio::set_spectrum_rendered(visual.is_some_and(|(left,top,right,bottom)|right>left&&bottom>top));
             let mut bounds = CURRENT_BOUNDS.lock().unwrap();
             let mut painted = VISUAL_BOUNDS.lock().unwrap();
             if *bounds == next && *painted == visual {return;}

@@ -1,4 +1,5 @@
 import { CollapsedTrack, MediaTitle } from '../components/CollapsedTrack';
+import { weatherDate } from '../weather/date';
 import { NormalMediaPill } from '../components/NormalMediaPill';
 import { LyricsMediaPill } from '../components/LyricsMediaPill';
 // Compatibility application source; migrate components incrementally.
@@ -414,7 +415,7 @@ function Yd(e, t, n = !1) {
   return r(`${a.replace(`.`, `,`)} мм`, `${a} mm`);
 }
 function Xd(e, t) {
-  return new Date((e + t) * 1e3);
+  return weatherDate(e, t);
 }
 function Zd(e, t) {
   return s(Xd(e, t).getUTCHours());
@@ -513,7 +514,7 @@ function lf(e) {
 }
 function uf(e) {
   let t = e.hours,
-    n = (n) => Zd(t[n].time, e.utcOffset),
+    n = (n) => Zd(t[n].time, e.timezone || e.utcOffset),
     i = Kd(e.now.code),
     a = e.now.precip >= 0.1 || ef.includes(i),
     o;
@@ -532,8 +533,8 @@ function uf(e) {
       o = r(`Около ${n(e)} начнётся ${a}`, `${i} from about ${n(e)}`);
     }
   }
-  let s = new Date((Math.floor(e.fetchedAt / 1e3) + e.utcOffset) * 1e3).getUTCHours(),
-    c = (t) => new Date((t.time + e.utcOffset) * 1e3).getUTCHours(),
+  let s = Xd(Math.floor(e.fetchedAt / 1e3), e.timezone || e.utcOffset).getUTCHours(),
+    c = (t) => Xd(t.time, e.timezone || e.utcOffset).getUTCHours(),
     l = s >= 15 || s < 5,
     u = t.filter((e) => (l ? c(e) <= 6 : c(e) >= 12 && c(e) <= 17)).map((e) => e.temp);
   if (!u.length) return o;
@@ -563,7 +564,7 @@ var ff = 0,
       let n = useIslandStore.getState().settings;
       n &&
         (e({ loading: !0, error: null, data: null }),
-        i.settingsSet({ ...n, weatherCity: t.name, weatherLat: t.lat, weatherLon: t.lon }));
+        i.settingsSet({ ...n, weatherCity: t.name, weatherLat: t.lat, weatherLon: t.lon, weatherTimezone: `` }));
     },
     received: (t) => {
       if (!validWeatherForecast(t))
@@ -593,7 +594,7 @@ function mf() {
         kind: `weather`,
         sky: n.sky,
         title: nf(n),
-        sub: r(`с ${Qd(n.at, t.utcOffset)} · ${Jd(n.temp)}`, `from ${Qd(n.at, t.utcOffset)} · ${Jd(n.temp)}`),
+        sub: r(`с ${Qd(n.at, t.timezone || t.utcOffset)} · ${Jd(n.temp)}`, `from ${Qd(n.at, t.timezone || t.utcOffset)} · ${Jd(n.temp)}`),
       })));
 }
 function hf() {

@@ -5,7 +5,7 @@ use std::{path::PathBuf, process::Stdio, sync::Mutex, time::{Duration,Instant}};
 
 static VPN_CACHE: Mutex<Option<(Instant,Vec<Value>)>> = Mutex::new(None);
 static CUSTOM_VPN: Mutex<Option<CustomVpn>> = Mutex::new(None);
-static CUSTOM_VPN_ON: Mutex<bool> = Mutex::new(false);
+static CUSTOM_VPN_REQUESTED: Mutex<Option<bool>> = Mutex::new(None);
 static VPN_ACTION: Mutex<()> = Mutex::new(());
 
 #[derive(Clone, PartialEq)]
@@ -22,7 +22,7 @@ fn custom_vpn(settings: &Value) -> Option<CustomVpn> {
 pub fn configure_vpn(settings: &Value) {
     let next = custom_vpn(settings);
     let mut saved = CUSTOM_VPN.lock().unwrap_or_else(|e|e.into_inner());
-    if *saved != next { *saved = next; *CUSTOM_VPN_ON.lock().unwrap_or_else(|e|e.into_inner()) = false; vpn_refresh(); }
+    if *saved != next { *saved = next; *CUSTOM_VPN_REQUESTED.lock().unwrap_or_else(|e|e.into_inner()) = None; vpn_refresh(); }
 }
 
 struct Wlan(HANDLE);
@@ -106,19 +106,40 @@ fn bluetooth_inventory()->Vec<windows::Win32::Devices::Bluetooth::BLUETOOTH_DEVI
         let _=BluetoothFindDeviceClose(find);devices
     }
 }
-pub fn bt_devices()->Vec<Value>{bluetooth_inventory().iter().map(|device|json!({"id":format!("{:012x}",unsafe{device.Address.Anonymous.ullLong}),"name":string(&device.szName),"connected":device.fConnected.as_bool(),"paired":device.fAuthenticated.as_bool(),"kind":"other","battery":null})).collect()}
+fn bluetooth_services(device:&windows::Win32::Devices::Bluetooth::BLUETOOTH_DEVICE_INFO)->Result<Vec<GUID>,String>{
+    use windows::Win32::Devices::Bluetooth::*;
+    let mut services=vec![GUID::default();16];
+    for _ in 0..3 {
+        let mut count=services.len() as u32;
+        let result=unsafe{BluetoothEnumerateInstalledServices(HANDLE::default(),device,&mut count,Some(services.as_mut_ptr()))};
+        if result==234 && count<=256 {services.resize(count as usize,GUID::default());continue;}
+        if result!=0{return Err(format!("Windows could not enumerate Bluetooth services ({result})"));}
+        services.truncate((count as usize).min(services.len()));return Ok(services);
+    }
+    Err("Bluetooth services changed during enumeration; try again".into())
+}
+fn bluetooth_kind(class:u32)->&'static str{
+    match (class>>8)&31 {1=>"computer",2=>"phone",4=>"audio",5 if class&0x80!=0=>"mouse",5 if class&0x40!=0=>"keyboard",5 if class&0x0c==0x08=>"gamepad",_=>"other"}
+}
+pub fn bt_devices()->Vec<Value>{bluetooth_inventory().iter().map(|device|{
+    let switchable=device.fAuthenticated.as_bool()&&bluetooth_services(device).is_ok_and(|services|!services.is_empty());
+    json!({"id":format!("{:012x}",unsafe{device.Address.Anonymous.ullLong}),"name":string(&device.szName),"connected":device.fConnected.as_bool(),"paired":device.fAuthenticated.as_bool(),"kind":bluetooth_kind(device.ulClassofDevice),"battery":null,"batteryStatus":"unavailable","switchable":switchable,"switchStatus":if switchable{"available"}else{"windowsSettings"}})
+}).collect()}
 pub fn bt_switch(id:&str,on:bool)->Result<(),String>{
     use windows::Win32::Devices::Bluetooth::*;
     let device=bluetooth_inventory().into_iter().find(|d|format!("{:012x}",unsafe{d.Address.Anonymous.ullLong})==id).ok_or("Bluetooth device was not found")?;
     unsafe{
-        let mut count=64;let mut services=vec![GUID::default();64];
-        let result=BluetoothEnumerateInstalledServices(HANDLE::default(),&device,&mut count,Some(services.as_mut_ptr()));
-        if result!=0{return Err(format!("Windows could not enumerate Bluetooth services ({result})"));}
-        services.truncate(count.min(64) as usize);
+        let services=bluetooth_services(&device)?;
         if services.is_empty(){return Err("Подключите устройство в настройках Bluetooth Windows, чтобы зарегистрировать его службы.".into());}
         let mut any=false;
         for service in services{if BluetoothSetServiceState(HANDLE::default(),&device,&service,if on{BLUETOOTH_SERVICE_ENABLE}else{BLUETOOTH_SERVICE_DISABLE})==0{any=true;}}
-        if any{Ok(())}else{Err("Windows denied Bluetooth service switching".into())}
+        if !any{return Err("Windows denied Bluetooth service switching".into());}
+        let began=Instant::now();
+        loop {
+            if bluetooth_inventory().iter().any(|current|format!("{:012x}",current.Address.Anonymous.ullLong)==id&&current.fConnected.as_bool()==on){return Ok(());}
+            if began.elapsed()>=Duration::from_secs(8){return Err("Службы Bluetooth переключены, но Windows не подтвердила состояние подключения. Проверьте устройство в параметрах Bluetooth.".into());}
+            std::thread::sleep(Duration::from_millis(250));
+        }
     }
 }
 
@@ -288,10 +309,20 @@ pub fn vpn_profiles()->Vec<Value>{
     profiles.extend(tunnel_profiles());
     profiles.extend(installed_vpn_clients());
     if let Some(path)=warp_path(){let on=warp_status(&path);profiles.push(json!({"id":"app:warp","name":"Cloudflare WARP","on":on.unwrap_or(false),"ready":on.is_some(),"onSource":"client","launchPath":path.parent().map(|p|p.join("Cloudflare WARP.exe")).map(|p|p.to_string_lossy().into_owned())}));}
-    if let Some(custom)=CUSTOM_VPN.lock().unwrap_or_else(|e|e.into_inner()).as_ref(){profiles.push(json!({"id":"app:custom","name":custom.name,"on":*CUSTOM_VPN_ON.lock().unwrap_or_else(|e|e.into_inner()),"ready":true,"onSource":"command"}));}
+    if let Some(custom)=CUSTOM_VPN.lock().unwrap_or_else(|e|e.into_inner()).as_ref(){profiles.push(custom_vpn_profile(custom,*CUSTOM_VPN_REQUESTED.lock().unwrap_or_else(|e|e.into_inner())));}
     *VPN_CACHE.lock().unwrap()=Some((Instant::now(),profiles.clone()));profiles
 }
 pub fn vpn_refresh(){*VPN_CACHE.lock().unwrap()=None;}
+
+fn custom_vpn_profile(custom:&CustomVpn,requested:Option<bool>)->Value{
+    json!({"id":"app:custom","name":custom.name,"on":null,"ready":true,"status":"unknown","onSource":"command","lastRequestedOn":requested})
+}
+/// A successful script is evidence of command execution, never of a tunnel.
+pub fn vpn_summary(profiles:&[Value])->Value{
+    let active=profiles.iter().find(|profile|profile["on"]==true);
+    let unknown=profiles.iter().any(|profile|profile["on"].is_null());
+    json!({"active":if active.is_some(){Some(true)}else if unknown{None}else{Some(false)},"status":if active.is_some(){"connected"}else if unknown{"unknown"}else{"disconnected"},"via":active.and_then(|profile|profile["name"].as_str()),"ip":null,"country":null,"countryCode":null})
+}
 
 pub fn start_controls_monitor(app: tauri::AppHandle, state: std::sync::Arc<crate::AppState>) {
     use tauri::Emitter;
@@ -313,7 +344,7 @@ pub fn vpn_toggle(id:&str,on:bool)->Result<(),String>{
     if id == "app:custom" {
         let custom = CUSTOM_VPN.lock().unwrap_or_else(|e|e.into_inner()).clone().ok_or("Configure both custom VPN commands first")?;
         crate::system::run_vpn_command(if on{&custom.connect}else{&custom.disconnect},custom.elevated)?;
-        *CUSTOM_VPN_ON.lock().unwrap_or_else(|e|e.into_inner()) = on;
+        *CUSTOM_VPN_REQUESTED.lock().unwrap_or_else(|e|e.into_inner()) = Some(on);
         vpn_refresh();
         return Ok(());
     }
@@ -359,6 +390,13 @@ pub fn vpn_toggle(id:&str,on:bool)->Result<(),String>{
         for name in ["ProtonVPN Service","Spooler","AmneziaWGTunnel$","WireGuardTunnel$../other","WireGuardTunnel$other\\path"]{assert!(tunnel_service(name).is_none());}
     }
     #[test]fn wifi_xml_encodes_literal_characters(){assert_eq!(xml_escape("a&<\"'"),"a&amp;&lt;&quot;&apos;");}
+    #[test]fn custom_command_success_never_claims_a_connected_tunnel(){
+        let custom=CustomVpn{name:"VPN".into(),connect:"connect".into(),disconnect:"disconnect".into(),elevated:false};
+        for requested in [None,Some(true),Some(false)]{let profile=custom_vpn_profile(&custom,requested);assert!(profile["on"].is_null());assert_eq!(profile["lastRequestedOn"],json!(requested));assert_eq!(vpn_summary(&[profile])["status"],"unknown");}
+        assert_eq!(vpn_summary(&[json!({"on":null}),json!({"on":true,"name":"Verified"})])["active"],true);
+        assert_eq!(vpn_summary(&[json!({"on":false})])["active"],false);
+    }
+    #[test]fn bluetooth_class_maps_only_reported_capabilities(){assert_eq!(bluetooth_kind(0x0400),"audio");assert_eq!(bluetooth_kind(0x0540),"keyboard");assert_eq!(bluetooth_kind(0x0580),"mouse");assert_eq!(bluetooth_kind(0),"other");}
     #[test]fn utf16_stops_at_null(){assert_eq!(string(&[65,66,0,67]),"AB");}
     #[test]fn virtual_ethernet_and_wifi_cannot_replace_the_physical_adapter(){
         use windows::Win32::NetworkManagement::IpHelper::*;

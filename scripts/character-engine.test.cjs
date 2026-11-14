@@ -11,6 +11,7 @@ const { creatures } = loadTypeScript('runtime/characters/drawings/creatures.ts')
 const { things } = loadTypeScript('runtime/characters/drawings/things.ts');
 const { createCharacterPose, genericMotion } = loadTypeScript('runtime/characters/pose.ts');
 const { createCharacterScheduler, animationInterval, STILL_INTERVAL_MS } = loadTypeScript('runtime/characters/scheduler.ts');
+const { shouldReduceCharacterMotion } = loadTypeScript('runtime/characters/scheduler.ts');
 const { createCursorTracker, normalizedLook } = loadTypeScript('runtime/characters/cursor.ts');
 const pixels = loadTypeScript('runtime/characters/pixel-layout.ts');
 const baseline = readFileSync(path.join(__dirname, 'fixtures/character-drawings-baseline.js'), 'utf8');
@@ -124,6 +125,22 @@ test('Native cursor honors mouse grace, viewport offset, null and listener clean
   mouse({x:10,y:20}); time += 249; cursor.setNative([0,0]); assert.deepEqual(cursor.get(),{x:10,y:20});
   time++; cursor.setNative([0,0]); assert.deepEqual(cursor.get(),{x:500,y:0});
   cursor.setNative(null); assert.equal(cursor.get(),null); cursor.dispose(); assert(removed);
+});
+
+test('Reduced motion stops scheduling but still renders an explicit mood update', () => {
+  assert.equal(shouldReduceCharacterMotion('auto', true), true);
+  assert.equal(shouldReduceCharacterMotion('auto', false), false);
+  assert.equal(shouldReduceCharacterMotion('reduce', false), true);
+  assert.equal(shouldReduceCharacterMotion('full', true), false);
+  let queued = 0, calls = 0;
+  const scheduler = createCharacterScheduler({ requestFrame: () => ++queued, cancelFrame: () => { queued--; }, isHidden: () => false, onVisibilityChange: () => () => {} });
+  const stop = scheduler.subscribe(() => calls++, () => 16);
+  assert.equal(queued, 1);
+  scheduler.suspend('reduced-motion', true); assert.equal(queued, 0);
+  scheduler.repaint(500); assert.equal(calls, 1); assert.equal(queued, 0);
+  scheduler.suspend('fullscreen', true); scheduler.suspend('reduced-motion', false); assert.equal(queued, 0);
+  scheduler.suspend('fullscreen', false); assert.equal(queued, 1);
+  stop(); assert.equal(queued, 0); scheduler.dispose();
 });
 
 test('Pixel geometry and hopping match the 288 legacy golden cases', () => {

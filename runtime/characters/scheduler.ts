@@ -79,7 +79,11 @@ export function createCharacterScheduler(dependencies: CharacterSchedulerDepende
     removeVisibilityListener?.();
     removeVisibilityListener = null;
   }
-  return { subscribe, suspend, refresh, dispose };
+  function repaint(time: number) {
+    if (disposed || dependencies.isHidden()) return;
+    subscribers.forEach(subscriber => { subscriber.last = time; subscriber.frame(time); });
+  }
+  return { subscribe, suspend, refresh, repaint, dispose };
 }
 
 export function animationInterval(mood: CharacterMood, still = false): number {
@@ -98,4 +102,34 @@ const sharedScheduler = createCharacterScheduler({
 });
 export const subscribeAnimationFrames = sharedScheduler.subscribe;
 export const suspendCharacterAnimations = sharedScheduler.suspend;
-export const refreshCharacterScheduler = sharedScheduler.refresh;
+export const refreshCharacterScheduler = () => {
+  sharedScheduler.repaint(performance.now());
+  sharedScheduler.refresh();
+};
+
+export type CharacterMotionPreference = 'auto' | 'reduce' | 'full';
+export function shouldReduceCharacterMotion(preference: CharacterMotionPreference, systemReduced: boolean) {
+  return preference === 'reduce' || (preference === 'auto' && systemReduced);
+}
+const motionQuery = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
+let motionPreference: CharacterMotionPreference = 'auto';
+let reducedMotion = shouldReduceCharacterMotion(motionPreference, motionQuery?.matches ?? false);
+const motionListeners = new Set<() => void>();
+export const isCharacterMotionReduced = () => reducedMotion;
+export function onCharacterMotionChange(listener: () => void) {
+  motionListeners.add(listener); return () => { motionListeners.delete(listener); };
+}
+function applyMotionPreference() {
+  const next = shouldReduceCharacterMotion(motionPreference, motionQuery?.matches ?? false);
+  if (next === reducedMotion) return;
+  reducedMotion = next;
+  sharedScheduler.suspend('reduced-motion', next);
+  motionListeners.forEach(listener => listener());
+  refreshCharacterScheduler();
+}
+export function setCharacterMotionPreference(preference: CharacterMotionPreference) {
+  motionPreference = ['auto', 'reduce', 'full'].includes(preference) ? preference : 'auto';
+  applyMotionPreference();
+}
+sharedScheduler.suspend('reduced-motion', reducedMotion);
+motionQuery?.addEventListener('change', applyMotionPreference);

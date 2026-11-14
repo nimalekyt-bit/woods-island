@@ -18,6 +18,7 @@ export function LiquidIsland({ mood, accent, ears = false, round = false, rain =
   const currentFill = React.useRef(fill); currentFill.current = fill;
   const engine = React.useRef<ReturnType<typeof mountLiquidIsland> | null>(null);
   React.useEffect(() => { engine.current?.updateFill(fill); }, [fill]);
+  React.useEffect(() => { engine.current?.draw(performance.now()); }, [mood, accent, ears, round, rain, scaled]);
   React.useEffect(() => {
     const root = svg.current;
     if (!root?.parentElement) return;

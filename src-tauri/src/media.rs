@@ -496,6 +496,12 @@ pub fn volume_mute() {
 }
 
 /// Polls GSMTC and starts the measured WASAPI stream independently of media apps.
+fn media_event_snapshot(current: &Option<Value>) -> Value {
+    let mut value=current.clone().unwrap_or(Value::Null);
+    if let Some(object)=value.as_object_mut() { object.remove("updatedAt"); }
+    value
+}
+
 pub fn start_media_loop(app: tauri::AppHandle) {
     crate::music_bridge::start();
     crate::audio::start_loopback(app.clone());
@@ -507,6 +513,7 @@ pub fn start_media_loop(app: tauri::AppHandle) {
         let mut last_key = String::new();
         let mut last_playing = false;
         let mut last_cover = None;
+        let mut last_payload = Value::Null;
 
         loop {
             std::thread::sleep(std::time::Duration::from_millis(350));
@@ -521,6 +528,7 @@ pub fn start_media_loop(app: tauri::AppHandle) {
                 .and_then(|v| v.get("playing"))
                 .and_then(|p| p.as_bool())
                 .unwrap_or(false);
+            crate::audio::set_spectrum_playing(is_playing);
 
             let key_changed = key != last_key;
             let play_changed = is_playing != last_playing;
@@ -562,7 +570,8 @@ pub fn start_media_loop(app: tauri::AppHandle) {
                 }
             }
 
-            if key_changed || play_changed || current.is_some() {
+            let snapshot=media_event_snapshot(&current);
+            if key_changed || play_changed || snapshot != last_payload {
                 let payload = match current {
                     Some(ref v) => v.clone(),
                     None => Value::Null,
@@ -570,6 +579,7 @@ pub fn start_media_loop(app: tauri::AppHandle) {
                 let _ = app_clone.emit("media:update", &payload);
                 last_key = key;
                 last_playing = is_playing;
+                last_payload = snapshot;
             }
         }
     });
@@ -581,4 +591,10 @@ mod tests {
     fn progress()->PlaybackProgress {PlaybackProgress{key:"track".into(),base_pos_ms:1000,last_tick:10000,duration_ms:100000,playing:true,raw_pos_ms:1000,timeline_at:1}}
     #[test] fn stale_timeline_does_not_rewind_every_three_seconds(){let mut p=progress();assert_eq!(p.advance(1000,100000,1,14000,true),5000);assert_eq!(p.advance(1000,100000,1,18000,true),9000);}
     #[test] fn seek_to_zero_and_pause_are_honored(){let mut p=progress();assert_eq!(p.advance(0,100000,2,11000,true),0);assert_eq!(p.advance(0,100000,2,12000,false),1000);assert_eq!(p.advance(0,100000,2,20000,false),1000);assert_eq!(p.advance(0,100000,2,30000,true),1000);assert_eq!(p.advance(0,100000,2,31000,true),2000);}
+    #[test] fn paused_media_deduplicates_clock_but_preserves_seeks_and_metadata(){
+        let a=Some(json!({"key":"a","positionMs":1000,"playing":false,"title":"Track","updatedAt":1}));
+        let mut b=a.clone();b.as_mut().unwrap()["updatedAt"]=json!(2);assert_eq!(media_event_snapshot(&a),media_event_snapshot(&b));
+        for (key,value) in [("positionMs",json!(0)),("title",json!("Corrected")),("playing",json!(true)),("cover",json!("new"))] {let mut changed=b.clone();changed.as_mut().unwrap()[key]=value;assert_ne!(media_event_snapshot(&a),media_event_snapshot(&changed));}
+        assert_ne!(media_event_snapshot(&a),media_event_snapshot(&None));
+    }
 }

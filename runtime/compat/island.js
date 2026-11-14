@@ -3597,7 +3597,7 @@ function gc({ radioOn: e, onClose: t }) {
                                 e.connected
                                   ? o(`Подключено`, `Connected`)
                                   : o(`Не подключено`, `Not connected`),
-                                e.battery !== null && ` · ${e.battery}%`,
+                                Number.isFinite(e.battery) ? ` · ${e.battery}%` : o(` · заряд недоступен`, ` · battery unavailable`),
                               ],
                             }),
                           ],
@@ -3613,6 +3613,12 @@ function gc({ radioOn: e, onClose: t }) {
                               e.connected ? o(`Отключить`, `Disconnect`) : o(`Подключить`, `Connect`),
                             ],
                           }),
+                        !e.switchable && (0, jsxRuntime.jsx)(`button`, {
+                          onClick: () => void u.openPath(`ms-settings:bluetooth`),
+                          className: `press h-7 shrink-0 rounded-full bg-white/8 px-2 text-[11px] text-ink-3`,
+                          title: o(`Windows не предоставила управление службами этого устройства`, `Windows does not expose service controls for this device`),
+                          children: o(`В Windows`, `In Windows`),
+                        }),
                       ],
                     },
                     e.id,
@@ -3963,6 +3969,7 @@ function Sc() {
     T = x.length === 1 ? x[0] : w.length === 1 ? w[0] : null,
     E = () => {
       if (C) return C.ready ? b(`vpn:${C.id}`, !1) : C.launchPath && u.openPath(C.launchPath);
+      if (T?.onSource === `command`) return d(!0);
       if (T) return T.ready ? b(`vpn:${T.id}`, !0) : T.launchPath && u.openPath(T.launchPath);
       d(!0);
     },
@@ -4009,7 +4016,7 @@ function Sc() {
                   children: [
                     (0, jsxRuntime.jsx)(`span`, {
                       className: `min-w-0 flex-1 truncate text-[12px] font-semibold text-ink-2`,
-                      children: o(`Какой VPN подключить?`, `Which VPN to connect?`),
+                      children: o(`Подключения VPN`, `VPN connections`),
                     }),
                     (0, jsxRuntime.jsx)(`button`, {
                       title: o(`Закрыть`, `Close`),
@@ -4021,8 +4028,24 @@ function Sc() {
                 }),
                 (0, jsxRuntime.jsx)(`div`, {
                   className: `scroll-thin flex min-h-0 flex-1 flex-wrap content-start gap-1.5 overflow-y-auto`,
-                  children: x.map((e) =>
-                    (0, jsxRuntime.jsx)(
+                  children: x.map((e) => e.onSource === `command`
+                    ? (0, jsxRuntime.jsxs)(`div`, {
+                      "data-custom-vpn": true,
+                      className: `flex w-full flex-wrap items-center gap-2 rounded-xl bg-white/5 p-2`,
+                      children: [
+                        (0, jsxRuntime.jsx)(`span`, { className: `w-full text-[12px] text-ink`, children: `${e.name} · ${o(`состояние неизвестно`, `status unknown`)}` }),
+                        (0, jsxRuntime.jsx)(`span`, { className: `w-full text-[11px] text-ink-3`, children: e.lastRequestedOn == null
+                          ? o(`Команды не проверяют состояние туннеля.`, `Commands do not verify tunnel status.`)
+                          : o(`Последняя команда выполнена; проверь соединение в VPN-клиенте.`, `Last command completed; check the connection in your VPN client.`) }),
+                        ...[true, false].map(on => (0, jsxRuntime.jsx)(`button`, {
+                          "data-vpn-command": on ? `connect` : `disconnect`, disabled: n === `vpn`,
+                          onClick: () => b(`vpn:${e.id}`, on),
+                          className: `press h-8 rounded-full bg-white/10 px-3 text-[12px] text-ink disabled:opacity-50`,
+                          children: on ? o(`Подключить`, `Connect`) : o(`Отключить`, `Disconnect`),
+                        }, String(on))),
+                      ],
+                    }, e.id)
+                    : (0, jsxRuntime.jsx)(
                       `button`,
                       {
                         onClick: () => {
@@ -7305,7 +7328,7 @@ function mA({ w: e }) {
           children: [
             (0, jsxRuntime.jsx)(`span`, {
               className: `text-[10.5px] text-ink-3`,
-              children: n === 0 ? o(`Сейчас`, `Now`) : De(t.time, e.utcOffset),
+              children: n === 0 ? o(`Сейчас`, `Now`) : De(t.time, e.timezone || e.utcOffset),
             }),
             (0, jsxRuntime.jsx)(nn, {
               sky: st(n === 0 ? e.now.code : t.code),
@@ -7342,7 +7365,7 @@ function hA({ w: e }) {
             children: [
               (0, jsxRuntime.jsx)(`span`, {
                 className: `truncate text-[10.5px] ${n === 0 ? `font-semibold text-ink` : `text-ink-3`}`,
-                children: tt(t.time, e.utcOffset, n),
+                children: tt(t.time, e.timezone || e.utcOffset, n),
               }),
               (0, jsxRuntime.jsx)(nn, { sky: st(t.code), size: 24, still: !0 }),
               (0, jsxRuntime.jsxs)(`span`, {
@@ -7640,8 +7663,8 @@ function SA({ w: e }) {
       (0, jsxRuntime.jsxs)(`div`, {
         className: `tabular flex justify-between text-[10.5px] text-ink-2`,
         children: [
-          (0, jsxRuntime.jsxs)(`span`, { children: [`↑ `, rt(t.sunrise, e.utcOffset)] }),
-          (0, jsxRuntime.jsxs)(`span`, { children: [`↓ `, rt(t.sunset, e.utcOffset)] }),
+          (0, jsxRuntime.jsxs)(`span`, { children: [`↑ `, rt(t.sunrise, e.timezone || e.utcOffset)] }),
+          (0, jsxRuntime.jsxs)(`span`, { children: [`↓ `, rt(t.sunset, e.timezone || e.utcOffset)] }),
         ],
       }),
     ],
@@ -7797,6 +7820,12 @@ function EA() {
                 : (0, jsxRuntime.jsxs)(jsxRuntime.Fragment, {
                     children: [
                       (0, jsxRuntime.jsx)(gA, { w: e }),
+                      e.timezoneWarning && (0, jsxRuntime.jsx)(`button`, {
+                        "data-weather-timezone-warning": true,
+                        onClick: () => void u.openSettings(`weather`),
+                        style: { color: `#ffdfac`, background: `#3c3021`, borderRadius: 8, padding: `6px 9px`, fontSize: 11, textAlign: `left`, flexShrink: 0 },
+                        children: o(`Часовой пояс не определён: время в UTC. Выбрать пояс →`, `Time zone unavailable: times are in UTC. Choose a zone →`),
+                      }),
                       (0, jsxRuntime.jsxs)(`div`, {
                         className: `grid min-h-0 flex-1 grid-cols-3 grid-rows-2 gap-2`,
                         children: [
@@ -7981,7 +8010,7 @@ function AA() {
     return null;
   let a = e.countryCode ?? (e.active ? `VPN` : `—`),
     s = [
-      e.active ? o(`VPN подключён`, `VPN connected`) : o(`VPN отключён`, `VPN off`),
+      e.active === null ? o(`Состояние VPN неизвестно`, `VPN status unknown`) : e.active ? o(`VPN подключён`, `VPN connected`) : o(`VPN отключён`, `VPN off`),
       e.country,
       e.ip,
       e.via,
@@ -8014,7 +8043,7 @@ function AA() {
     l = t
       ? o(`Жду ответа VPN…`, `Waiting for the VPN…`)
       : `${s}
-${e.active ? o(`Клик — отключить VPN`, `Click to turn the VPN off`) : o(`Клик — включить VPN`, `Click to turn the VPN on`)} · ${o(`правый клик — проверить заново`, `right-click to check again`)}`;
+${e.active === null ? o(`Клик — выбрать команду VPN`, `Click to choose a VPN command`) : e.active ? o(`Клик — отключить VPN`, `Click to turn the VPN off`) : o(`Клик — включить VPN`, `Click to turn the VPN on`)} · ${o(`правый клик — проверить заново`, `right-click to check again`)}`;
   return (0, jsxRuntime.jsxs)(`button`, {
     "data-vpn-chip": !0,
     "data-vpn-busy": t || void 0,

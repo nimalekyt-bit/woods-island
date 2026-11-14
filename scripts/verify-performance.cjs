@@ -3,6 +3,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
 const { spawn } = require('node:child_process');
+const net = require('node:net');
 const { createHash } = require('node:crypto');
 const assert = require('node:assert/strict');
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -12,8 +13,17 @@ const baseline = arguments_[0];
 const candidate = arguments_[1] || path.join(root, 'src-tauri/target/release/woods-island.exe');
 const seconds = Number(process.env.WOODS_PERF_SECONDS || 20);
 const port = Number(process.env.WOODS_PERF_PORT || 9460);
+const scratchRoot = path.resolve(process.env.WOODS_PERF_TEMP || path.join(root, '.qa-temp', 'performance-work'));
+const hidden = process.env.WOODS_PERF_HIDE === '1';
+const reportPath = path.resolve(process.env.WOODS_PERF_REPORT || path.join(root, '.qa-temp', 'performance.json'));
 let proc, ws, fixtureTimer;
 const exceptions = [];
+async function requireFreePort(value) {
+  await new Promise((resolve,reject)=>{
+    const server=net.createServer();server.once('error',reject);
+    server.listen({host:'127.0.0.1',port:value,exclusive:true},()=>server.close(error=>error?reject(error):resolve()));
+  });
+}
 async function connect(url) {
   ws = new WebSocket(url); await new Promise((resolve,reject) => { ws.onopen=resolve; ws.onerror=reject; });
   let id=0;const pending=new Map();
@@ -25,27 +35,38 @@ async function connect(url) {
   return {command,evaluate,invoke};
 }
 async function run(label,source) {
-  const directory=await fs.mkdtemp(path.join(os.tmpdir(),`woods-perf-${label}-`)),data=path.join(directory,'data');await fs.mkdir(data);
+  await requireFreePort(port);await requireFreePort(port+1);
+  await fs.mkdir(scratchRoot,{recursive:true});
+  const directory=await fs.mkdtemp(path.join(scratchRoot,`woods-perf-${label}-`)),data=path.join(directory,'data');await fs.mkdir(data);
   const exe=path.join(directory,'woods-island.exe');await fs.copyFile(source,exe);
-  await fs.writeFile(path.join(data,'settings.json'),JSON.stringify({autostart:false,obsStatus:false,showClock:true,clockSeconds:false,character:'liquid',liquidWith:false,lyrics:false,mediaPill:'normal',checkUpdates:false,moduleWeather:false}));
-  proc=spawn(exe,[],{cwd:directory,windowsHide:true,stdio:'ignore',env:{...process.env,WOODS_ISLAND_DATA_DIR:data,WOODS_ISLAND_AGENT_HOME:path.join(directory,'agent-home'),WOODS_ISLAND_MUSIC_PORT:String(port+1),WOODS_ISLAND_STEAM_PATH:path.join(directory,'steam'),WOODS_ISLAND_PASSIVE_QA:'1',WEBVIEW2_USER_DATA_FOLDER:path.join(directory,'webview'),WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS:`--remote-debugging-port=${port}`}});
+  await fs.writeFile(path.join(data,'settings.json'),JSON.stringify({autostart:false,obsStatus:false,showClock:true,clockSeconds:false,character:'liquid',liquidWith:false,lyrics:false,mediaPill:'normal',checkUpdates:false,moduleWeather:false,autoHide:false,hideInFullscreen:false}));
+  proc=spawn(exe,[],{cwd:directory,windowsHide:true,stdio:'ignore',env:{...process.env,TEMP:directory,TMP:directory,WOODS_ISLAND_DATA_DIR:data,WOODS_ISLAND_AGENT_HOME:path.join(directory,'agent-home'),WOODS_ISLAND_MUSIC_PORT:String(port+1),WOODS_ISLAND_STEAM_PATH:path.join(directory,'steam'),WOODS_ISLAND_PASSIVE_QA:'1',WEBVIEW2_USER_DATA_FOLDER:path.join(directory,'webview'),WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS:`--remote-debugging-port=${port}`}});
   let pages;for(let i=0;i<100;i++){try{pages=await(await fetch(`http://127.0.0.1:${port}/json`)).json();if(pages.some(p=>p.url==='http://tauri.localhost/'))break;}catch{}await pause(200);}
   const client=await connect(pages.find(p=>p.url==='http://tauri.localhost/').webSocketDebuggerUrl);
   for(let i=0;i<100;i++){if(await client.evaluate('!!document.querySelector("[data-island]")'))break;await pause(100);}
   assert(await client.evaluate('!!document.querySelector("[data-island]")'));
+  if(hidden)await client.invoke('set_island_hidden',{hidden:true});
+  let fixturePlaying=false,fixturePosition=0,fixtureAt=Date.now();
+  const publish=()=>fetch(`http://127.0.0.1:${port+1}/track`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({trackId:'performance-fixture',title:'Performance fixture',artist:'Woods',duration:300000,progress:fixturePosition+(fixturePlaying?Date.now()-fixtureAt:0),isPlaying:fixturePlaying})});
+  await publish();fixtureTimer=setInterval(()=>void publish().catch(()=>{}),1000);await pause(1000);
+  await client.invoke('media_pick',{id:'ru.yandex.desktop.music.mod.connector'});
   await pause(8000);
-  await client.evaluate(`(async()=>{window.__perfEvents={};for(const event of ['media:bands','media:level','downloads:update','agents:update','controls:changed']){window.__perfEvents[event]=0;const handler=window.__TAURI_INTERNALS__.transformCallback(()=>window.__perfEvents[event]++);await window.__TAURI_INTERNALS__.invoke('plugin:event|listen',{event,target:{kind:'Any'},handler});}})()`);
+  await client.evaluate(`(async()=>{window.__perfEvents={};for(const event of ['media:update','media:bands','media:level','downloads:update','agents:update','controls:changed']){window.__perfEvents[event]=0;const handler=window.__TAURI_INTERNALS__.transformCallback(()=>window.__perfEvents[event]++);await window.__TAURI_INTERNALS__.invoke('plugin:event|listen',{event,target:{kind:'Any'},handler});}})()`);
   const result={sha256:createHash('sha256').update(await fs.readFile(source)).digest('hex'),scenarios:{}};
-  for(const phase of ['idle','music']) {
+  for(const phase of ['idle','music','paused']) {
     if(phase==='music') {
-      const at=Date.now();const publish=()=>fetch(`http://127.0.0.1:${port+1}/track`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({trackId:'performance-fixture',title:'Performance fixture',artist:'Woods',duration:300000,progress:Date.now()-at,isPlaying:true})}).catch(()=>{});
-      await publish();fixtureTimer=setInterval(publish,1000);await pause(3500);
-      await client.invoke('media_pick',{id:'ru.yandex.desktop.music.mod.connector'});await pause(3500);
+      fixturePlaying=true;fixtureAt=Date.now();await publish();await pause(3500);
       await client.invoke('settings_set',{settings:{mediaPill:'title'}});await pause(500);
       assert(await client.evaluate('document.body.textContent.includes("Performance fixture")'),
         'The music fixture must reach the rendered pill before measuring');
       await client.invoke('settings_set',{settings:{mediaPill:'normal'}});await pause(1000);
     }
+    if(phase==='paused') {
+      fixturePosition+=Date.now()-fixtureAt;fixturePlaying=false;await publish();await pause(4000);
+    }
+    const currentMedia=await client.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");return ot.getState().media;})()');
+    assert.equal(currentMedia?.app,'ru.yandex.desktop.music.mod.connector','Never measure the user’s real media session as the fixture');
+    assert.equal(currentMedia?.playing,fixturePlaying);
     await client.evaluate('Object.keys(window.__perfEvents).forEach(k=>window.__perfEvents[k]=0)');
     const before=await client.command('Performance.getMetrics');
     const file=path.join(directory,phase+'.json');
@@ -69,18 +90,31 @@ async function run(label,source) {
 }
 (async()=>{
   assert(baseline,'Provide the preserved baseline executable');
+  assert(Number.isInteger(seconds)&&seconds>=12&&seconds<=120,'Measurement seconds must be 12–120');
+  assert(Number.isInteger(port)&&port>=1024&&port<65535,'Use two valid non-privileged local ports');
   const previous=await run('baseline',baseline),current=await run('candidate',candidate);
-  const report={date:new Date().toISOString(),logicalProcessors:os.cpus().length,method:'Sequential isolated profiles. CPU sums the native app and every descendant including hidden WebView2 windows. Music uses a loopback metadata fixture; the existing Windows audio output is observed without changing playback or volume.',baseline:previous,candidate:current,frontendExceptions:exceptions};
-  const reportPath = path.join(root,'.qa-temp','performance.json');
+  const report={date:new Date().toISOString(),logicalProcessors:os.cpus().length,windowHidden:hidden,method:'Sequential isolated profiles. Idle is a forced paused connector fixture, music is playing metadata, paused follows music. CPU sums the native app and descendants. The existing Windows audio output is only observed; this harness never changes playback, volume, device or personal profile. Hidden mode measures a hidden HUD and must not be reported as visible-HUD performance.',baseline:previous,candidate:current,frontendExceptions:exceptions};
   await fs.mkdir(path.dirname(reportPath), { recursive:true });
   await fs.writeFile(reportPath,JSON.stringify(report,null,2)+'\n');
   assert.equal(exceptions.length,0,'No frontend exceptions');
-  for(const scenario of ['idle','music']) {
+  for(const scenario of ['idle','music','paused']) {
     const a=previous.scenarios[scenario],b=current.scenarios[scenario];
     assert(b.cpuMachinePercent<=a.cpuMachinePercent*1.5+0.5,`${scenario} CPU regression`);
     assert(b.meanPrivateMiB<=a.meanPrivateMiB*1.3+50,`${scenario} memory regression`);
     assert(b.cpuMachinePercent<5,`${scenario} CPU budget`);
     assert.equal(b.events['downloads:update'],0,'No repeating unchanged download events');
+    if(scenario!=='music'){
+      assert.equal(b.events['media:bands'],0,'Paused visualization does not keep capturing');
+      assert.equal(b.events['media:level'],0,'Paused visualization does not emit repeating meter events');
+      assert(b.events['media:update']<=2,'Unchanged paused metadata is deduplicated');
+    }
   }
   console.log('PASS process tree performance budgets; report saved in .qa-temp/performance.json');
-})().catch(error=>{console.error(error);process.exitCode=1;}).finally(()=>{clearInterval(fixtureTimer);ws?.close();if(proc)proc.kill();});
+})().catch(error=>{console.error(error);process.exitCode=1;}).finally(async()=>{
+  clearInterval(fixtureTimer);ws?.close();
+  if(proc&&proc.exitCode===null){
+    // Only the child started from this run's isolated directory and its tree.
+    const cleanup=spawn('taskkill.exe',['/PID',String(proc.pid),'/T','/F'],{windowsHide:true,stdio:'ignore'});
+    await new Promise(resolve=>{cleanup.once('exit',resolve);cleanup.once('error',resolve);});
+  }
+});

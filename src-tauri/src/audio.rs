@@ -14,6 +14,16 @@ const FFT_SIZE: usize = 2048;
 const BAND_EDGES: [f32; 9] = [30., 80., 180., 400., 900., 2000., 4500., 9000., 20000.];
 static SELECTED_OUTPUT: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 static SELECTED_INPUT: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+static SPECTRUM_PLAYING: AtomicBool = AtomicBool::new(false);
+static SPECTRUM_VISIBLE: AtomicBool = AtomicBool::new(true);
+static SPECTRUM_RENDERED: AtomicBool = AtomicBool::new(true);
+
+/// Media metadata keeps running while the HUD is idle. WASAPI visualization
+/// has no consumer until playback starts; recording uses its own capture path.
+pub fn set_spectrum_playing(playing: bool) { SPECTRUM_PLAYING.store(playing, Ordering::Relaxed); }
+pub fn set_spectrum_visible(visible: bool) { SPECTRUM_VISIBLE.store(visible, Ordering::Relaxed); }
+pub fn set_spectrum_rendered(rendered: bool) { SPECTRUM_RENDERED.store(rendered, Ordering::Relaxed); }
+fn spectrum_active() -> bool { SPECTRUM_PLAYING.load(Ordering::Relaxed) && SPECTRUM_VISIBLE.load(Ordering::Relaxed) && SPECTRUM_RENDERED.load(Ordering::Relaxed) }
 
 pub fn configure(settings: &Value) {
     *SELECTED_OUTPUT.lock().unwrap() = settings["audioOutput"].as_str().filter(|s|!s.is_empty()).map(str::to_owned);
@@ -265,6 +275,11 @@ impl Spectrum {
     fn measure(&mut self, rate: u32) -> ([f32;8],f32) {
         let count=self.samples.len();
         let rms=if count>0 {(self.samples.iter().map(|s|s*s).sum::<f32>()/count as f32).sqrt()}else{0.};
+        // Exact silence needs only the same release envelope, not a 2048-bin FFT.
+        if rms == 0. {
+            for band in &mut self.bands { *band *= 0.65; if *band < 0.001 { *band = 0.; } }
+            return (self.bands, 0.);
+        }
         for (i,bin) in self.scratch.iter_mut().enumerate() {
             let sample=self.samples.get(i).copied().unwrap_or(0.);
             let window=0.5-0.5*(2.*std::f32::consts::PI*i as f32/(FFT_SIZE-1) as f32).cos();
@@ -334,6 +349,7 @@ unsafe fn capture_session(app:&tauri::AppHandle)->Result<(),String> {
     let mut quiet = false;
     let outcome=(||->Result<(),String>{
         loop {
+            if !spectrum_active() { break; }
             std::thread::sleep(Duration::from_millis(if quiet {32} else {10}));
             while capture.GetNextPacketSize().map_err(|e|e.to_string())?>0 {
                 let mut data=std::ptr::null_mut();let mut frames=0;let mut flags=0;
@@ -393,10 +409,12 @@ pub fn start_loopback(app:tauri::AppHandle) {
     std::thread::spawn(move||{
         let _com=match ComApartment::new(){Ok(c)=>c,Err(e)=>{let _=app.emit("audio:error",e);return;}};
         loop {
+            if !spectrum_active() { std::thread::sleep(Duration::from_millis(100)); continue; }
             let outcome=unsafe{capture_session(&app)};
+            let failed=outcome.is_err();
             if let Err(error)=outcome {let _=app.emit("audio:error",error);}
             let _=app.emit("media:bands",[0.;8]);let _=app.emit("media:level",0.);
-            std::thread::sleep(Duration::from_secs(1));
+            if failed { std::thread::sleep(Duration::from_secs(1)); }
         }
     });
 }
@@ -473,4 +491,5 @@ mod tests {
     #[test] fn sine_is_measured_in_its_frequency_band(){let mut s=Spectrum::new();for i in 0..FFT_SIZE{s.push((2.*std::f32::consts::PI*1000.*i as f32/48000.).sin()*0.5);}let(b,l)=s.measure(48000);let dominant=b.iter().enumerate().max_by(|a,b|a.1.total_cmp(b.1)).unwrap().0;assert_eq!(dominant,4);assert!((l-0.3535).abs()<0.02);}
     #[test] fn sample_formats_preserve_sign(){assert_eq!(decode_sample(&[0,128],false),-1.);assert_eq!(decode_sample(&[0,0,128],false),-1.);assert_eq!(decode_sample(&1f32.to_le_bytes(),true),1.);}
     #[test] fn invalid_samples_never_poison_spectrum(){let mut s=Spectrum::new();s.push(f32::NAN);s.push(f32::INFINITY);let(b,l)=s.measure(48000);assert!(b.iter().all(|v|v.is_finite()));assert!(l.is_finite());}
+    #[test] fn silence_releases_previous_bands_without_fft(){let mut s=Spectrum::new();s.bands=[1.;8];for _ in 0..FFT_SIZE{s.push(0.);}let(b,l)=s.measure(48000);assert_eq!(b,[0.65;8]);assert_eq!(l,0.);for _ in 0..24{s.measure(48000);}assert_eq!(s.bands,[0.;8]);}
 }

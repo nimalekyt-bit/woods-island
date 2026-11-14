@@ -1,0 +1,13 @@
+/* Preserve event-driven state changes while removing decorative movement. */
+html[data-woods-reduced-motion="true"] *,
+html[data-woods-reduced-motion="true"] *::before,
+html[data-woods-reduced-motion="true"] *::after {
+  animation-duration: .01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: .01ms !important;
+  scroll-behavior: auto !important;
+}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible {
+  outline: 2px solid #8ea2ff;
+  outline-offset: 2px;
+}

@@ -4,7 +4,7 @@ import type { CharacterMood } from './types';
 import { PixelCharacter } from './PixelCharacter';
 import { BitmapSprite } from './BitmapSprite';
 import { createCharacterPose, genericMotion, GENERIC_BOUNCE_LIMIT } from './pose';
-import { subscribeAnimationFrames, refreshCharacterScheduler, animationInterval } from './scheduler';
+import { subscribeAnimationFrames, refreshCharacterScheduler, animationInterval, onCharacterMotionChange, isCharacterMotionReduced } from './scheduler';
 import { createSvg, createThinkingDots, createSleepSymbol, createAttentionBadge,
   drawThinkingDots, drawSleepSymbol, drawAttentionBadge } from './drawings/helpers';
 
@@ -15,6 +15,8 @@ export interface CharacterSpriteProps {
 }
 export function CharacterSprite({ definition, mood = 'idle', width, height, look = 0,
   accent, level = 0, still = false, className = '' }: CharacterSpriteProps) {
+  const reducedMotion = React.useSyncExternalStore(onCharacterMotionChange, isCharacterMotionReduced);
+  still = still || reducedMotion;
   const svg = React.useRef<SVGSVGElement>(null);
   const latest = React.useRef({ mood, look, accent, still });
   latest.current = { mood, look, accent, still };
