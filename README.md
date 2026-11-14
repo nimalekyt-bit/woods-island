@@ -264,7 +264,7 @@ cargo build --release --locked --manifest-path src-tauri/Cargo.toml --bin woods-
 Условия использования компонентов: [LICENSE](LICENSE) и
 [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md).
 
-[Сайт Woods Island](https://woods-island.tuz032.workers.dev/).
+[Сайт Woods Island](https://island.woodslab.top/).
 
 <div align="center">
 <br>
