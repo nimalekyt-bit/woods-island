@@ -27,6 +27,7 @@ let browser,server;
   await page.addInitScript(({defaults,lang})=>{
    let next=1;const callbacks=new Map(),subscriptions=new Map();
    window.calls=[];window.saved={...defaults,language:lang,onboardingCompleted:false,hotkeyToggle:'Alt+I',hotkeyPalette:'Ctrl+Space',uploadService:'imgbb'};
+   window.__TAURI_EVENT_PLUGIN_INTERNALS__={unregisterListener:()=>{}};
    window.updateFixture={status:'ready',version:'1.2.1',downloaded:100,total:100,canInstall:true,error:null,reason:null};
    const emit=(event,payload)=>{for(const item of subscriptions.values())if(item.event===event)callbacks.get(item.handler)?.({event,payload});};
    window.setUpdate=value=>{window.updateFixture={...window.updateFixture,...value};emit('update:state',window.updateFixture);};
@@ -126,6 +127,10 @@ let browser,server;
   await page.getByRole('button',{name:pick('Установить','Install update'),exact:true}).waitFor();
   const clipped=await page.locator('[data-update-settings] button').evaluateAll(buttons=>buttons.some(button=>{const rect=button.getBoundingClientRect();return rect.width>0&&(rect.left<212||rect.right>innerWidth);}));assert.equal(clipped,false);
   await screenshot('updates-narrow');
+  await page.evaluate(()=>window.__TAURI_INTERNALS__.invoke('settings_set',{settings:{language:window.saved.language==='ru'?'en':'ru'}}));
+  await page.locator('[data-nav=updates][data-now=true]').waitFor();
+  await page.getByRole('button',{name:pick('Install update','Установить'),exact:true}).waitFor();
+  assert.equal(await page.locator('[data-update-settings]').count(),1,'Changing language preserves the active section');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   assert.deepEqual(errors,[]);results.push({language:lang,shell:['820x720','660x600'],checks:24,errors:0,overflow:false});
   await context.close();

@@ -2016,9 +2016,14 @@ function Lt({ version: e }) {
 function Rt() {
   return woodsAbout(U, n);
 }
+// The language provider remounts its children. Keep navigation within this
+// window; a newly created settings webview still honors its requested target.
+let woodsLastSettingsPage = null;
 function zt() {
   const petLibrary = usePetLibrary();
   const [saveError, setSaveError] = WoodsReact.useState(``);
+  const priorPage = WoodsReact.useRef(woodsLastSettingsPage);
+  const targetRequested = WoodsReact.useRef(false);
   let [e, t] = (0, F.useState)(null),
     i = (0, F.useRef)(null),
     a = (0, F.useRef)(0);
@@ -2036,7 +2041,7 @@ function zt() {
     [_, te] = (0, F.useState)(``),
     [v, ne] = (0, F.useState)(`hide`),
     [ie, ae] = (0, F.useState)(null),
-    [y, b] = (0, F.useState)(`general`),
+    [y, b] = (0, F.useState)(woodsLastSettingsPage ?? `general`),
     [oe, se] = (0, F.useState)(`idle`),
     [ce, le] = (0, F.useState)(!1),
     ue = (0, F.useCallback)((e) => {
@@ -2108,8 +2113,10 @@ function zt() {
       return (e(), window.addEventListener(`focus`, e), () => window.removeEventListener(`focus`, e));
     }, []),
     (0, F.useEffect)(() => {
-      (r.settingsGet().then((e) => {
-        if (e.onboardingCompleted === false) b(`connections`);
+      (Promise.all([r.settingsGet(), r.settingsTarget().catch(() => null)]).then(([e, target]) => {
+        if (!priorPage.current && !targetRequested.current) {
+          b(xt().some((section) => section.id === target) ? target : e.onboardingCompleted === false ? `connections` : `general`);
+        }
         ((i.current = e),
           t(e),
           h(
@@ -2147,10 +2154,7 @@ function zt() {
           .newsGet()
           .then(je)
           .catch(() => je(null)));
-      let e = (e) => e && He((t) => ({ id: e, n: (t?.n ?? 0) + 1 }));
-      r.settingsTarget()
-        .then(e)
-        .catch(() => {});
+      let e = (e) => e && ((targetRequested.current = true), He((t) => ({ id: e, n: (t?.n ?? 0) + 1 })));
       let n = s(`license:changed`, u),
         a = s(`settings:goto`, e);
       return () => {
@@ -2161,8 +2165,9 @@ function zt() {
       z && xt().some((e) => e.id === z.id) && b(z.id);
     }, [z]),
     (0, F.useEffect)(() => {
+      if (e) woodsLastSettingsPage = y;
       ie?.scrollTo({ top: 0 });
-    }, [y, ie]));
+    }, [y, ie, e]));
   let B = (e) => {
       r.sttKeySet(e)
         .then((e) => {
