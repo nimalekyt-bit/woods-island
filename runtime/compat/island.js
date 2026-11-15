@@ -3025,12 +3025,19 @@ function lc() {
                 if (openingRef.current) return;
                 openingRef.current = true;
                 setOpening(true); setOpeningError(null);
+                const previousHold = useIslandStore.getState().holdOpen;
+                useIslandStore.getState().setHoldOpen(true);
+                useIslandStore.setState({ webAiTransferring: e });
                 try {
                   await u.webAiWindow(e);
                   useIslandStore.getState().close();
                 } catch (error) {
                   setOpeningError(String(error));
-                } finally { openingRef.current = false; setOpening(false); }
+                } finally {
+                  useIslandStore.setState({ webAiTransferring: null });
+                  if (useIslandStore.getState().expanded) useIslandStore.getState().setHoldOpen(previousHold);
+                  openingRef.current = false; setOpening(false);
+                }
               },
               title: o(
                 `Открыть в отдельном окне: его размер можно менять`,
@@ -3061,6 +3068,7 @@ function lc() {
 }
 function uc({ service: e }) {
   let navigation = useWebAiStatus(e, 'embedded'),
+    transferring = useIslandStore(s => s.webAiTransferring === e),
     t = (0, ReactRuntime.useRef)(null),
     n = useIslandStore((e) => e.expanded),
     r = useIslandStore((e) => e.tab === `chat`),
@@ -3167,7 +3175,7 @@ function uc({ service: e }) {
                   }),
                   (0, jsxRuntime.jsx)(`button`, {
                     "data-web-ai-back": !0,
-                    onClick: () => void u.webAiWindowClose(),
+                    onClick: () => void u.webAiWindowClose(true),
                     className: `press h-7 rounded-full bg-tile px-3 text-[12px] text-ink`,
                     children: o(`Вернуть в остров`, `Back into the island`),
                   }),
@@ -3179,11 +3187,11 @@ function uc({ service: e }) {
       : (0, jsxRuntime.jsx)(`div`, {
           ref: t,
           "data-web-ai-slot": e,
-          className: `relative min-h-0 flex-1 overflow-hidden rounded-xl bg-[#131314]`,
+          className: `relative min-h-0 flex-1 overflow-hidden rounded-xl border border-line bg-island shadow-inner`,
           children: (0, jsxRuntime.jsx)(`div`, {
             className: `on-dark absolute inset-0 grid place-items-center text-center text-[12px] text-ink-3`,
             "data-web-ai-status": l ? 'error' : navigation.status?.phase ?? 'loading',
-            children: navigation.status?.phase === 'loaded' && !l ? null : (0, jsxRuntime.jsxs)(`div`, {
+            children: transferring ? o(`Переносим чат в окно…`, `Moving the chat to its window…`) : navigation.status?.phase === 'loaded' && !l ? null : (0, jsxRuntime.jsxs)(`div`, {
               className: `flex max-w-[85%] flex-col items-center gap-3`,
               children: [
                 l || navigation.listenerError || o(statusText(navigation.status, navigation.slow), statusText(navigation.status, navigation.slow, true)),

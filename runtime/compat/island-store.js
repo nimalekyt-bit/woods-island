@@ -271,6 +271,7 @@ var useIslandStore = ce((e, t) => ({
     expanded: !1,
     pinned: !1,
     holdOpen: !1,
+    webAiTransferring: null,
     tall: !1,
     openedBy: null,
     enteredSinceOpen: !1,

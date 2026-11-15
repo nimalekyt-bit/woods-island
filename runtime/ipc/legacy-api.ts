@@ -29,7 +29,7 @@ export const api: {
   webAiBrowser: (e: string | null) => Promise<Commands["web_ai_browser"]["result"]>;
   webAiWindow: (e: string | null) => Promise<Commands["web_ai_window"]["result"]>;
   webAiWindowShow: () => Promise<Commands["web_ai_window_show"]["result"]>;
-  webAiWindowClose: () => Promise<Commands["web_ai_window_close"]["result"]>;
+  webAiWindowClose: (returnToPill?: boolean) => Promise<Commands["web_ai_window_close"]["result"]>;
   webAiPopped: () => Promise<Commands["web_ai_popped"]["result"]>;
   islandTall: (e: boolean | null) => Promise<Commands["island_tall"]["result"]>;
   playerVolume: () => Promise<Commands["player_volume"]["result"]>;
@@ -231,7 +231,7 @@ export const api: {
   webAiBrowser: (e) => T(`web_ai_browser`, { service: e }),
   webAiWindow: (e) => T(`web_ai_window`, { service: e }),
   webAiWindowShow: () => T(`web_ai_window_show`),
-  webAiWindowClose: () => T(`web_ai_window_close`),
+  webAiWindowClose: (returnToPill) => T(`web_ai_window_close`, { returnToPill }),
   webAiPopped: () => T(`web_ai_popped`),
   islandTall: (e) => T(`island_tall`, { on: e }),
   playerVolume: () => T(`player_volume`),

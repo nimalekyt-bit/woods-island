@@ -34,7 +34,7 @@ use clipboard::ClipboardStore;
 use serde_json::{json, Value};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, Listener, Manager};
 use windows::Win32::Foundation::HWND;
 
 static AUX_WINDOW_BUILD: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -424,7 +424,13 @@ async fn web_ai_window_attach(service:String,x:f64,y:f64,width:f64,height:f64,ap
 fn web_ai_reload(service:String,target:String,app:AppHandle)->Result<bool,String>{webai::reload(&app,&service,&target).map(|_|true)}
 
 #[tauri::command]
-fn web_ai_window_close(app:AppHandle)->Result<bool,String>{webai::window_close(&app).map(|_|true)}
+async fn web_ai_window_close(return_to_pill:Option<bool>,app:AppHandle)->Result<bool,String>{tauri::async_runtime::spawn_blocking(move||webai::window_close(&app,return_to_pill.unwrap_or(false)).map(|_|true)).await.map_err(|e|e.to_string())?}
+
+#[tauri::command]
+async fn web_ai_window_present(service:String,app:AppHandle)->Result<bool,String>{tauri::async_runtime::spawn_blocking(move||webai::window_present(&app,&service).map(|_|true)).await.map_err(|e|e.to_string())?}
+
+#[tauri::command]
+async fn web_ai_window_reveal(service:String,navigation:u64,app:AppHandle)->Result<bool,String>{tauri::async_runtime::spawn_blocking(move||webai::window_reveal(&app,&service,navigation)).await.map_err(|e|e.to_string())?}
 
 #[tauri::command]
 fn web_ai_window_show(app:AppHandle)->Result<bool,String>{webai::window_show(&app).map(|_|true)}
@@ -1302,6 +1308,8 @@ pub fn run() {
         .manage(state)
         .setup(move |app| {
             app_log("setup hook executing");
+            let surface_app=app.handle().clone();
+            app.listen("settings:changed",move |_|{let app=surface_app.clone();tauri::async_runtime::spawn_blocking(move||webai::refresh_surfaces(&app));});
             if let Some(window) = app.get_window("main") {
                 app_log("found main webview window");
                 let _win_clone = window.clone();
@@ -1367,6 +1375,8 @@ pub fn run() {
             web_ai_window,
             web_ai_status,
             web_ai_window_attach,
+            web_ai_window_present,
+            web_ai_window_reveal,
             web_ai_reload,
             web_ai_window_close,
             web_ai_window_show,
