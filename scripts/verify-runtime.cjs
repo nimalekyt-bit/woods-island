@@ -7,6 +7,7 @@ const http = require('node:http');
 const { createHash } = require('node:crypto');
 const assert = require('node:assert/strict');
 const { inflateSync } = require('node:zlib');
+const { assertWebAiPaint, readWebAiPaintRects } = require('./web-ai-paint.cjs');
 
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 function zipFixture(files) {
@@ -34,6 +35,8 @@ let weatherServer;
 let webAiServer;
 let failWebAi = false;
 let delayWebAi = 0;
+let holdWebAi = false;
+const heldWebAiResponses = [];
 
 async function assertQaMusicBridge() {
   for(let attempt=0;attempt<30;attempt++){
@@ -247,8 +250,9 @@ async function quit(client) {
   webAiServer=http.createServer((req,res)=>{
     if(failWebAi){req.socket.destroy();return;}
     res.setHeader('Content-Type','text/html; charset=utf-8');
-    const html=`<!doctype html><html><head><title>Isolated Web AI</title></head><body style="background:#fff;color:#111"><h1 data-provider="${req.url.slice(1)}">${req.url.slice(1)}</h1><input aria-label="Draft" /></body></html>`;
-    if(delayWebAi)setTimeout(()=>res.end(html),delayWebAi);else res.end(html);
+    const html=`<!doctype html><html><head><title>Isolated Web AI</title></head><body style="background:#fff;color:#111"><h1 data-provider="${req.url.slice(1)}">${req.url.slice(1)}</h1><input aria-label="Draft" /><div style="height:2200px"></div><script>window.fixtureInstance=crypto.randomUUID();</script></body></html>`;
+    if(holdWebAi)heldWebAiResponses.push(()=>res.end(html));
+    else if(delayWebAi)setTimeout(()=>res.end(html),delayWebAi);else res.end(html);
   });
   await new Promise(resolve=>webAiServer.listen(0,'127.0.0.1',resolve));
   const webAiUrl=`http://127.0.0.1:${webAiServer.address().port}`;
@@ -1248,6 +1252,73 @@ async function quit(client) {
     const denied=await main.evaluate('window.__TAURI_INTERNALS__.invoke("agents_answer",{id:"../outside",verdict:"allow"}).then(()=>({ok:true}),error=>({ok:false,error:String(error)}))');
     assert.equal(denied.ok,false);assert.match(denied.error,/Invalid request ID/);
   });
+  await check('Web AI first loading paint keeps provider text and view buttons visible',async()=>{
+    const before=await main.invoke('settings_get'), samples=[];
+    try {
+      for(const theme of ['dark','light'])for(const reducedMotion of ['reduce','full'])for(const service of ['gemini','deepseek']){
+        holdWebAi=true;
+        await main.invoke('settings_set',{settings:{theme,reducedMotion}});
+        // Reload the preserved provider in embedded mode, so reopening cannot
+        // skip the loading UI by reusing an already completed navigation.
+        if((await main.invoke('web_ai_status')).some(s=>s.service===service)){
+          await main.invoke('web_ai_embed',{service,x:10,y:10,width:360,height:240});
+          await main.invoke('web_ai_reload',{service,target:'embedded'});
+        }
+        await main.invoke('web_ai_window',{service});
+        const pages=await pagesReady(p=>p.url.endsWith('/web-ai.html'));
+        const shell=await attach(pages.find(p=>p.url.endsWith('/web-ai.html')));
+        await waitFor(shell,`!!(document.querySelector('[data-preferences-ready=true][data-phase=loading]')&&document.querySelector('.webai-provider-mark>img'))`,'first loading paint');
+        const geometry=await shell.evaluate(`(${readWebAiPaintRects.toString()})()`);
+        const shot=Buffer.from((await shell.command('Page.captureScreenshot',{format:'png'})).data,'base64');
+        const label=`web-ai-first-${theme}-${reducedMotion}-${service}`;
+        await fs.writeFile(path.join(directory,label+'.png'),shot);
+        await fs.writeFile(path.join(directory,label+'.json'),JSON.stringify(geometry,null,2));
+        samples.push({label,proof:assertWebAiPaint(shot,geometry,label)});
+        await assertPassiveForeground(main);
+        holdWebAi=false;heldWebAiResponses.splice(0).forEach(release=>release());
+        await waitFor(shell,`!document.querySelector('.webai-placeholder')`,'held provider reveal');
+        await main.invoke('web_ai_window_close');
+        await waitForWindowClosed('/web-ai.html');
+      }
+      return {samples,firstShow:true,delayedLocalPage:true};
+    } finally {
+      delayWebAi=0;
+      holdWebAi=false;heldWebAiResponses.splice(0).forEach(release=>release());
+      await main.invoke('web_ai_window_close');await waitForWindowClosed('/web-ai.html');
+      await main.invoke('settings_set',{settings:{theme:before.theme,reducedMotion:before.reducedMotion}});
+      await main.evaluate(`import('/assets/runtime-debug.js').then(({O})=>O.webAiHide())`);
+    }
+  });
+  await check('Web AI embedded surface clips native corners and follows theme without losing the draft',async()=>{
+    const settings=await main.invoke('settings_get');
+    const before=await main.evaluate(`import('/assets/runtime-debug.js').then(({ot})=>{const s=ot.getState();return {expanded:s.expanded,tab:s.tab,chatService:s.chatService,holdOpen:s.holdOpen,license:s.license}})`);
+    try{
+      await main.invoke('settings_set',{settings:{theme:'dark',reducedMotion:'reduce'}});
+      await main.evaluate(`import('/assets/runtime-debug.js').then(async({ot,O})=>{ot.setState({expanded:true,tab:'chat',chatService:'gemini',holdOpen:true,license:{...ot.getState().license,pro:true}});await O.webAiEmbed('gemini',{x:10,y:10,width:360,height:240},false)})`);
+      await waitFor(main,`window.__TAURI_INTERNALS__.invoke('web_ai_status').then(s=>s.some(s=>s.service==='gemini'&&s.target==='embedded'&&s.phase==='loaded'&&s.surface?.corner_cut&&s.surface?.center_included))`,'native rounded embedded view');
+      const pages=await pagesReady(p=>p.url.startsWith(webAiUrl+'/gemini'));
+      const content=await attach(pages.find(p=>p.url.startsWith(webAiUrl+'/gemini')));
+      await waitFor(content,`getComputedStyle(document.body).backgroundColor==='rgb(23, 25, 28)'`,'dark embedded page surface');
+      const dark=await content.evaluate(`({theme:document.documentElement.dataset.woodsAiTheme,thumb:getComputedStyle(document.documentElement,'::-webkit-scrollbar-thumb').borderRadius,width:getComputedStyle(document.documentElement,'::-webkit-scrollbar').width,preferred:matchMedia('(prefers-color-scheme:dark)').matches})`);
+      assert.deepEqual(dark,{theme:'dark',thumb:'999px',width:'8px',preferred:true});
+      await content.evaluate(`document.querySelector('input').value='Черновик при смене темы';scrollTo(0,400)`);
+      const draft=await content.evaluate(`({value:document.querySelector('input').value,scroll:scrollY,instance:window.fixtureInstance})`);
+      const screenshot=await content.command('Page.captureScreenshot',{format:'png'});
+      await fs.writeFile(path.join(directory,'embedded-dark.png'),Buffer.from(screenshot.data,'base64'));
+      await main.invoke('settings_set',{settings:{theme:'light'}});
+      await waitFor(content,`getComputedStyle(document.body).backgroundColor==='rgb(246, 246, 247)'`,'live light embedded surface');
+      assert.deepEqual(await content.evaluate(`({value:document.querySelector('input').value,scroll:scrollY,instance:window.fixtureInstance})`),draft);
+      assert.equal(await content.evaluate(`matchMedia('(prefers-color-scheme:light)').matches`),true);
+      const proof=(await main.invoke('web_ai_status')).find(s=>s.service==='gemini').surface;
+      assert(proof.corner_cut&&proof.center_included&&proof.corner_radius>=12,'Native region must remove corners and retain the viewport centre');
+      await main.invoke('settings_set',{settings:{theme:'dark',scale:150}});
+      await waitFor(main,`window.__TAURI_INTERNALS__.invoke('web_ai_status').then(s=>s.some(s=>s.service==='gemini'&&s.surface?.corner_radius>=18&&s.surface?.corner_cut))`,'scaled rounded native view');
+      return {nativeRegion:proof,customScrollbar:true,darkAndLight:true,liveTheme:true,draftScrollAndInstancePreserved:true,scale150:true};
+    }finally{
+      await main.invoke('settings_set',{settings:{theme:settings.theme,scale:settings.scale,reducedMotion:settings.reducedMotion}});
+      await main.evaluate(`import('/assets/runtime-debug.js').then(async({ot,O})=>{ot.setState(${JSON.stringify(before)});await O.webAiHide()})`);
+    }
+  });
   await check('Web AI read contract and invalid service rejection',async()=>{
     assert.equal(await main.invoke('web_ai_popped'),null);
     const invalid=await main.evaluate('window.__TAURI_INTERNALS__.invoke("web_ai_embed",{service:"https://invalid.example",x:0,y:0,width:100,height:100,focus:false,word:0}).then(()=>({ok:true}),error=>({ok:false,error:String(error)}))');
@@ -1255,11 +1326,12 @@ async function quit(client) {
   });
   await check('Web AI window creation failure keeps island context and rejects duplicate clicks',async()=>{
     try {
-      await main.evaluate(`(async()=>{const {ot,O}=await import('/assets/runtime-debug.js');const s=ot.getState();window.__qaWebAiBefore={expanded:s.expanded,palette:s.palette,tab:s.tab,chatService:s.chatService,license:s.license};window.__qaWindow=O.webAiWindow;window.__qaCalls=0;O.webAiWindow=()=>{window.__qaCalls++;return new Promise((resolve,reject)=>window.__qaRejectWindow=reject)};ot.setState({palette:false,expanded:true,tab:'chat',chatService:'gemini',license:{...s.license,pro:true}})})()`);
+      await main.evaluate(`(async()=>{const {ot,O}=await import('/assets/runtime-debug.js');const s=ot.getState();window.__qaWebAiBefore={expanded:s.expanded,palette:s.palette,tab:s.tab,chatService:s.chatService,license:s.license,holdOpen:s.holdOpen};window.__qaWindow=O.webAiWindow;window.__qaCalls=0;O.webAiWindow=()=>{window.__qaCalls++;return new Promise((resolve,reject)=>window.__qaRejectWindow=reject)};ot.setState({palette:false,expanded:true,tab:'chat',chatService:'gemini',license:{...s.license,pro:true}})})()`);
       await waitFor(main,`!!document.querySelector('[data-web-ai-window]')`,'pop-out action');
       await main.evaluate(`document.querySelector('[data-web-ai-window]').click();document.querySelector('[data-web-ai-window]').click()`);
       await pause(200);
       assert.equal(await main.evaluate('window.__qaCalls'),1);
+      assert.equal(await main.evaluate(`import('/assets/runtime-debug.js').then(({ot})=>ot.getState().holdOpen)`),true);
       assert.equal(await main.evaluate(`import('/assets/runtime-debug.js').then(({ot})=>ot.getState().expanded)`),true);
       await main.evaluate(`window.__qaRejectWindow('Fixture AI window creation failed')`);
       await waitFor(main,`document.querySelector('[data-web-ai-window-error]')?.textContent.includes('Fixture AI window creation failed')`,'window creation error');
@@ -1270,17 +1342,80 @@ async function quit(client) {
       await main.evaluate(`(async()=>{const {ot,O}=await import('/assets/runtime-debug.js');O.webAiWindow=window.__qaWindow;ot.setState({...window.__qaWebAiBefore,peek:null});delete window.__qaWindow;delete window.__qaWebAiBefore;delete window.__qaCalls;delete window.__qaRejectWindow;await O.webAiHide()})()`);
     }
   });
+  await check('Web AI moves one page between pill and window with draft scroll session and reduced motion',async()=>{
+    const settings=await main.invoke('settings_get');
+    const state=await main.evaluate(`import('/assets/runtime-debug.js').then(({ot})=>{const s=ot.getState();return {expanded:s.expanded,tab:s.tab,chatService:s.chatService,holdOpen:s.holdOpen,license:s.license}})`);
+    try{
+      await main.invoke('settings_set',{settings:{reducedMotion:'full'}});
+      await listen(main,'webai:transition');
+      await main.evaluate(`(async()=>{const {ot,O}=await import('/assets/runtime-debug.js');const s=ot.getState();ot.setState({expanded:true,tab:'chat',chatService:'gemini',holdOpen:true,license:{...s.license,pro:true}});await O.webAiEmbed('gemini',{x:10,y:10,width:360,height:240},false)})()`);
+      await waitFor(main,`window.__TAURI_INTERNALS__.invoke('web_ai_status').then(s=>s.some(s=>s.service==='gemini'&&s.target==='embedded'&&s.phase==='loaded'))`,'initial embedded Gemini');
+      const pages=await pagesReady(p=>p.url===webAiUrl+'/gemini'),original=pages.find(p=>p.url===webAiUrl+'/gemini');
+      const page=await attach(original);
+      await page.evaluate(`document.querySelector('input').value='Черновик переноса';document.cookie='transfer_fixture=kept; SameSite=Lax';history.replaceState(null,'','#transfer');scrollTo(0,450)`);
+      const read=()=>page.evaluate(`({draft:document.querySelector('input').value,scroll:scrollY,instance:window.fixtureInstance,url:location.href,cookie:document.cookie})`);
+      const before=await read();assert.equal(before.scroll,450);
+      console.log('Web AI transfer stage: pop-out');
+      await main.invoke('web_ai_window',{service:'gemini'});
+      const afterPages=await pagesReady(p=>p.url===webAiUrl+'/gemini#transfer');
+      assert.equal(afterPages.find(p=>p.url===webAiUrl+'/gemini#transfer').id,original.id,'The page must retain its CDP identity');
+      assert.equal(afterPages.filter(p=>p.url.startsWith(webAiUrl+'/gemini')).length,1,'Only one Gemini page may exist');
+      console.log('Web AI transfer stage: read pop-out');
+      assert.deepEqual(await read(),before,'Moving into the window must retain page state');
+      console.log('Web AI transfer stage: return');
+      await main.invoke('web_ai_window_close',{returnToPill:true});
+      await waitForWindowClosed('/web-ai.html');
+      await waitFor(main,`import('/assets/runtime-debug.js').then(({ot})=>{const s=ot.getState();return s.expanded&&s.tab==='chat'&&s.chatService==='gemini'})`,'return to pill');
+      await waitFor(main,`window.__TAURI_INTERNALS__.invoke('web_ai_status').then(s=>s.some(s=>s.service==='gemini'&&s.target==='embedded'))`,'returned native parent');
+      console.log('Web AI transfer stage: read returned page');
+      assert.deepEqual(await read(),before,'Returning must retain page state');
+      const events=await main.evaluate(`window.__woodsEvents['webai:transition']`);
+      for(const [target,start,end] of [['window',0,255],['pill',255,0]]){
+        const frames=events.filter(e=>e.target===target&&e.phase==='frame');assert(frames.length>=3);
+        assert.equal(frames.at(-1).alpha,end);assert(Math.abs(frames[0].alpha-start)<=2);
+        for(let i=1;i<frames.length;i++)assert(target==='window'?frames[i].alpha>=frames[i-1].alpha:frames[i].alpha<=frames[i-1].alpha);
+        assert(frames.at(-1).ms>=200&&frames.at(-1).ms<1500);assert(frames.every(e=>e.passive===true));
+      }
+      await main.invoke('settings_set',{settings:{reducedMotion:'reduce'}});
+      console.log('Web AI transfer stage: reduced-motion reopen');
+      await main.evaluate(`window.__woodsEvents['webai:transition']=[]`);
+      await main.invoke('web_ai_window',{service:'gemini'});
+      assert.deepEqual(await read(),before,'Reopening must retain page state');
+      const shellPages=await pagesReady(p=>p.url.endsWith('/web-ai.html')),shell=await attach(shellPages.find(p=>p.url.endsWith('/web-ai.html')));
+      // Closing destroys this JS context. Verify native closure below rather
+      // than awaiting an IPC Promise whose document may already be gone.
+      await shell.evaluate(`void window.__TAURI_INTERNALS__.invoke('plugin:window|close',{label:'web-ai-window'}).catch(()=>{});true`).catch(()=>{});
+      console.log('Web AI transfer stage: native close');
+      await waitForWindowClosed('/web-ai.html');
+      const reduced=await main.evaluate(`window.__woodsEvents['webai:transition']`);
+      assert.equal(reduced.filter(e=>e.phase==='frame').length,0);
+      assert.equal(reduced.filter(e=>e.phase==='end'&&e.duration===0).length,2);
+      assert.deepEqual(await read(),before,'Closing via the native close request must retain page state');
+      await assertPassiveForeground(main);
+      await page.evaluate(`history.replaceState(null,'',location.pathname)`);
+      return {singlePage:true,draftScrollUrlCookieAndInstancePreserved:true,returnToPill:true,nativeClosePreservesPage:true,reducedMotion:true,hiddenAlphaApiTraces:events,onscreenSmoothnessVerified:false};
+    }finally{
+      await main.invoke('web_ai_window_close');await waitForWindowClosed('/web-ai.html');
+      await main.invoke('settings_set',{settings:{reducedMotion:settings.reducedMotion}});
+      await main.evaluate(`import('/assets/runtime-debug.js').then(async({ot,O})=>{ot.setState(${JSON.stringify(state)});await O.webAiHide()})`);
+    }
+  });
   await check('Web AI pop-out shell loads switches retries and reopens without stealing focus',async()=>{
     try {
       assert.equal(await main.invoke('web_ai_window',{service:'gemini'}),true);
       let pages=await pagesReady(p=>p.url.endsWith('/web-ai.html'));
       let shell=await attach(pages.find(p=>p.url.endsWith('/web-ai.html')));
-      const loaded=service=>waitFor(shell,`document.querySelector('[data-web-ai-shell]')?.dataset.webAiShell===${JSON.stringify(service)}&&document.querySelector('[data-web-ai-status]')?.dataset.webAiStatus==='loaded'`,service+' loaded');
+      const loaded=service=>waitFor(shell,`document.querySelector('[data-web-ai-shell]')?.dataset.webAiShell===${JSON.stringify(service)}&&document.querySelector('[data-web-ai-status]')?.dataset.webAiStatus==='loaded'&&!document.querySelector('.webai-placeholder')`,service+' presented after fade');
       await loaded('gemini');
       assert.equal(await main.invoke('web_ai_popped'),'gemini');
       await assertPassiveForeground(main);
       pages=await pagesReady(p=>p.url===webAiUrl+'/gemini');
       const gemini=await attach(pages.find(p=>p.url===webAiUrl+'/gemini'));
+      assert.equal(await gemini.evaluate(`document.visibilityState`),'visible','The provider must be visible after the shell fade');
+      assert.equal(await gemini.evaluate(`document.documentElement.hasAttribute('data-woods-ai-theme')`),false,'Embedded presentation must be removed in the pop-out');
+      assert.equal((await main.invoke('web_ai_status')).find(s=>s.service==='gemini').surface.corner_cut,false,'Embedded native clipping must be removed in the pop-out');
+      const currentNavigation=(await main.invoke('web_ai_status')).find(s=>s.service==='gemini'&&s.target==='window').navigation;
+      assert.equal(await main.invoke('web_ai_window_reveal',{service:'gemini',navigation:currentNavigation+1}),false,'A stale navigation must not reveal a page');
       await gemini.evaluate(`document.querySelector('input').value='Сохранённый черновик'`);
       await shell.evaluate(`document.querySelector('[data-web-ai-service=deepseek]').click()`);
       await loaded('deepseek');
