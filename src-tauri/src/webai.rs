@@ -72,6 +72,35 @@ struct SurfaceProof { theme:String,corner_radius:i32,width:i32,height:i32,corner
 #[derive(Clone,serde::Serialize)]
 struct ViewStatus { service:String, target:String, phase:String, code:Option<i32>, navigation:u64, #[serde(skip)] instance:u64, #[serde(skip)] revealed_navigation:Option<u64>, #[serde(skip_serializing_if="Option::is_none")] surface:Option<SurfaceProof> }
 pub fn status()->serde_json::Value { serde_json::json!(VIEW_STATUS.lock().unwrap().values().cloned().collect::<Vec<_>>()) }
+// Surface application is asynchronous. Its cached proof may describe an earlier
+// size or parent, so acceptance reads current controller/HWND data on the UI thread.
+pub async fn status_live(app:&AppHandle)->serde_json::Value{
+    use windows::Win32::{Foundation::RECT,Graphics::Gdi::{CreateRectRgn,DeleteObject,GetWindowRgn,PtInRegion},UI::WindowsAndMessaging::{GetClientRect,GetWindowRect,GetParent}};
+    let settings=app.state::<std::sync::Arc<crate::AppState>>().settings.lock().unwrap().clone();
+    let mut states=VIEW_STATUS.lock().unwrap().values().cloned().collect::<Vec<_>>();
+    for state in &mut states{
+        let Some(view)=app.get_webview(&format!("web-ai-{}",state.service))else{continue;};
+        let Ok(parent)=view.window().hwnd().map(|hwnd|hwnd.0 as isize)else{continue;};
+        let factor=view.window().scale_factor().unwrap_or(1.)*if state.target=="embedded"{settings["scale"].as_f64().unwrap_or(100.)/100.}else{1.};
+        let radius=((if state.target=="embedded"{12.}else{19.})*factor).round().max(1.) as i32;
+        let theme=if settings["theme"].as_str()==Some("light"){"light"}else{"dark"}.to_owned();
+        let (sender,receiver)=mpsc::channel();
+        if view.with_webview(move|platform|unsafe{
+            let controller=platform.controller();let mut host=Default::default();
+            if controller.ParentWindow(&mut host).is_err()||host.0 as isize==parent{let _=sender.send(None);return;}
+            let hwnd=windows::Win32::Foundation::HWND(host.0 as _);
+            let mut rect=RECT::default();let mut screen=RECT::default();let mut bounds=Default::default();
+            if GetClientRect(hwnd,&mut rect).is_err()||GetWindowRect(hwnd,&mut screen).is_err()||controller.Bounds(&mut bounds).is_err(){let _=sender.send(None);return;}
+            let region=CreateRectRgn(0,0,0,0);let has_region=GetWindowRgn(hwnd,region).0>0;
+            let proof=SurfaceProof{theme,corner_radius:radius,width:rect.right,height:rect.bottom,hwnd:host.0 as isize,
+                screen:[screen.left,screen.top,screen.right-screen.left,screen.bottom-screen.top],parent_matches:GetParent(hwnd).is_ok_and(|actual|actual.0 as isize==parent),controller_bounds:[bounds.left,bounds.top,bounds.right,bounds.bottom],
+                corner_cut:has_region&&!PtInRegion(region,0,0).as_bool(),bottom_corner_cut:has_region&&!PtInRegion(region,0,rect.bottom-1).as_bool(),center_included:!has_region||PtInRegion(region,rect.right/2,rect.bottom/2).as_bool()};
+            let _=DeleteObject(region);let _=sender.send(Some(proof));
+        }).is_err(){continue;}
+        if let Ok(Ok(Some(proof)))=tauri::async_runtime::spawn_blocking(move||receiver.recv_timeout(std::time::Duration::from_secs(2))).await{state.surface=Some(proof);}
+    }
+    serde_json::json!(states)
+}
 fn publish(app:&AppHandle,label:&str,phase:&str,code:Option<i32>,navigation:Option<u64>){
     publish_for(app,label,phase,code,navigation,None)
 }

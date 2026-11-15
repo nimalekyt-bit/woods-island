@@ -415,7 +415,7 @@ fn web_ai_browser(service:Option<String>)->Result<bool,String>{webai::browser(&s
 async fn web_ai_window(service:Option<String>,app:AppHandle)->Result<bool,String>{tauri::async_runtime::spawn_blocking(move||webai::window(&app,&service.ok_or("AI service is required")?).map(|_|true)).await.map_err(|e|e.to_string())?}
 
 #[tauri::command]
-fn web_ai_status()->Value{webai::status()}
+async fn web_ai_status(app:AppHandle)->Value{webai::status_live(&app).await}
 
 #[tauri::command]
 async fn web_ai_window_attach(service:String,x:f64,y:f64,width:f64,height:f64,app:AppHandle)->Result<bool,String>{tauri::async_runtime::spawn_blocking(move||webai::window_attach(&app,&service,x,y,width,height).map(|_|true)).await.map_err(|e|e.to_string())?}
