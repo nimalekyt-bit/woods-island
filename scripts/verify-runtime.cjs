@@ -370,6 +370,97 @@ async function quit(client) {
     await main.evaluate('(async()=>{const m=await import("/assets/runtime-debug.js");m.ot.setState({expanded:false,tab:"home"});})()');
     return measured;
   });
+  await check('Cross-PC candidate embeds the final built runtime resources', async () => {
+    const manifest = JSON.parse(await fs.readFile(path.join(root, 'dist', 'runtime-manifest.json'), 'utf8'));
+    const files = (manifest.files || manifest).filter(file => !file.path.endsWith('.html'));
+    for (const file of files) {
+      const actual = await main.evaluate(`(async()=>{const r=await fetch(${JSON.stringify('/' + file.path)});if(!r.ok)return {status:r.status};const b=await r.arrayBuffer();return {bytes:b.byteLength,sha256:Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',b))).map(v=>v.toString(16).padStart(2,'0')).join('')};})()`);
+      assert.equal(actual.bytes, file.bytes, `Embedded resource size: ${file.path}`);
+      assert.equal(actual.sha256, file.sha256, `Embedded resource SHA: ${file.path}`);
+    }
+    return { resources: files.length, exactFinalDist: true };
+  });
+  await check('Cross-PC settings retain scroll when saving an unavailable hotkey', async () => {
+    const prior = await main.invoke('settings_get');
+    await main.invoke('open_settings', { section: 'hotkeys' });
+    const pages = await pagesReady(page => page.url.endsWith('/settings.html'));
+    const settings = await attach(pages.find(page => page.url.endsWith('/settings.html')));
+    await waitFor(settings, 'document.querySelector("[data-nav=hotkeys]")?.dataset.now==="true"', 'Hotkey settings');
+    await settings.evaluate('document.querySelector(".scroll-thin.min-w-0.flex-1.overflow-y-auto").scrollTop=180');
+    await pause(120);
+    const before = await settings.evaluate('document.querySelector(".scroll-thin.min-w-0.flex-1.overflow-y-auto").scrollTop');
+    assert(before > 100, 'Hotkey settings must overflow for this regression');
+    try {
+      await settings.invoke('settings_set', { settings: { hotkeyPalette: 'UnavailableKey' } });
+      await pause(300);
+      const after = await settings.evaluate('document.querySelector(".scroll-thin.min-w-0.flex-1.overflow-y-auto").scrollTop');
+      assert.equal(after, before, 'Changing settings must not reset the section scroll');
+      await settings.evaluate('document.querySelector("[data-nav=general]").click()');
+      await pause(100);
+      assert.equal(await settings.evaluate('document.querySelector(".scroll-thin.min-w-0.flex-1.overflow-y-auto").scrollTop'), 0);
+      return { before, after, sectionNavigationResetsScroll: true, passive: true };
+    } finally {
+      await settings.invoke('settings_set', { settings: { hotkeyPalette: prior.hotkeyPalette } });
+      await main.invoke('plugin:window|close', { label: 'settings' });
+      await waitForWindowClosed('/settings.html');
+    }
+  });
+  await check('Cross-PC weather pill accepts text and persists the chosen city', async () => {
+    const prior = await main.invoke('settings_get');
+    await main.invoke('settings_set', { settings: { weatherCity: '', weatherLat: 0, weatherLon: 0, moduleWeather: true } });
+    try {
+      await main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");ot.setState({palette:false,expanded:true,tab:"weather"});})()');
+      await waitFor(main, 'document.activeElement?.placeholder?.startsWith("Город:")', 'Weather city input focus');
+      await main.command('Input.insertText', { text: 'Брянск' });
+      await main.evaluate('Array.from(document.querySelectorAll("button")).find(b=>b.textContent==="Найти").click()');
+      await waitFor(main, 'Array.from(document.querySelectorAll("button")).some(b=>b.querySelector("span")?.textContent==="Брянск")', 'City search result');
+      await main.evaluate('(async()=>{const {O}=await import("/assets/runtime-debug.js");window.__crossPcSettingsSet=O.settingsSet;O.settingsSet=()=>Promise.reject("Fixture weather save denied");})()');
+      try {
+        await main.evaluate('Array.from(document.querySelectorAll("button")).find(b=>b.querySelector("span")?.textContent==="Брянск").click()');
+        await waitFor(main, 'Array.from(document.querySelectorAll("[role=alert]")).some(e=>e.textContent.includes("Fixture weather save denied"))', 'Visible city save error');
+        assert.equal((await main.invoke('settings_get')).weatherCity, '', 'Failed save must keep the prior city');
+      } finally {
+        await main.evaluate('(async()=>{const {O}=await import("/assets/runtime-debug.js");O.settingsSet=window.__crossPcSettingsSet;delete window.__crossPcSettingsSet;})()');
+      }
+      await main.evaluate('Array.from(document.querySelectorAll("button")).find(b=>b.querySelector("span")?.textContent==="Брянск").click()');
+      await waitFor(main, '(async()=>{const s=await window.__TAURI_INTERNALS__.invoke("settings_get");return s.weatherCity==="Брянск"&&s.weatherLat===53.2424;})()', 'Saved city');
+      const saved = JSON.parse(await fs.readFile(path.join(dataDir, 'settings.json'), 'utf8'));
+      assert.equal(saved.weatherCity, 'Брянск'); assert.equal(saved.weatherLon, 34.3668);
+      await waitFor(main, '!!document.querySelector("[data-wx-now]")', 'Forecast after city selection');
+      return { city: saved.weatherCity, persisted: true, enteredThroughPill: true, saveFailureVisibleAndRetryWorks: true, passive: true };
+    } finally {
+      await main.invoke('settings_set', { settings: { weatherCity: prior.weatherCity, weatherLat: prior.weatherLat, weatherLon: prior.weatherLon, moduleWeather: prior.moduleWeather } });
+      await main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");ot.getState().close();})()');
+    }
+  });
+  await check('Cross-PC palette focuses on every opening and accepts text without a click', async () => {
+    const input = 'Array.from(document.querySelectorAll("input")).find(e=>e.placeholder.startsWith("Программа,"))';
+    const samples = [];
+    for (let cycle = 0; cycle < 8; cycle++) {
+      await main.invoke('plugin:event|emit', { event: 'island:palette', payload: null });
+      await waitFor(main, `document.activeElement===(${input})`, 'Palette input focus');
+      await main.command('Input.insertText', { text: cycle % 2 ? 'поиск' : '12*34' });
+      assert.equal(await main.evaluate(`(${input}).value`), cycle % 2 ? 'поиск' : '12*34');
+      if (cycle === 0) samples.push(...await main.evaluate('new Promise(resolve=>{const frames=[],start=performance.now();const tick=()=>{const r=document.querySelector("[data-island]").getBoundingClientRect();frames.push({ms:Math.round(performance.now()-start),w:r.width,h:r.height});if(performance.now()-start<500)requestAnimationFrame(tick);else resolve(frames);};requestAnimationFrame(tick);})'));
+      await main.command('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+      await main.command('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+      await waitFor(main, `!(${input})`, 'Palette closed');
+    }
+    assert(samples.length > 2 && samples.every(s => Number.isFinite(s.w) && Number.isFinite(s.h)));
+    const foreground = await assertPassiveForeground(main);
+    return { opens: 8, textWithoutClicks: true, samples, foreground, nativeKeyboardActivation: 'Not exercised in passive QA' };
+  });
+  await check('Cross-PC browser cover arrives through metadata without a separate cover event', async () => {
+    const cover = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=';
+    const payload = { key: 'cross-pc-browser', app: 'browser-fixture', title: 'Browser fixture', artist: 'Fixture', playing: true, positionMs: 0, durationMs: 300000, cover };
+    const publish = () => main.invoke('plugin:event|emit', { event: 'media:update', payload });
+    const timer = setInterval(() => { void publish().catch(() => {}); }, 100);
+    try {
+      await publish();
+      await waitFor(main, `(async()=>{const {ot}=await import("/assets/runtime-debug.js");const s=ot.getState();return s.media?.key==="cross-pc-browser"&&s.cover===${JSON.stringify(cover)};})()`, 'Embedded browser thumbnail');
+      return { metadataOnly: true, coverApplied: true, browserFixture: true };
+    } finally { clearInterval(timer); }
+  });
   await check('Weather search works offline for Брянск', async () => {
     const cities = await main.invoke('weather_search', { query: 'брянск' });
     assert(cities.some(c => c.name === 'Брянск' && c.lat === 53.2424 && c.lon === 34.3668));

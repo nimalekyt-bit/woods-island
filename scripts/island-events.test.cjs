@@ -108,6 +108,23 @@ test('Cover arriving before metadata is applied; only the latest color request m
   f.colors[0].resolve('#111111'); await flush(); assert.equal(f.state.accent, '#222222');
   f.controller.cover({ key: 'second', cover: null }); assert.equal(f.state.cover, null); assert.equal(f.state.accent, null);
 });
+test('Browser metadata supplies the cover when the separate cover event is absent or stale', () => {
+  const f = mediaFixture();
+  f.controller.cover({ key: 'old-browser-track', cover: 'stale' });
+  f.controller.update({ ...track('browser'), cover: 'browser-image' });
+  assert.equal(f.state.cover, 'browser-image'); assert.equal(f.tasks.size, 0);
+  f.advance(5000); assert.equal(f.state.cover, 'browser-image');
+  f.controller.update({ ...track('browser'), cover: 'updated-browser-image' });
+  assert.equal(f.state.cover, 'updated-browser-image');
+  f.controller.update({ ...track('browser'), cover: 'updated-browser-image' });
+  assert.equal(f.colors.length, 2, 'Repeated metadata must not restart color extraction');
+});
+test('A late browser thumbnail replaces the missing-cover fallback for the same track', () => {
+  const f = mediaFixture(); f.controller.update(track('browser')); f.advance(COVER_WAIT_MS);
+  assert.equal(f.state.cover, null);
+  f.controller.update({ ...track('browser'), cover: 'late-image' });
+  assert.equal(f.state.cover, 'late-image'); assert.equal(f.tasks.size, 0);
+});
 test('Missing-cover fallback runs at 4000 ms, is replaced on track change and cancelled by a cover', () => {
   const f = mediaFixture(); f.controller.update(track('first')); f.controller.cover({ key: 'first', cover: 'image' });
   f.controller.update(track('second')); f.advance(3999); assert.equal(f.state.cover, 'image');
