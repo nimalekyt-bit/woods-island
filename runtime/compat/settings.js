@@ -2165,9 +2165,9 @@ function zt() {
       z && xt().some((e) => e.id === z.id) && b(z.id);
     }, [z]),
     (0, F.useEffect)(() => {
-      if (e) woodsLastSettingsPage = y;
+      woodsLastSettingsPage = y;
       ie?.scrollTo({ top: 0 });
-    }, [y, ie, e]));
+    }, [y, ie]));
   let B = (e) => {
       r.sttKeySet(e)
         .then((e) => {

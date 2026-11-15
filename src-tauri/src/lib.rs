@@ -592,6 +592,8 @@ async fn rates()->Result<Value,String>{weather::rates().await}
 fn take_focus(app: AppHandle) {
     if win::WindowManager::passive_qa() { return; }
     if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
         if let Ok(hwnd) = window.hwnd() { win::WindowManager::keyboard_focus(HWND(hwnd.0 as _),true); }
         if !win::WindowManager::passive_qa() { let _ = window.set_focus(); }
     }

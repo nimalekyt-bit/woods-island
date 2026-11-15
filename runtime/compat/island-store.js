@@ -1,4 +1,5 @@
 import { creatures } from '../characters/drawings/creatures';
+import { focusInputAfterActivation } from '../island/input-focus';
 import { things } from '../characters/drawings/things';
 import { genericDrawings } from '../characters/drawings/generic';
 import { CharacterSprite } from '../characters/CharacterSprite';
@@ -377,7 +378,7 @@ var useIslandStore = ce((e, t) => ({
     sendToText: (t, n) =>
       e((e) => ({ textSeed: { text: t, n: (e.textSeed?.n ?? 0) + 1, then: n }, tab: `text` })),
     openPalette: () => {
-      (clearTimeout(N), e({ palette: !0, expanded: !1, peek: null, queue: [] }), r.takeFocus());
+      (clearTimeout(N), e({ palette: !0, expanded: !1, peek: null, queue: [] }));
     },
     closePalette: () => {
       t().palette && (e({ palette: !1 }), r.releaseFocus());
@@ -1260,12 +1261,14 @@ function qn(e, t) {
           70
     : !1;
 }
-function Jn({ onPick: e, autoFocus: t = !1, onFocusInput: i }) {
+function Jn({ onPick: e, autoFocus: t = !1 }) {
   let [a, o] = (0, ReactRuntime.useState)(``),
     [s, c] = (0, ReactRuntime.useState)(null),
     [l, u] = (0, ReactRuntime.useState)(null),
     [d, f] = (0, ReactRuntime.useState)(!1),
     [p, m] = (0, ReactRuntime.useState)(``),
+    inputRef = (0, ReactRuntime.useRef)(null),
+    cancelFocus = (0, ReactRuntime.useRef)(null),
     _ = (0, ReactRuntime.useRef)(0),
     v = () => {
       let e = a.trim();
@@ -1284,6 +1287,14 @@ function Jn({ onPick: e, autoFocus: t = !1, onFocusInput: i }) {
             t === _.current && f(!1);
           }));
     };
+  (0, ReactRuntime.useEffect)(() => {
+    if (t) cancelFocus.current = focusInputAfterActivation(() => inputRef.current, () => r.takeFocus());
+    return () => cancelFocus.current?.();
+  }, [t]);
+  const activateInput = () => {
+    cancelFocus.current?.();
+    cancelFocus.current = focusInputAfterActivation(() => inputRef.current, () => r.takeFocus());
+  };
   return (0, jsxRuntime.jsxs)(`div`, {
     className: `flex min-h-0 flex-col gap-1.5`,
     children: [
@@ -1292,11 +1303,10 @@ function Jn({ onPick: e, autoFocus: t = !1, onFocusInput: i }) {
         children: [
           (0, jsxRuntime.jsx)(Ge, { size: 14, className: `shrink-0 text-white/40` }),
           (0, jsxRuntime.jsx)(`input`, {
-            autoFocus: t,
+            ref: inputRef,
             value: a,
             onChange: (e) => o(e.target.value),
-            onMouseDown: i,
-            onFocus: i,
+            onMouseDown: t ? activateInput : void 0,
             onKeyDown: (t) => {
               t.key === `Enter` && (s?.[0] && p === a.trim() ? e(s[0]) : v());
             },

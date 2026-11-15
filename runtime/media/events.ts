@@ -1,6 +1,6 @@
 import { createMediaActivityTracker, scheduleTimeout, type Schedule } from './activity';
 
-export interface MediaTrack { key: string; playing: boolean }
+export interface MediaTrack { key: string; playing: boolean; cover?: string | null }
 export interface CoverEvent { key: string; cover: string | null }
 interface MediaPorts<M extends MediaTrack> {
   getMedia: () => M | null;
@@ -54,7 +54,8 @@ export function createMediaEventController<M extends MediaTrack>(ports: MediaPor
         ports.setCover(null); ports.setAccent(null); ports.resetLevel();
       } else if (previous?.key !== media.key) {
         stopFallback(); ++revision;
-        const nextCover = pendingCover?.key === media.key ? pendingCover : null;
+        const nextCover = media.cover ? { key: media.key, cover: media.cover } :
+          pendingCover?.key === media.key ? pendingCover : null;
         pendingCover = null;
         if (nextCover) applyCover(nextCover);
         else {
@@ -66,6 +67,8 @@ export function createMediaEventController<M extends MediaTrack>(ports: MediaPor
             }
           }, COVER_WAIT_MS);
         }
+      } else if (media.cover && (appliedKey !== media.key || previous.cover !== media.cover)) {
+        applyCover({ key: media.key, cover: media.cover });
       }
       activity.update(media);
     },

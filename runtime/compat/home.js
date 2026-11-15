@@ -561,10 +561,9 @@ var ff = 0,
           .catch((t) => e({ loading: !1, error: String(t) })));
     },
     setPlace: (t) => {
-      let n = useIslandStore.getState().settings;
-      n &&
-        (e({ loading: !0, error: null, data: null }),
-        i.settingsSet({ ...n, weatherCity: t.name, weatherLat: t.lat, weatherLon: t.lon, weatherTimezone: `` }));
+      e({ loading: !0, error: null, data: null });
+      return i.settingsSet({ weatherCity: t.name, weatherLat: t.lat, weatherLon: t.lon, weatherTimezone: `` })
+        .catch((error) => { e({ loading: !1, error: String(error) }); throw error; });
     },
     received: (t) => {
       if (!validWeatherForecast(t))

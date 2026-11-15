@@ -1,4 +1,5 @@
 import { calculateIslandGeometry, agentQuestionHeight as dj } from '../island/geometry';
+import { focusInputAfterActivation } from '../island/input-focus';
 import { LIQUID_FOLDED, updateSizeHistory, selectSizeTransition } from '../island/transitions';
 import { k as subscribeEvent } from './shared.js';
 import { createMediaEventController } from '../media/events';
@@ -7756,6 +7757,7 @@ function wA({ w: e }) {
   });
 }
 function TA({ onDone: e, first: t = !1 }) {
+  const [saveError, setSaveError] = ReactRuntime.useState(``);
   return (
     (0, ReactRuntime.useEffect)(
       () => (useIslandStore.getState().setHoldOpen(!0), () => useIslandStore.getState().setHoldOpen(!1)),
@@ -7785,9 +7787,13 @@ function TA({ onDone: e, first: t = !1 }) {
         (0, jsxRuntime.jsx)(Yn, {
           autoFocus: !0,
           onPick: (t) => {
-            (dn.getState().setPlace(t), e?.());
+            setSaveError(``);
+            void dn.getState().setPlace(t).then(() => e?.()).catch((error) => setSaveError(String(error)));
           },
-          onFocusInput: () => void u.takeFocus(),
+        }),
+        saveError && (0, jsxRuntime.jsx)(`div`, {
+          role: `alert`, className: `text-[12px] text-danger`,
+          children: o(`Не удалось сохранить город: ${saveError}`, `Could not save the city: ${saveError}`),
         }),
         t &&
           (0, jsxRuntime.jsx)(`div`, {
@@ -8651,8 +8657,10 @@ function ij({ onResize: e }) {
           .then(p)
           .catch(() => {}),
         u.aiKeyStatus().then(_),
-        x.current?.focus(),
-        () => b.current?.()
+        (() => {
+          const cancel = focusInputAfterActivation(() => x.current, () => u.takeFocus());
+          return () => { cancel(); b.current?.(); };
+        })()
       ),
       [],
     ));
@@ -9212,7 +9220,7 @@ function ij({ onResize: e }) {
     }, [n, s, l, m, f, g, ae, S?.aiModel, S?.searchEngine, S?.searchUrl]);
   return (
     (0, ReactRuntime.useEffect)(() => a(0), [n]),
-    (0, ReactRuntime.useEffect)(() => e(oe.length, v !== null), [oe.length, v, e]),
+    (0, ReactRuntime.useLayoutEffect)(() => e(oe.length, v !== null), [oe.length, v, e]),
     (0, jsxRuntime.jsxs)(`div`, {
       className: `flex h-full flex-col`,
       children: [
