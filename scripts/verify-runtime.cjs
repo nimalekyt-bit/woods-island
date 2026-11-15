@@ -116,13 +116,15 @@ public class WoodsQaHosts {
   assert.equal(result.status,0,result.stderr);
   return JSON.parse(result.stdout.trim());
 }
-async function sampleWebAiHost(client,service,target) {
+async function sampleWebAiHostOnce(client,service,target) {
   const selector=target==='embedded'?`[data-web-ai-slot="${service}"]`:'[data-web-ai-content]';
   const dom=await client.evaluate(`(()=>{const slot=document.querySelector(${JSON.stringify(selector)}),r=slot?.getBoundingClientRect(),style=slot&&getComputedStyle(slot);return r?{rect:[r.x,r.y,r.width,r.height],viewport:[innerWidth,innerHeight],border:style.borderTopColor,background:style.backgroundColor}:null})()`);
   assert(dom&&dom.rect[2]>0&&dom.rect[3]>0,'Real provider slot is missing');
   const windowPosition=await client.invoke('plugin:window|outer_position',{label:target==='embedded'?'main':'web-ai-window'});
-  const surface=(await client.invoke('web_ai_status')).find(row=>row.service===service&&row.target===target)?.surface;
   const observedHosts=readWebAiHosts();
+  // Enumerating HWNDs starts a separate process. Read the live controller after
+  // that enumeration so its result cannot predate a delayed layout/resize.
+  const surface=(await client.invoke('web_ai_status')).find(row=>row.service===service&&row.target===target)?.surface;
   // Passive QA deliberately keeps the shell root hidden. Its child HWND still
   // has authoritative physical coordinates and must carry its own visible bit.
   const hosts=observedHosts.filter(h=>h.rootScreen[0]===windowPosition.x&&h.rootScreen[1]===windowPosition.y&&h.parent===h.root&&(!surface?.hwnd||h.hwnd===surface.hwnd));
@@ -135,6 +137,11 @@ async function sampleWebAiHost(client,service,target) {
   const controllerMatches=!surface?.controller_bounds||(surface.parent_matches&&surface.controller_bounds[0]===0&&surface.controller_bounds[1]===0&&surface.controller_bounds[2]===surface.width&&surface.controller_bounds[3]===surface.height);
   const controllerFitsHost=!surface?.controller_bounds||!!match&&surface.controller_bounds[2]===match.host.screen[2]&&surface.controller_bounds[3]===match.host.screen[3];
   return {service,target,match:!!match&&controllerMatches&&controllerFitsHost,candidates,surface,...(!match?{windowPosition,observedHosts}:{})};
+}
+async function sampleWebAiHost(client,service,target){
+  const deadline=Date.now()+4000;let result,attempts=0;
+  do{result=await sampleWebAiHostOnce(client,service,target);attempts++;if(result.match)break;await pause(100);}while(Date.now()<deadline);
+  return {...result,attempts};
 }
 
 // Runs in the real WebView2 page. Leaf bounds include stroke and all four
