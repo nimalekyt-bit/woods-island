@@ -13,6 +13,11 @@
 
 [**Скачать установщик**](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.2.0) · [**Сообщить об ошибке**](https://github.com/nimalekyt-bit/woods-island/issues/new/choose) · [**Woods**](https://t.me/woodskilla)
 
+[**Сайт**](https://island.woodslab.top/) · [**Портфолио автора**](https://me.woodslab.top/) · [**Woods Lab**](https://woodslab.top/) · [**support@woodslab.top**](mailto:support@woodslab.top)
+
+Telegram — основной канал обсуждения проектов; почта — для коротких обращений без больших вложений.
+
+
 </div>
 
 <details open>
