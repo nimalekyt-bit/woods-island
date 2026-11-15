@@ -1,6 +1,6 @@
 {
   "name": "woods-island",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Dynamic Island HUD for Windows 10 & 11 (Woods Corp)",
   "private": true,
   "packageManager": "pnpm@10.33.0",
@@ -46,6 +46,7 @@
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
+    "playwright-core": "1.62.1",
     "prettier": "3.6.2",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.2",

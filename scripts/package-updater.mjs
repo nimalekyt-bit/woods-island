@@ -31,7 +31,7 @@ if (config.plugins?.updater?.requireSignedVersion !== true) throw Error('Signed 
 if (config.plugins?.updater?.windows?.installMode !== 'quiet')
   throw Error('Quiet update installation is required to avoid a hidden language selector');
 const update = {
-  version, notes: 'Обновления из приложения, восстановление профиля, оптимизация и диагностика. / In-app updates, profile recovery, performance and diagnostics.',
+  version, notes: 'Чаты Gemini и DeepSeek: перенос между пилюлей и окном с сохранением черновика и прокрутки, тема и скругления встроенного чата, исправления отображения и навигации. / Gemini and DeepSeek chats: move between the pill and a window while keeping drafts and scroll position, embedded chat theme and rounded corners, display and navigation fixes.',
   pub_date: new Date().toISOString(),
   platforms: { 'windows-x86_64': {
     signature, url: `https://github.com/nimalekyt-bit/woods-island/releases/download/v${version}/${name}`,
