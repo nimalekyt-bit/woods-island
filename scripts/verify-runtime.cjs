@@ -31,6 +31,9 @@ let connections = [];
 let providerServer;
 let obsServer;
 let weatherServer;
+let webAiServer;
+let failWebAi = false;
+let delayWebAi = 0;
 
 async function assertQaMusicBridge() {
   for(let attempt=0;attempt<30;attempt++){
@@ -241,12 +244,20 @@ async function quit(client) {
   });
   await new Promise(resolve=>weatherServer.listen(0,'127.0.0.1',resolve));
   const weatherUrl=`http://127.0.0.1:${weatherServer.address().port}/forecast`;
+  webAiServer=http.createServer((req,res)=>{
+    if(failWebAi){req.socket.destroy();return;}
+    res.setHeader('Content-Type','text/html; charset=utf-8');
+    const html=`<!doctype html><html><head><title>Isolated Web AI</title></head><body style="background:#fff;color:#111"><h1 data-provider="${req.url.slice(1)}">${req.url.slice(1)}</h1><input aria-label="Draft" /></body></html>`;
+    if(delayWebAi)setTimeout(()=>res.end(html),delayWebAi);else res.end(html);
+  });
+  await new Promise(resolve=>webAiServer.listen(0,'127.0.0.1',resolve));
+  const webAiUrl=`http://127.0.0.1:${webAiServer.address().port}`;
   await fs.writeFile(path.join(dataDir,'weather.json'),JSON.stringify({lat:53.2424,lon:34.3668,fetchedAt:Date.now(),now:{temp:2,code:'cloudy'},hours:[{time:weatherStart*1000}]}));
   const agentHome=path.join(directory,'agent-home');
   const agentConfigs=[['.claude/settings.json',JSON.stringify({permissions:{allow:['Read']},hooks:{Stop:[{hooks:[{type:'command',command:'fixture-notify.exe'}]}]}})],['.codex/config.toml','# untouched fixture\nnotify = ["fixture-notify.exe"]\nmodel = "fixture"\n'],['.config/opencode/opencode.json','{}']];
   for(const [name,content]of agentConfigs){const file=path.join(agentHome,name);await fs.mkdir(path.dirname(file),{recursive:true});await fs.writeFile(file,content);}
   async function launch(){
-    proc = spawn(exe, [], { cwd: directory, windowsHide: true, stdio: ['ignore','pipe','pipe'], env: { ...process.env, TEMP:scratchDir, TMP:scratchDir, APPDATA: path.join(directory, 'appdata'), WOODS_ISLAND_DATA_DIR: dataDir, WOODS_ISLAND_AGENT_HOME:agentHome, WOODS_ISLAND_STEAM_PATH:path.join(directory,'steam'), WOODS_ISLAND_MUSIC_PORT:String(musicPort), WOODS_ISLAND_WEATHER_URL:weatherUrl, WOODS_ISLAND_LYRICS_URL:weatherUrl.replace('/forecast','/lyrics'), WOODS_ISLAND_PASSIVE_QA:'1', WEBVIEW2_USER_DATA_FOLDER:path.join(directory,'webview'), WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}` } });
+    proc = spawn(exe, [], { cwd: directory, windowsHide: true, stdio: ['ignore','pipe','pipe'], env: { ...process.env, TEMP:scratchDir, TMP:scratchDir, APPDATA: path.join(directory, 'appdata'), WOODS_ISLAND_DATA_DIR: dataDir, WOODS_ISLAND_AGENT_HOME:agentHome, WOODS_ISLAND_STEAM_PATH:path.join(directory,'steam'), WOODS_ISLAND_MUSIC_PORT:String(musicPort), WOODS_ISLAND_WEATHER_URL:weatherUrl, WOODS_ISLAND_LYRICS_URL:weatherUrl.replace('/forecast','/lyrics'), WOODS_ISLAND_WEBAI_TEST_URL:webAiUrl, WOODS_ISLAND_PASSIVE_QA:'1', WEBVIEW2_USER_DATA_FOLDER:path.join(directory,'webview'), WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}` } });
     proc.stdout.on('data', data => process.stdout.write(data));
     proc.stderr.on('data', data => process.stderr.write(data));
     proc.on('exit', (code, signal) => console.log(`Native process exited: code=${code}, signal=${signal}`));
@@ -1242,6 +1253,102 @@ async function quit(client) {
     const invalid=await main.evaluate('window.__TAURI_INTERNALS__.invoke("web_ai_embed",{service:"https://invalid.example",x:0,y:0,width:100,height:100,focus:false,word:0}).then(()=>({ok:true}),error=>({ok:false,error:String(error)}))');
     assert.equal(invalid.ok,false);assert.match(invalid.error,/Unknown AI website/);
   });
+  await check('Web AI window creation failure keeps island context and rejects duplicate clicks',async()=>{
+    try {
+      await main.evaluate(`(async()=>{const {ot,O}=await import('/assets/runtime-debug.js');const s=ot.getState();window.__qaWebAiBefore={expanded:s.expanded,palette:s.palette,tab:s.tab,chatService:s.chatService,license:s.license};window.__qaWindow=O.webAiWindow;window.__qaCalls=0;O.webAiWindow=()=>{window.__qaCalls++;return new Promise((resolve,reject)=>window.__qaRejectWindow=reject)};ot.setState({palette:false,expanded:true,tab:'chat',chatService:'gemini',license:{...s.license,pro:true}})})()`);
+      await waitFor(main,`!!document.querySelector('[data-web-ai-window]')`,'pop-out action');
+      await main.evaluate(`document.querySelector('[data-web-ai-window]').click();document.querySelector('[data-web-ai-window]').click()`);
+      await pause(200);
+      assert.equal(await main.evaluate('window.__qaCalls'),1);
+      assert.equal(await main.evaluate(`import('/assets/runtime-debug.js').then(({ot})=>ot.getState().expanded)`),true);
+      await main.evaluate(`window.__qaRejectWindow('Fixture AI window creation failed')`);
+      await waitFor(main,`document.querySelector('[data-web-ai-window-error]')?.textContent.includes('Fixture AI window creation failed')`,'window creation error');
+      assert.equal(await main.evaluate(`import('/assets/runtime-debug.js').then(({ot})=>ot.getState().chatService)`),'gemini');
+      assert.equal(await main.evaluate(`!!document.querySelector('[data-web-ai-window]')&&!document.querySelector('[data-web-ai-window]').disabled`),true);
+      return {pendingKeepsIsland:true,oneAttempt:true,failureVisible:true,servicePreserved:true};
+    } finally {
+      await main.evaluate(`(async()=>{const {ot,O}=await import('/assets/runtime-debug.js');O.webAiWindow=window.__qaWindow;ot.setState({...window.__qaWebAiBefore,peek:null});delete window.__qaWindow;delete window.__qaWebAiBefore;delete window.__qaCalls;delete window.__qaRejectWindow;await O.webAiHide()})()`);
+    }
+  });
+  await check('Web AI pop-out shell loads switches retries and reopens without stealing focus',async()=>{
+    try {
+      assert.equal(await main.invoke('web_ai_window',{service:'gemini'}),true);
+      let pages=await pagesReady(p=>p.url.endsWith('/web-ai.html'));
+      let shell=await attach(pages.find(p=>p.url.endsWith('/web-ai.html')));
+      const loaded=service=>waitFor(shell,`document.querySelector('[data-web-ai-shell]')?.dataset.webAiShell===${JSON.stringify(service)}&&document.querySelector('[data-web-ai-status]')?.dataset.webAiStatus==='loaded'`,service+' loaded');
+      await loaded('gemini');
+      assert.equal(await main.invoke('web_ai_popped'),'gemini');
+      await assertPassiveForeground(main);
+      pages=await pagesReady(p=>p.url===webAiUrl+'/gemini');
+      const gemini=await attach(pages.find(p=>p.url===webAiUrl+'/gemini'));
+      await gemini.evaluate(`document.querySelector('input').value='Сохранённый черновик'`);
+      await shell.evaluate(`document.querySelector('[data-web-ai-service=deepseek]').click()`);
+      await loaded('deepseek');
+      await shell.evaluate(`document.querySelector('[data-web-ai-service=gemini]').click()`);
+      await loaded('gemini');
+      assert.equal(await gemini.evaluate(`document.querySelector('input').value`),'Сохранённый черновик');
+      failWebAi=true;
+      await shell.evaluate(`document.querySelector('[data-web-ai-retry]').click()`);
+      await waitFor(shell,`document.querySelector('[data-web-ai-status]')?.dataset.webAiStatus==='error'`,'Web AI error feedback');
+      const diagnostic=await main.invoke('diagnostics_summary');
+      assert(diagnostic.webAi.some(s=>s.service==='gemini'&&s.target==='window'&&s.phase==='error'&&Number.isInteger(s.code)));
+      assert(!JSON.stringify(diagnostic.webAi).includes(webAiUrl),'Support statuses must not contain provider URLs');
+      assert.match(await shell.evaluate(`document.querySelector('.notice').textContent`),/загрузить|недоступен/);
+      assert.equal(await shell.evaluate(`!!document.querySelector('[data-web-ai-browser]')`),true);
+      const screenshot=await shell.command('Page.captureScreenshot',{format:'png'});
+      await fs.writeFile(path.join(directory,'web-ai-error-960.png'),Buffer.from(screenshot.data,'base64'));
+      await shell.invoke('plugin:window|set_size',{label:'web-ai-window',value:{Logical:{width:560,height:420}}});
+      await pause(250);
+      assert(await shell.evaluate(`document.documentElement.scrollWidth<=innerWidth&&Array.from(document.querySelectorAll('header button')).every(b=>{const r=b.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth})`),'Compact Web AI toolbar must fit the window');
+      const compact=await shell.command('Page.captureScreenshot',{format:'png'});
+      await fs.writeFile(path.join(directory,'web-ai-error-560.png'),Buffer.from(compact.data,'base64'));
+      await shell.invoke('plugin:window|set_size',{label:'web-ai-window',value:{Logical:{width:960,height:760}}});
+      failWebAi=false;
+      await shell.evaluate(`document.querySelector('[data-web-ai-retry]').click()`);
+      await loaded('gemini');
+      await main.invoke('web_ai_window_close');
+      await waitForWindowClosed('/web-ai.html');
+      await waitFor(main,`window.__TAURI_INTERNALS__.invoke('web_ai_popped').then(s=>s===null)`,'pop-out close');
+      await main.invoke('web_ai_window',{service:'deepseek'});
+      pages=await pagesReady(p=>p.url.endsWith('/web-ai.html'));
+      shell=await attach(pages.find(p=>p.url.endsWith('/web-ai.html')));
+      await loaded('deepseek');
+      await assertPassiveForeground(main);
+      return {services:['gemini','deepseek'],localFixture:true,draftPreserved:true,errorRetry:true,reopen:true,foregroundStolen:false};
+    } catch(error) {
+      console.log('Web AI pop-out primary failure:',error.message);
+      console.log('Web AI native state:',JSON.stringify(await main.invoke('web_ai_status')));
+      throw error;
+    } finally {failWebAi=false;await main.invoke('web_ai_window_close');await waitForWindowClosed('/web-ai.html');}
+  });
+  await check('Web AI embedded navigation reports error and retry and stays hidden after collapse',async()=>{
+    try {
+      await main.evaluate(`import('/assets/runtime-debug.js').then(({O})=>O.webAiEmbed('gemini',{x:10,y:10,width:360,height:240},false))`);
+      const phase=(phase,stage='')=>waitFor(main,`window.__TAURI_INTERNALS__.invoke('web_ai_status').then(states=>states.some(s=>s.service==='gemini'&&s.target==='embedded'&&s.phase===${JSON.stringify(phase)}))`,'embedded '+phase+' '+stage);
+      await phase('loaded','initial');
+      failWebAi=true;await main.invoke('web_ai_reload',{service:'gemini',target:'embedded'});await phase('error');
+      failWebAi=false;await main.invoke('web_ai_reload',{service:'gemini',target:'embedded'});await phase('loaded','retry');
+      delayWebAi=400;
+      await main.invoke('web_ai_reload',{service:'gemini',target:'embedded'});
+      await main.evaluate(`import('/assets/runtime-debug.js').then(({O})=>O.webAiHide())`);
+      await pause(800);
+      const pages=await pagesReady(p=>p.url===webAiUrl+'/gemini');
+      const embedded=await attach(pages.find(p=>p.url===webAiUrl+'/gemini'));
+      await waitFor(embedded,`document.visibilityState==='hidden'`,'AI view stays hidden during suspended navigation');
+      await main.evaluate(`import('/assets/runtime-debug.js').then(({O})=>O.webAiEmbed('gemini',{x:10,y:10,width:360,height:240},false))`);
+      await phase('loaded','after resume');
+      await assertPassiveForeground(main);
+      const before=await main.invoke('settings_get');
+      try {
+        const warnings=await main.invoke('settings_set',{settings:{scale:150}});
+        assert(!warnings.some(w=>w.includes('Main window unavailable')));
+        assert.equal(await main.invoke('set_island_hidden',{hidden:true}),true);
+        assert.equal(await main.invoke('set_island_hidden',{hidden:false}),true);
+      } finally {await main.invoke('settings_set',{settings:{scale:before.scale}});}
+      return {localFixture:true,errorRetry:true,hiddenWhileLoading:true,resumeCompletesNavigation:true,mainWindowWorksAfterChild:true};
+    } catch(error) {console.log('Web AI embedded primary failure:',error.message,JSON.stringify(await main.invoke('web_ai_status')));throw error;}
+    finally {failWebAi=false;delayWebAi=0;await main.evaluate(`import('/assets/runtime-debug.js').then(({O})=>O.webAiHide())`);}
+  });
   await check('Claude single and multiple choices reach the real answer file',async()=>{
     const id='native-choice-fixture';
     const questions=[{question:'Какой режим?',header:'Режим',multiSelect:false,options:[{label:'Быстро'},{label:'Точно'}]},{question:'Что включить?',header:'Модули',multiSelect:true,options:[{label:'Музыка, текст'},{label:'Буфер'},{label:'Заметки'}]}];
@@ -1547,5 +1654,6 @@ async function quit(client) {
   if(proc && proc.exitCode===null) proc.kill();
   if(providerServer)providerServer.close();
   if(weatherServer)weatherServer.close();
+  if(webAiServer)webAiServer.close();
   if(obsServer){for(const client of obsServer.clients)client.terminate();obsServer.close();}
 });
