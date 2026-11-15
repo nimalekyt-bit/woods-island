@@ -1293,7 +1293,7 @@ async function quit(client) {
       const diagnostic=await main.invoke('diagnostics_summary');
       assert(diagnostic.webAi.some(s=>s.service==='gemini'&&s.target==='window'&&s.phase==='error'&&Number.isInteger(s.code)));
       assert(!JSON.stringify(diagnostic.webAi).includes(webAiUrl),'Support statuses must not contain provider URLs');
-      assert.match(await shell.evaluate(`document.querySelector('.notice').textContent`),/загрузить|недоступен/);
+      assert.match(await shell.evaluate(`document.querySelector('.webai-state-card').textContent`),/загрузить|недоступен/);
       assert.equal(await shell.evaluate(`!!document.querySelector('[data-web-ai-browser]')`),true);
       const screenshot=await shell.command('Page.captureScreenshot',{format:'png'});
       await fs.writeFile(path.join(directory,'web-ai-error-960.png'),Buffer.from(screenshot.data,'base64'));

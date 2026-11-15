@@ -4,6 +4,11 @@ import { g } from '../vendor/react-foundation.js';
 import { invoke } from '../ipc/client';
 import { useWebAiStatus } from '../web-ai/use-status';
 import { statusText } from '../web-ai/status';
+import { ArrowLeft, CircleAlert, ExternalLink, Globe, LoaderCircle, RefreshCw } from '../components/settings-icons';
+import geminiLogo from '../assets/providers/gemini.svg';
+import deepseekLogo from '../assets/providers/deepseek.svg';
+import islandLogo from '../../src-tauri/icons/32x32.png';
+import '../styles/runtime.css';
 import '../web-ai/window.css';
 
 const names: Record<string, string> = { gemini: 'Gemini', deepseek: 'DeepSeek', chatgpt: 'ChatGPT', openai: 'ChatGPT', claude: 'Claude', grok: 'Grok', qwen: 'Qwen' };
@@ -26,7 +31,7 @@ function WebAiWindow() {
       const initial = await invoke('web_ai_popped');
       if (active && !seen) setService(initial ?? '');
       const settings = await invoke('settings_get');
-      if (active) setEnglish(settings.language === 'en');
+      if (active) { setEnglish(settings.language === 'en'); document.documentElement.dataset.theme = settings.theme === 'light' ? 'light' : 'dark'; }
     })().catch(e => { if (active) setError(String(e)); });
     return () => { active = false; unlisten?.(); };
   }, []);
@@ -60,42 +65,47 @@ function WebAiWindow() {
   const retry = () => action(() => invoke('web_ai_reload', { service, target: 'window' }));
   const browser = () => action(() => invoke('web_ai_browser', { service }));
   const choices = ['gemini', 'deepseek', ...(!['', 'gemini', 'deepseek'].includes(service) ? [service] : [])];
-  return <main data-web-ai-shell={service}>
-    <header>
-      <div className="brand"><span className="brand-mark"><Glyph kind="spark" /></span><strong>Woods Island</strong></div>
+  const logo = service === 'deepseek' ? deepseekLogo : service === 'gemini' ? geminiLogo : null;
+  return <main data-web-ai-shell={service} className="webai-app">
+    <aside className="webai-sidebar">
+      <div className="webai-brand"><img src={islandLogo} alt="" /><div><strong>Woods Island</strong><span>{english ? 'AI workspace' : 'Пространство ИИ'}</span></div></div>
+      <div className="webai-nav-label">{english ? 'CHATS' : 'ЧАТЫ'}</div>
       <nav aria-label={english ? 'AI service' : 'AI сервис'}>
-        {choices.map(id => <button key={id} data-web-ai-service={id} aria-pressed={service === id} disabled={pending}
-          onClick={() => void action(() => invoke('web_ai_window', { service: id }))}>{names[id]}</button>)}
+        {choices.map(id => <button className="press webai-service" key={id} data-web-ai-service={id} aria-pressed={service === id} disabled={pending}
+          onClick={() => void action(() => invoke('web_ai_window', { service: id }))}>
+          {id === 'gemini' || id === 'deepseek' ? <img src={id === 'gemini' ? geminiLogo : deepseekLogo} alt="" /> : <Globe size={20} />}
+          <span>{names[id]}</span>{service === id && <i />}
+        </button>)}
       </nav>
-      <div className="toolbar-status" data-web-ai-status={failed ? 'error' : status?.phase ?? 'loading'} title={message}>
-        <i /><span>{failed ? (english ? 'Unavailable' : 'Не загрузилось') : ready ? (english ? 'Ready' : 'Готово') : (english ? 'Connecting' : 'Подключение')}</span>
+      <div className="webai-sidebar-bottom">
+        <button className="press webai-side-action" data-web-ai-browser disabled={!service || pending} onClick={() => void browser()}><ExternalLink size={16}/><span>{english ? 'Open in browser' : 'Открыть в браузере'}</span></button>
+        <button className="press webai-side-action" data-web-ai-back disabled={pending} onClick={() => void action(() => invoke('web_ai_window_close'))}><ArrowLeft size={16}/><span>{english ? 'Back to island' : 'Вернуться в остров'}</span></button>
       </div>
-      <div className="actions">
-        <button className="icon-button" data-web-ai-retry disabled={!service || pending} title={english ? 'Reload website' : 'Перезагрузить сайт'} aria-label={english ? 'Reload website' : 'Перезагрузить сайт'} onClick={() => void retry()}><Glyph kind="retry" /></button>
-        <button className="quiet-button" data-web-ai-browser disabled={!service || pending} aria-label={english ? 'Open in browser' : 'Открыть в браузере'} onClick={() => void browser()}><Glyph kind="external" /><span>{english ? 'Browser' : 'В браузере'}</span></button>
-        <button className="back-button" data-web-ai-back disabled={pending} onClick={() => void action(() => invoke('web_ai_window_close'))}><Glyph kind="back" /><span>{english ? 'Island' : 'В остров'}</span></button>
-      </div>
-    </header>
-    <div ref={slot} data-web-ai-content>
-      {!ready && <div className="notice" role="status">
-        <div className="notice-mark" data-error={failed || undefined}><Glyph kind={failed ? 'error' : 'spark'} /></div>
-        <span className="eyebrow">{english ? 'YOUR AI SPACE' : 'ВАШ AI ЧАТ'}</span>
-        <h1>{failed ? (english ? 'Could not open ' : 'Не удалось открыть ') : ''}{names[service] ?? (english ? 'Opening a chat' : 'Открываем чат')}</h1>
-        <p>{message}</p>
-        {!failed && !slow && <div className="loading-track" aria-hidden="true"><i /></div>}
-        {(failed || slow) && <div className="notice-actions">
-          <button className="primary-button" disabled={!service || pending} onClick={() => void retry()}><Glyph kind="retry" />{english ? 'Try again' : 'Попробовать снова'}</button>
-          <button className="quiet-button" disabled={!service || pending} onClick={() => void browser()}><Glyph kind="external" />{english ? 'Open in browser' : 'Открыть в браузере'}</button>
+    </aside>
+    <section className="webai-workspace" aria-label={names[service] ?? 'AI'}>
+      <header className="webai-toolbar">
+        <div className="webai-page-title"><strong>{names[service] ?? (english ? 'Chat' : 'Чат')}</strong>
+          <span data-web-ai-status={failed ? 'error' : status?.phase ?? 'loading'}>{failed ? (english ? 'Could not connect' : 'Не удалось подключиться') : ready ? (english ? 'Website open' : 'Сайт открыт') : (english ? 'Connecting…' : 'Подключение…')}</span>
+        </div>
+        <button className="press webai-tool-button" data-web-ai-retry disabled={!service || pending} title={english ? 'Reload website' : 'Перезагрузить сайт'} aria-label={english ? 'Reload website' : 'Перезагрузить сайт'} onClick={() => void retry()}><RefreshCw size={17}/></button>
+      </header>
+      <div ref={slot} data-web-ai-content>
+        {!ready && <div className="webai-placeholder" role="status">
+          <div className="webai-state-card">
+            <div className="webai-provider-mark">{logo ? <img src={logo} alt="" /> : <Globe size={32}/>}</div>
+            <h1>{failed ? (english ? 'Let’s try again' : 'Попробуем ещё раз') : (english ? 'Opening ' : 'Открываем ') + (names[service] ?? (english ? 'your chat' : 'чат'))}</h1>
+            <p>{failed || slow ? message : (english ? 'Your conversation will open here. Sign in to your account after loading.' : 'Здесь откроется ваш чат. После загрузки войдите в свой аккаунт.')}</p>
+            {failed || slow ? <div className="webai-recovery-actions">
+              <button className="press webai-primary" disabled={!service || pending} onClick={() => void retry()}><RefreshCw size={15}/>{english ? 'Try again' : 'Повторить попытку'}</button>
+              <button className="press webai-secondary" disabled={!service || pending} onClick={() => void browser()}><ExternalLink size={15}/>{english ? 'Open in browser' : 'Открыть в браузере'}</button>
+            </div> : <div className="webai-loading"><LoaderCircle size={16}/><span>{english ? 'Loading website' : 'Загружаем сайт'}</span></div>}
+            {failed && <div className="webai-error-detail"><CircleAlert size={14}/><span>{english ? 'Check your connection or try a browser.' : 'Проверьте подключение или попробуйте браузер.'}</span></div>}
+            {status?.code != null && <details><summary>{english ? 'Technical details' : 'Технические сведения'}</summary><small>{english ? 'Error code' : 'Код ошибки'}: {status.code}</small></details>}
+          </div>
         </div>}
-        <span className="notice-hint">{english ? 'Sign in on the service website. Your conversation stays here.' : 'Вход — на сайте сервиса. Общаться можно прямо здесь.'}</span>
-        {status?.code != null && <details><summary>{english ? 'Technical details' : 'Технические сведения'}</summary><small>{english ? 'Error code' : 'Код ошибки'}: {status.code}</small></details>}
-      </div>}
-    </div>
+      </div>
+    </section>
   </main>;
-}
-function Glyph({ kind }: { kind: 'spark' | 'retry' | 'external' | 'back' | 'error' }) {
-  const paths = { spark: 'M12 3l2.3 6.7L21 12l-6.7 2.3L12 21l-2.3-6.7L3 12l6.7-2.3L12 3Z', retry: 'M20 7v5h-5M19.2 12a7.2 7.2 0 1 0-1.5 5', external: 'M14 4h6v6M20 4l-9 9M10 5H5a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h13a1 1 0 0 0 1-1v-5', back: 'M10 6l-6 6 6 6M4 12h16', error: 'M12 8v5M12 16h.01M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z' };
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[kind]} /></svg>;
 }
 
 g().createRoot(document.getElementById('root')!).render(<WebAiWindow />);

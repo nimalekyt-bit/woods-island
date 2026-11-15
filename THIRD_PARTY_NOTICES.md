@@ -7,5 +7,6 @@
 - Авторские дополнения Woods: 11 растровых питомцев — Складень, Узелок, Лунный Нокт, Нуль, Парадокс, Искорка, Кряжик, Нокт, Латунчик, Шурш и Скол. Рисунки входят в Woods Island.
 - Питомцы OpenAI Codex: рисунки не входят в исходники, EXE, portable или сайт. Дополнительный локальный импорт читает установленное приложение пользователя; право на распространение artwork не установлено и не заявляется.
 - Production `runtime/vendor/`: React/ReactDOM 19.3.0 (Meta, MIT), Motion (Framer, MIT), ProseMirror (Marijn Haverbeke и contributors, MIT), Tiptap (ueberdosis и contributors, MIT). Зафиксированные библиотеки перенесены из поставляемого runtime; версии React 18 из pnpm-lock относятся к отдельному прототипу.
+- Иконки интерфейса: Lucide 0.469.0, ISC (https://lucide.dev/license), геометрия через общий React runtime приложения. Логотипы Gemini/DeepSeek: Simple Icons, CC0 (https://github.com/simple-icons/simple-icons/blob/develop/LICENSE), источники https://cdn.simpleicons.org/googlegemini и https://cdn.simpleicons.org/deepseek. Товарные знаки принадлежат соответствующим владельцам.
 
 Условия для кода Woods указаны в LICENSE. Компоненты сторонних авторов сохраняют свои лицензии.

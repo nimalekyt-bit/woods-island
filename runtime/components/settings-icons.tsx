@@ -130,3 +130,15 @@ export const KeyRound = createIcon({name:"key-round",size:24,node:[
   ],
   ["circle", { cx: "16.5", cy: "7.5", r: ".5", fill: "currentColor", key: "w0ekpg" }]
 ]});
+export const ArrowLeft = createIcon({name:"arrow-left",size:24,node:[
+  ["path",{d:"m12 19-7-7 7-7",key:"1l729n"}],
+  ["path",{d:"M19 12H5",key:"x3x0zl"}]
+]});
+export const CircleAlert = createIcon({name:"circle-alert",size:24,node:[
+  ["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],
+  ["line",{x1:"12",x2:"12",y1:"8",y2:"12",key:"1pkeuh"}],
+  ["line",{x1:"12",x2:"12.01",y1:"16",y2:"16",key:"4dfq90"}]
+]});
+export const LoaderCircle = createIcon({name:"loader-circle",size:24,node:[
+  ["path",{d:"M21 12a9 9 0 1 1-6.219-8.56",key:"13zald"}]
+]});
