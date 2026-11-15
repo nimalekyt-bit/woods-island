@@ -1,5 +1,7 @@
 import { calculateIslandGeometry, agentQuestionHeight as dj } from '../island/geometry';
 import { focusInputAfterActivation } from '../island/input-focus';
+import { useWebAiStatus } from '../web-ai/use-status';
+import { statusText } from '../web-ai/status';
 import { LIQUID_FOLDED, updateSizeHistory, selectSizeTransition } from '../island/transitions';
 import { k as subscribeEvent } from './shared.js';
 import { createMediaEventController } from '../media/events';
@@ -2961,7 +2963,10 @@ function sc({ m: e, isLast: t, streaming: n }) {
 }
 var cc = { gemini: `Gemini`, deepseek: `DeepSeek` };
 function lc() {
-  let e = useIslandStore((e) => e.chatService),
+  let openingRef = ReactRuntime.useRef(false),
+    [opening, setOpening] = ReactRuntime.useState(false),
+    [openingError, setOpeningError] = ReactRuntime.useState(null),
+    e = useIslandStore((e) => e.chatService),
     t = useIslandStore((e) => e.license.pro),
     n = (e) => {
       if (e !== `island` && !t) return useIslandStore.getState().pushPeek({ kind: `pro`, feature: `ai` });
@@ -2972,6 +2977,7 @@ function lc() {
       { id: `gemini`, label: `Gemini` },
       { id: `deepseek`, label: `DeepSeek` },
     ];
+  ReactRuntime.useEffect(() => setOpeningError(null), [e]);
   return (0, jsxRuntime.jsxs)(`div`, {
     "data-chat-switch": !0,
     className: `flex shrink-0 items-center gap-1.5`,
@@ -2984,6 +2990,7 @@ function lc() {
             {
               "data-chat-service": t.id,
               "data-on": e === t.id || void 0,
+              disabled: opening,
               onClick: () => n(t.id),
               title:
                 t.id === `island`
@@ -3013,21 +3020,28 @@ function lc() {
           children: [
             (0, jsxRuntime.jsxs)(`button`, {
               "data-web-ai-window": !0,
-              onClick: () => {
-                (u
-                  .webAiWindow(e)
-                  .catch((e) => useIslandStore.getState().pushPeek({ kind: `error`, message: String(e) })),
-                  useIslandStore.getState().close());
+              disabled: opening,
+              onClick: async () => {
+                if (openingRef.current) return;
+                openingRef.current = true;
+                setOpening(true); setOpeningError(null);
+                try {
+                  await u.webAiWindow(e);
+                  useIslandStore.getState().close();
+                } catch (error) {
+                  setOpeningError(String(error));
+                } finally { openingRef.current = false; setOpening(false); }
               },
               title: o(
                 `Открыть в отдельном окне: его размер можно менять`,
                 `Open in a window of its own: it can be resized`,
               ),
               className: `press flex h-6 items-center gap-1 rounded-full px-2 text-[11.5px] text-ink-2 hover:bg-tile hover:text-ink`,
-              children: [(0, jsxRuntime.jsx)(ze, { size: 11 }), o(`В окне`, `In a window`)],
+              children: [(0, jsxRuntime.jsx)(ze, { size: 11 }), opening ? o(`Открываю…`, `Opening…`) : o(`В окне`, `In a window`)],
             }),
             (0, jsxRuntime.jsx)(`button`, {
               "data-web-ai-browser": !0,
+              disabled: opening,
               onClick: () => {
                 (u.webAiBrowser(e), useIslandStore.getState().close());
               },
@@ -3037,11 +3051,17 @@ function lc() {
             }),
           ],
         }),
+      openingError && (0, jsxRuntime.jsx)(`span`, {
+        role: 'alert', 'data-web-ai-window-error': true,
+        className: 'max-w-[200px] text-[11px] text-rec-ink',
+        children: o(`Не удалось открыть окно: `, `Could not open the window: `) + openingError,
+      }),
     ],
   });
 }
 function uc({ service: e }) {
-  let t = (0, ReactRuntime.useRef)(null),
+  let navigation = useWebAiStatus(e, 'embedded'),
+    t = (0, ReactRuntime.useRef)(null),
     n = useIslandStore((e) => e.expanded),
     r = useIslandStore((e) => e.tab === `chat`),
     i = useIslandStore((e) => e.license.pro),
@@ -3162,18 +3182,22 @@ function uc({ service: e }) {
           className: `relative min-h-0 flex-1 overflow-hidden rounded-xl bg-[#131314]`,
           children: (0, jsxRuntime.jsx)(`div`, {
             className: `on-dark absolute inset-0 grid place-items-center text-center text-[12px] text-ink-3`,
-            children: l
-              ? (0, jsxRuntime.jsxs)(`span`, {
-                  className: `flex max-w-[80%] items-center gap-1.5 text-rec-ink`,
-                  children: [(0, jsxRuntime.jsx)(Ia, { size: 14, className: `shrink-0` }), l],
-                })
-              : (0, jsxRuntime.jsxs)(`span`, {
-                  className: `flex items-center gap-1.5`,
+            "data-web-ai-status": l ? 'error' : navigation.status?.phase ?? 'loading',
+            children: navigation.status?.phase === 'loaded' && !l ? null : (0, jsxRuntime.jsxs)(`div`, {
+              className: `flex max-w-[85%] flex-col items-center gap-3`,
+              children: [
+                l || navigation.listenerError || o(statusText(navigation.status, navigation.slow), statusText(navigation.status, navigation.slow, true)),
+                (l || navigation.slow || navigation.status?.phase === 'error') && (0, jsxRuntime.jsxs)(`div`, {
+                  className: `flex gap-2`,
                   children: [
-                    (0, jsxRuntime.jsx)(Ve, { size: 14, className: `animate-spin` }),
-                    o(`Открываю ${cc[e]}…`, `Opening ${cc[e]}…`),
+                    (0, jsxRuntime.jsx)(`button`, { "data-web-ai-retry": !0, className: `press rounded-full bg-tile px-3 py-1 text-ink`,
+                      onClick: async () => { try { d(null); if (l && c.current) await u.webAiEmbed(e, c.current, false); else await window.__TAURI_INTERNALS__.invoke('web_ai_reload', { service: e, target: 'embedded' }); } catch(error) { d(String(error)); } }, children: o(`Повторить`, `Retry`) }),
+                    (0, jsxRuntime.jsx)(`button`, { "data-web-ai-browser": !0, className: `press rounded-full bg-tile px-3 py-1 text-ink`,
+                      onClick: () => u.webAiBrowser(e).catch(error => d(String(error))), children: o(`В браузере`, `Browser`) }),
                   ],
                 }),
+              ],
+            }),
           }),
         })
   );

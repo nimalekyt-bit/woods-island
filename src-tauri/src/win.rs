@@ -171,7 +171,7 @@ impl WindowManager {
             SetWindowLongPtrW(hwnd, GWL_EXSTYLE, if active { style & !(WS_EX_NOACTIVATE.0 as isize) } else { style | WS_EX_NOACTIVATE.0 as isize });
             if !active {
                 let previous=std::mem::take(&mut *PREVIOUS_FOCUS.lock().unwrap());
-                if previous!=0 { let _=windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow(HWND(previous as _)); }
+                if previous!=0 && GetForegroundWindow()==hwnd { let _=windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow(HWND(previous as _)); }
             }
         }
     }

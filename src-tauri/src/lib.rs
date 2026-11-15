@@ -216,10 +216,10 @@ fn island_zoom(settings: &Value) -> f64 {
 }
 
 fn apply_island_geometry(app: &AppHandle, state: &AppState) -> Result<(), String> {
-    let window = app.get_webview_window("main").ok_or("Main window unavailable")?;
+    let window = app.get_window("main").ok_or("Main window unavailable")?;
     let settings = state.settings.lock().unwrap().clone();
     let zoom = island_zoom(&settings);
-    window.set_zoom(zoom).map_err(|e|e.to_string())?;
+    app.get_webview("main").ok_or("Main view unavailable")?.set_zoom(zoom).map_err(|e|e.to_string())?;
     win::WindowManager::set_zoom(zoom);
     let monitors = app.available_monitors().map_err(|e|e.to_string())?;
     let primary = app.primary_monitor().map_err(|e|e.to_string())?;
@@ -403,7 +403,7 @@ fn web_ai_popped()->Option<String>{webai::popped()}
 fn web_ai_open(service:Option<String>,app:AppHandle)->Result<bool,String>{webai::open(&app,service.as_deref()).map(|_|true)}
 
 #[tauri::command]
-async fn web_ai_embed(service:Option<String>,x:Option<f64>,y:Option<f64>,width:Option<f64>,height:Option<f64>,focus:Option<bool>,word:Option<u64>,app:AppHandle)->Result<bool,String>{webai::embed(&app,&service.ok_or("AI service is required")?,x.unwrap_or(0.),y.unwrap_or(0.),width.unwrap_or(0.),height.unwrap_or(0.),focus.unwrap_or(false),word.unwrap_or(0)).map(|_|true)}
+async fn web_ai_embed(service:Option<String>,x:Option<f64>,y:Option<f64>,width:Option<f64>,height:Option<f64>,focus:Option<bool>,word:Option<u64>,app:AppHandle)->Result<bool,String>{tauri::async_runtime::spawn_blocking(move||webai::embed(&app,&service.ok_or("AI service is required")?,x.unwrap_or(0.),y.unwrap_or(0.),width.unwrap_or(0.),height.unwrap_or(0.),focus.unwrap_or(false),word.unwrap_or(0)).map(|_|true)).await.map_err(|e|e.to_string())?}
 
 #[tauri::command]
 fn web_ai_hide(word:Option<u64>,app:AppHandle)->Result<bool,String>{webai::hide(&app,word.unwrap_or(0)).map(|_|true)}
@@ -412,7 +412,16 @@ fn web_ai_hide(word:Option<u64>,app:AppHandle)->Result<bool,String>{webai::hide(
 fn web_ai_browser(service:Option<String>)->Result<bool,String>{webai::browser(&service.ok_or("AI service is required")?).map(|_|true)}
 
 #[tauri::command]
-async fn web_ai_window(service:Option<String>,app:AppHandle)->Result<bool,String>{webai::window(&app,&service.ok_or("AI service is required")?).map(|_|true)}
+async fn web_ai_window(service:Option<String>,app:AppHandle)->Result<bool,String>{tauri::async_runtime::spawn_blocking(move||webai::window(&app,&service.ok_or("AI service is required")?).map(|_|true)).await.map_err(|e|e.to_string())?}
+
+#[tauri::command]
+fn web_ai_status()->Value{webai::status()}
+
+#[tauri::command]
+async fn web_ai_window_attach(service:String,x:f64,y:f64,width:f64,height:f64,app:AppHandle)->Result<bool,String>{tauri::async_runtime::spawn_blocking(move||webai::window_attach(&app,&service,x,y,width,height).map(|_|true)).await.map_err(|e|e.to_string())?}
+
+#[tauri::command]
+fn web_ai_reload(service:String,target:String,app:AppHandle)->Result<bool,String>{webai::reload(&app,&service,&target).map(|_|true)}
 
 #[tauri::command]
 fn web_ai_window_close(app:AppHandle)->Result<bool,String>{webai::window_close(&app).map(|_|true)}
@@ -465,7 +474,7 @@ fn settings_set(settings:Option<Value>,app:AppHandle,state:tauri::State<'_, Arc<
  if let Err(e)=storage::save_json_file("settings.json",&updated){return vec![e];}*state.settings.lock().unwrap()=updated.clone();
  if patch["audioOutput"].is_string() || patch["audioInput"].is_string() {audio::configure(&updated);}
  if patch.as_object().unwrap().keys().any(|key|key.starts_with("vpnCustom")) {network::configure_vpn(&updated);}
- if patch["captureVisible"].is_boolean() {if let Some(window)=app.get_webview_window("main"){if let Err(e)=window.set_content_protected(!updated["captureVisible"].as_bool().unwrap_or(false)){warnings.push(e.to_string());}}}
+ if patch["captureVisible"].is_boolean() {if let Some(window)=app.get_window("main"){if let Err(e)=window.set_content_protected(!updated["captureVisible"].as_bool().unwrap_or(false)){warnings.push(e.to_string());}}}
  if patch.as_object().unwrap().keys().any(|k|["scale","monitor","offsetX","underTaskbar"].contains(&k.as_str())) {if let Err(e)=apply_island_geometry(&app,&state){warnings.push(e);}}
  if let Some(on)=patch["autostart"].as_bool(){if std::env::var_os("WOODS_ISLAND_DATA_DIR").is_none(){if let Err(e)=system::autostart(on){warnings.push(e);}}}
  if patch.as_object().unwrap().keys().any(|k|k.starts_with("hotkey")){warnings.extend(register_hotkeys(&app,&updated));}
@@ -591,7 +600,7 @@ async fn rates()->Result<Value,String>{weather::rates().await}
 #[tauri::command]
 fn take_focus(app: AppHandle) {
     if win::WindowManager::passive_qa() { return; }
-    if let Some(window) = app.get_webview_window("main") {
+    if let Some(window) = app.get_window("main") {
         let _ = window.unminimize();
         let _ = window.show();
         if let Ok(hwnd) = window.hwnd() { win::WindowManager::keyboard_focus(HWND(hwnd.0 as _),true); }
@@ -601,7 +610,7 @@ fn take_focus(app: AppHandle) {
 
 #[tauri::command]
 fn release_focus(app: AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
+    if let Some(window) = app.get_window("main") {
         if let Ok(hwnd) = window.hwnd() {
             win::WindowManager::keyboard_focus(HWND(hwnd.0 as _),false);
         }
@@ -759,7 +768,7 @@ fn hover(state:Option<bool>,app:AppHandle)->bool{let _=app.emit("hover",state.un
 fn island_tall(on:Option<bool>,app:AppHandle,state:tauri::State<'_, Arc<AppState>>)->Result<bool,String>{state.is_tall.store(on.unwrap_or(false),Ordering::Relaxed);apply_island_geometry(&app,&state).map(|_|true)}
 
 #[tauri::command]
-fn set_island_hidden(hidden:Option<bool>,app:AppHandle)->Result<bool,String>{let window=app.get_webview_window("main").ok_or("Main window unavailable")?;if hidden.unwrap_or(false){window.hide()}else{window.show()}.map(|_|true).map_err(|e|e.to_string())}
+fn set_island_hidden(hidden:Option<bool>,app:AppHandle)->Result<bool,String>{let window=app.get_window("main").ok_or("Main window unavailable")?;if hidden.unwrap_or(false){window.hide()}else{window.show()}.map(|_|true).map_err(|e|e.to_string())}
 
 #[tauri::command]
 fn fullscreen(state:tauri::State<'_, Arc<AppState>>)->bool{state.main_hwnd.lock().unwrap().map(|h|win::WindowManager::system_context(HWND(h as _))["fullscreen"].as_bool().unwrap_or(false)).unwrap_or(false)}
@@ -924,13 +933,13 @@ fn chime(sound:Option<String>,state:tauri::State<'_, Arc<AppState>>)->bool{let s
 fn chime_try(sound:Option<String>)->bool{play_chime(sound.as_deref())}
 
 #[tauri::command]
-fn capture_start(mode:Option<String>,app:AppHandle,state:tauri::State<'_, Arc<AppState>>)->Result<bool,String>{let mode=mode.unwrap_or_else(||"area".into());let rect=capture::screen_rect();let mut visibility=capture::hide_main(&app);std::thread::sleep(std::time::Duration::from_millis(70));let image=capture::screenshot(rect)?;capture::set_frame(&image);if mode=="screen"{let settings=state.settings.lock().unwrap().clone();let result=capture::save(&image,&settings)?;capture::clear_frame();let _=clipboard::set_png(&capture::data_url(&image)?);let _=app.emit("capture:done",result);if let Some(main)=app.get_webview_window("main"){let _=main.show();}return Ok(true);}let overlay=app.get_webview_window("overlay").ok_or("Capture overlay is unavailable")?;overlay.set_position(tauri::PhysicalPosition::new(rect.left,rect.top)).map_err(|e|e.to_string())?;overlay.set_size(tauri::PhysicalSize::new((rect.right-rect.left) as u32,(rect.bottom-rect.top) as u32)).map_err(|e|e.to_string())?;let frame=capture::data_url(&image)?;let _=app.emit_to("overlay","overlay:start",json!({"mode":mode,"frame":frame,"below":0}));overlay.show().map_err(|e|e.to_string())?;if !win::WindowManager::passive_qa(){overlay.set_focus().map_err(|e|e.to_string())?;}visibility.keep_hidden();Ok(true)}
+fn capture_start(mode:Option<String>,app:AppHandle,state:tauri::State<'_, Arc<AppState>>)->Result<bool,String>{let mode=mode.unwrap_or_else(||"area".into());let rect=capture::screen_rect();let mut visibility=capture::hide_main(&app);std::thread::sleep(std::time::Duration::from_millis(70));let image=capture::screenshot(rect)?;capture::set_frame(&image);if mode=="screen"{let settings=state.settings.lock().unwrap().clone();let result=capture::save(&image,&settings)?;capture::clear_frame();let _=clipboard::set_png(&capture::data_url(&image)?);let _=app.emit("capture:done",result);if let Some(main)=app.get_window("main"){let _=main.show();}return Ok(true);}let overlay=app.get_webview_window("overlay").ok_or("Capture overlay is unavailable")?;overlay.set_position(tauri::PhysicalPosition::new(rect.left,rect.top)).map_err(|e|e.to_string())?;overlay.set_size(tauri::PhysicalSize::new((rect.right-rect.left) as u32,(rect.bottom-rect.top) as u32)).map_err(|e|e.to_string())?;let frame=capture::data_url(&image)?;let _=app.emit_to("overlay","overlay:start",json!({"mode":mode,"frame":frame,"below":0}));overlay.show().map_err(|e|e.to_string())?;if !win::WindowManager::passive_qa(){overlay.set_focus().map_err(|e|e.to_string())?;}visibility.keep_hidden();Ok(true)}
 
 #[tauri::command]
-fn capture_cancel(app:AppHandle)->bool{capture::clear_frame();if let Some(w)=app.get_webview_window("overlay"){let _=w.hide();}if let Some(w)=app.get_webview_window("main"){let _=w.show();}true}
+fn capture_cancel(app:AppHandle)->bool{capture::clear_frame();if let Some(w)=app.get_webview_window("overlay"){let _=w.hide();}if let Some(w)=app.get_window("main"){let _=w.show();}true}
 
 #[tauri::command]
-fn capture_region(x:Option<f64>,y:Option<f64>,w:Option<f64>,h:Option<f64>,mode:Option<String>,app:AppHandle,state:tauri::State<'_, Arc<AppState>>)->Result<bool,String>{let rect=capture::region(x.unwrap_or(0.),y.unwrap_or(0.),w.unwrap_or(1.),h.unwrap_or(1.))?;if let Some(overlay)=app.get_webview_window("overlay"){let _=overlay.hide();}std::thread::sleep(std::time::Duration::from_millis(70));let result:Result<Value,String>=(||{let image=capture::selected_image(rect)?;let settings=state.settings.lock().unwrap().clone();match mode.as_deref().unwrap_or("area"){"ocr"=>{let saved=capture::save(&image,&settings)?;let text=capture::ocr(std::path::Path::new(saved["path"].as_str().unwrap()))?;let _=clipboard::set_text(&text);Ok(json!({"kind":"ocr","text":text}))},"qr"=>{let text=capture::qr(&image)?;let url=reqwest::Url::parse(&text).ok().filter(|u|["http","https"].contains(&u.scheme())).map(|u|u.to_string());Ok(json!({"kind":"qr","text":text,"url":url}))},_=>{let saved=capture::save(&image,&settings)?;clipboard::set_png(&capture::data_url(&image)?)?;Ok(saved)}}})();capture::clear_frame();if let Some(main)=app.get_webview_window("main"){let _=main.show();}match result{Ok(payload)=>{let _=app.emit("capture:done",payload);Ok(true)},Err(error)=>{let _=app.emit("capture:error",&error);Err(error)}}}
+fn capture_region(x:Option<f64>,y:Option<f64>,w:Option<f64>,h:Option<f64>,mode:Option<String>,app:AppHandle,state:tauri::State<'_, Arc<AppState>>)->Result<bool,String>{let rect=capture::region(x.unwrap_or(0.),y.unwrap_or(0.),w.unwrap_or(1.),h.unwrap_or(1.))?;if let Some(overlay)=app.get_webview_window("overlay"){let _=overlay.hide();}std::thread::sleep(std::time::Duration::from_millis(70));let result:Result<Value,String>=(||{let image=capture::selected_image(rect)?;let settings=state.settings.lock().unwrap().clone();match mode.as_deref().unwrap_or("area"){"ocr"=>{let saved=capture::save(&image,&settings)?;let text=capture::ocr(std::path::Path::new(saved["path"].as_str().unwrap()))?;let _=clipboard::set_text(&text);Ok(json!({"kind":"ocr","text":text}))},"qr"=>{let text=capture::qr(&image)?;let url=reqwest::Url::parse(&text).ok().filter(|u|["http","https"].contains(&u.scheme())).map(|u|u.to_string());Ok(json!({"kind":"qr","text":text,"url":url}))},_=>{let saved=capture::save(&image,&settings)?;clipboard::set_png(&capture::data_url(&image)?)?;Ok(saved)}}})();capture::clear_frame();if let Some(main)=app.get_window("main"){let _=main.show();}match result{Ok(payload)=>{let _=app.emit("capture:done",payload);Ok(true)},Err(error)=>{let _=app.emit("capture:error",&error);Err(error)}}}
 
 #[tauri::command]
 fn capture_region_drawn(x:Option<f64>,y:Option<f64>,w:Option<f64>,h:Option<f64>,drawing:Option<String>,app:AppHandle,state:tauri::State<'_, Arc<AppState>>)->Result<bool,String>{
@@ -938,7 +947,7 @@ fn capture_region_drawn(x:Option<f64>,y:Option<f64>,w:Option<f64>,h:Option<f64>,
  use base64::Engine;let encoded=drawing.split_once(',').ok_or("Invalid annotation image")?.1;let bytes=base64::engine::general_purpose::STANDARD.decode(encoded).map_err(|e|e.to_string())?;let annotated=image::load_from_memory(&bytes).map_err(|e|e.to_string())?.into_rgba8();
  let rect=capture::region(x.unwrap_or(0.),y.unwrap_or(0.),w.unwrap_or(1.),h.unwrap_or(1.))?;if let Some(overlay)=app.get_webview_window("overlay"){let _=overlay.hide();}std::thread::sleep(std::time::Duration::from_millis(70));
  let mut image=capture::selected_image(rect)?;capture::clear_frame();let drawing=image::imageops::resize(&annotated,image.width(),image.height(),image::imageops::FilterType::Lanczos3);image::imageops::overlay(&mut image,&drawing,0,0);
- let settings=state.settings.lock().unwrap().clone();let result=capture::save(&image,&settings)?;clipboard::set_png(&capture::data_url(&image)?)?;let _=app.emit("capture:done",result);if let Some(main)=app.get_webview_window("main"){let _=main.show();}Ok(true)
+ let settings=state.settings.lock().unwrap().clone();let result=capture::save(&image,&settings)?;clipboard::set_png(&capture::data_url(&image)?)?;let _=app.emit("capture:done",result);if let Some(main)=app.get_window("main"){let _=main.show();}Ok(true)
 }
 
 #[tauri::command]
@@ -1293,7 +1302,7 @@ pub fn run() {
         .manage(state)
         .setup(move |app| {
             app_log("setup hook executing");
-            if let Some(window) = app.get_webview_window("main") {
+            if let Some(window) = app.get_window("main") {
                 app_log("found main webview window");
                 let _win_clone = window.clone();
                 window.on_window_event(move |event| {
@@ -1356,6 +1365,9 @@ pub fn run() {
             web_ai_hide,
             web_ai_browser,
             web_ai_window,
+            web_ai_status,
+            web_ai_window_attach,
+            web_ai_reload,
             web_ai_window_close,
             web_ai_window_show,
             agents_now,

@@ -17,7 +17,7 @@ async function filesIn(directory) {
 
 const files = await filesIn(source);
 const paths = new Set(files.map(file => resolve(file)));
-const requiredEntries = ['index.html', 'settings.html', 'overlay.html', 'editor.html'];
+const requiredEntries = ['index.html', 'settings.html', 'overlay.html', 'editor.html', 'web-ai.html'];
 for (const entry of requiredEntries) {
   if (!paths.has(join(source, entry))) throw new Error(`Missing runtime entry: ${entry}`);
 }

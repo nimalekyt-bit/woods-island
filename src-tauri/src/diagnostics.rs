@@ -29,5 +29,5 @@ pub fn summary(state: &AppState) -> Value {
     } else { text("История сохраняется локально.", "History is stored locally.") });
     let recovery = crate::storage::recovery_warnings().into_iter().map(|message| json!({"kind":"storage","message":message})).collect::<Vec<_>>();
     json!({"version":env!("CARGO_PKG_VERSION"),"os":format!("Windows {}",std::env::consts::ARCH),
-        "webview":tauri::webview_version().unwrap_or_else(|_|"unavailable".into()),"modules":modules,"recovery":recovery})
+        "webview":tauri::webview_version().unwrap_or_else(|_|"unavailable".into()),"webAi":crate::webai::status(),"modules":modules,"recovery":recovery})
 }

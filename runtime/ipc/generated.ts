@@ -142,6 +142,9 @@ export interface RustCommands {
   web_ai_hide: { args: { word?: number | null }; result: boolean };
   web_ai_browser: { args: { service?: string | null }; result: boolean };
   web_ai_window: { args: { service?: string | null }; result: boolean };
+  web_ai_status: { args: {  }; result: JsonValue };
+  web_ai_window_attach: { args: { service: string; x: number; y: number; width: number; height: number }; result: boolean };
+  web_ai_reload: { args: { service: string; target: string }; result: boolean };
   web_ai_window_close: { args: {  }; result: boolean };
   web_ai_window_show: { args: {  }; result: boolean };
   agents_now: { args: {  }; result: Array<JsonValue> };

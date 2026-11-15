@@ -1,3 +1,4 @@
+import { parseStatus, type WebAiStatus } from '../web-ai/status';
 export type UpdatePhase = 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'installing' | 'upToDate' | 'error';
 export interface UpdateState {
   status: UpdatePhase; version: string | null; downloaded: number; total: number | null;
@@ -32,6 +33,7 @@ export interface DiagnosticModule { id: string; status: 'ready' | 'notConfigured
 export interface DiagnosticSummary {
   version: string; os: string; webview: string; modules: DiagnosticModule[];
   recovery: { kind: string; message: string }[];
+  webAi?: WebAiStatus[];
 }
 export function diagnosticSummary(value: unknown): DiagnosticSummary {
   const data = value && typeof value === 'object' ? value as Record<string, unknown> : {};
@@ -40,6 +42,7 @@ export function diagnosticSummary(value: unknown): DiagnosticSummary {
   return { version: text(data.version), os: text(data.os), webview: text(data.webview),
     modules: Array.isArray(data.modules) ? data.modules.filter((v): v is DiagnosticModule => !!v && typeof v.id === 'string' && statuses.has(v.status)).map(v => ({ id: v.id, status: v.status, detail: text(v.detail) })) : [],
     recovery: Array.isArray(data.recovery) ? data.recovery.filter(v => v && typeof v.kind === 'string').map(v => ({kind: text(v.kind), message: text(v.message)})) : [],
+    webAi: Array.isArray(data.webAi) ? data.webAi.map(parseStatus).filter((s): s is WebAiStatus => s !== null) : [],
   };
 }
 // Deliberate allowlist: do not copy arbitrary backend fields, paths, error text,
@@ -50,6 +53,8 @@ export function supportReport(summary: DiagnosticSummary): string {
   const safeModules = new Set(['media', 'yandex', 'obs', 'ai', 'speech', 'stt', 'ffmpeg', 'webview', 'notifications', 'hotkeys', 'agents', 'node', 'clipboard', 'storage', 'pets', 'updater']);
   return [ `Woods Island ${version(summary.version)}`, `OS: ${system}`, `WebView2: ${version(summary.webview)}`,
     ...summary.modules.filter(m => safeModules.has(m.id)).map(m => `${m.id}: ${m.status}`),
+    ...(summary.webAi ?? []).map(parseStatus).filter((s): s is WebAiStatus => s !== null && ['gemini','deepseek','chatgpt','openai','claude','grok','qwen'].includes(s.service))
+      .map(s => `Web AI ${s.service} (${s.target}): ${s.phase}${s.code === null ? '' : `, code ${s.code}`}`),
     `Recovered files: ${summary.recovery.length}`,
   ].join('\n');
 }

@@ -6,12 +6,12 @@ use windows::Win32::{Foundation::{HWND, RECT}, Graphics::Gdi::*};
 static EDITOR_PATH: Mutex<Option<PathBuf>> = Mutex::new(None);
 static FRAME: Mutex<Option<image::RgbaImage>> = Mutex::new(None);
 
-pub struct MainHidden { window:Option<tauri::WebviewWindow>, restore:bool }
+pub struct MainHidden { window:Option<tauri::Window>, restore:bool }
 impl MainHidden { pub fn keep_hidden(&mut self){self.restore=false;} }
 impl Drop for MainHidden {fn drop(&mut self){if self.restore{if let Some(window)=&self.window{let _=window.show();}}}}
 pub fn hide_main(app:&tauri::AppHandle)->MainHidden{
     use tauri::Manager;
-    let window=app.get_webview_window("main");if let Some(window)=&window{let _=window.hide();}
+    let window=app.get_window("main");if let Some(window)=&window{let _=window.hide();}
     MainHidden{window,restore:true}
 }
 pub fn set_frame(image:&image::RgbaImage){*FRAME.lock().unwrap()=Some(image.clone());}
