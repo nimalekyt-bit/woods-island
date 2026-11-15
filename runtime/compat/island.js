@@ -3074,6 +3074,7 @@ function uc({ service: e }) {
     r = useIslandStore((e) => e.tab === `chat`),
     i = useIslandStore((e) => e.license.pro),
     a = useIslandStore((t) => t.webAiPopped === e),
+    uiScale = useIslandStore(state => state.settings?.scale ?? 100),
     s = useIslandStore((e) => e.webAiWantsKeys),
     c = (0, ReactRuntime.useRef)(null),
     [l, d] = (0, ReactRuntime.useState)(null);
@@ -3117,7 +3118,8 @@ function uc({ service: e }) {
             f = requestAnimationFrame(_);
             return;
           }
-          let y = [n.x, n.y, n.width, n.height].map((e) => Math.round(e)).join(`,`);
+          // Identical CSS bounds can map to new native pixels after a zoom/DPI change.
+          let y = [n.x, n.y, n.width, n.height].map((e) => Math.round(e)).join(`,`) + `@${window.devicePixelRatio}`;
           if (y === g) return;
           g = y;
           let b = { x: n.x, y: n.y, width: n.width, height: n.height };
@@ -3144,7 +3146,7 @@ function uc({ service: e }) {
             u.webAiHide());
         }
       );
-    }, [e, n, i, r, a]),
+    }, [e, n, i, r, a, uiScale]),
     (0, ReactRuntime.useEffect)(() => {
       s &&
         c.current &&
@@ -3187,7 +3189,7 @@ function uc({ service: e }) {
       : (0, jsxRuntime.jsx)(`div`, {
           ref: t,
           "data-web-ai-slot": e,
-          className: `relative min-h-0 flex-1 overflow-hidden rounded-xl border border-line bg-island shadow-inner`,
+          className: `relative min-h-0 flex-1 overflow-hidden rounded-xl`,
           children: (0, jsxRuntime.jsx)(`div`, {
             className: `on-dark absolute inset-0 grid place-items-center text-center text-[12px] text-ink-3`,
             "data-web-ai-status": l ? 'error' : navigation.status?.phase ?? 'loading',

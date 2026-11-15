@@ -1,0 +1,12 @@
+/* The compatibility CSS bundle does not contain border-line/shadow-inner.
+   Give the native slot an explicit surface instead of currentColor (white). */
+[data-web-ai-slot] {
+  border: 1px solid #3b3e43;
+  background: #17191c;
+  box-shadow: inset 0 1px 3px #00000030;
+}
+:root[data-theme="light"] [data-web-ai-slot] {
+  border-color: #d8d9dd;
+  background: #f6f6f7;
+  box-shadow: inset 0 1px 3px #20232a0a;
+}

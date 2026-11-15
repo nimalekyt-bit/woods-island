@@ -1,4 +1,4 @@
-use tauri::{AppHandle, Emitter, Manager, WebviewUrl, LogicalPosition, LogicalSize};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, PhysicalPosition, PhysicalSize, Rect};
 use std::sync::{Mutex,atomic::{AtomicBool,AtomicU64,Ordering},mpsc};
 use std::collections::BTreeMap;
 use webview2_com::{Microsoft::Web::WebView2::Win32::{ICoreWebView2_3, COREWEBVIEW2_WEB_ERROR_STATUS}, TrySuspendCompletedHandler, NavigationStartingEventHandler, NavigationCompletedEventHandler};
@@ -20,12 +20,14 @@ fn surface_script(app:&AppHandle,target:&str)->String{
     format!("{}\nwindow.__woodsWebAiSurface?.apply({});",PROVIDER_SURFACE,serde_json::json!({"embedded":target=="embedded","theme":theme}))
 }
 fn apply_surface(app:&AppHandle,view:&tauri::Webview,target:&str)->Result<(),String>{
-    use windows::Win32::{Foundation::RECT,Graphics::Gdi::{CreateRectRgn,CreateRoundRectRgn,DeleteObject,GetWindowRgn,PtInRegion,SetWindowRgn},UI::WindowsAndMessaging::GetClientRect};
+    use windows::Win32::{Foundation::RECT,Graphics::Gdi::{CreateRectRgn,CreateRoundRectRgn,CombineRgn,DeleteObject,GetWindowRgn,PtInRegion,SetWindowRgn,RGN_OR},UI::WindowsAndMessaging::{GetClientRect,GetWindowRect,GetParent}};
     use webview2_com::Microsoft::Web::WebView2::Win32::{ICoreWebView2_13,COREWEBVIEW2_PREFERRED_COLOR_SCHEME_DARK,COREWEBVIEW2_PREFERRED_COLOR_SCHEME_LIGHT};
     let settings=app.state::<std::sync::Arc<crate::AppState>>().settings.lock().unwrap().clone();
     let light=settings["theme"].as_str()==Some("light");
     let scale=if target=="embedded"{settings["scale"].as_f64().unwrap_or(100.)/100.}else{1.};
-    let radius=(12.*scale*view.window().scale_factor().map_err(|e|e.to_string())?).round().max(1.) as i32;
+    // The separate shell has a 20px frame and a 1px border. Only its bottom
+    // content corners are rounded; the top must meet the browser toolbar.
+    let radius=((if target=="embedded"{12.}else{19.})*scale*view.window().scale_factor().map_err(|e|e.to_string())?).round().max(1.) as i32;
     let embedded=target=="embedded";
     let label=view.label().to_owned();
     let parent=view.window().hwnd().map_err(|e|e.to_string())?.0 as isize;
@@ -38,14 +40,24 @@ fn apply_surface(app:&AppHandle,view:&tauri::Webview,target:&str)->Result<(),Str
         let hwnd=windows::Win32::Foundation::HWND(host.0 as _);
         let mut rect=RECT::default();
         if GetClientRect(hwnd,&mut rect).is_err()||rect.right<=0||rect.bottom<=0{return;}
-        if embedded{
-            let region=CreateRoundRectRgn(0,0,rect.right+1,rect.bottom+1,radius*2,radius*2);
-            if !region.is_invalid()&&SetWindowRgn(hwnd,region,true)==0{let _=DeleteObject(region);}
-        }else{let _=SetWindowRgn(hwnd,None,false);}
+        let mut screen=RECT::default();
+        let mut controller_bounds=Default::default();
+        if GetWindowRect(hwnd,&mut screen).is_err()||controller.Bounds(&mut controller_bounds).is_err(){return;}
+        let region=CreateRoundRectRgn(0,0,rect.right+1,rect.bottom+1,radius*2,radius*2);
+        if !region.is_invalid(){
+            if !embedded{
+                let top=CreateRectRgn(0,0,rect.right+1,(radius+1).min(rect.bottom));
+                if top.is_invalid(){let _=DeleteObject(region);return;}
+                let combined=CombineRgn(region,region,top,RGN_OR);let _=DeleteObject(top);
+                if combined.0==0{let _=DeleteObject(region);return;}
+            }
+            if SetWindowRgn(hwnd,region,true)==0{let _=DeleteObject(region);}
+        }
         let actual=CreateRectRgn(0,0,0,0);
         let has_region=GetWindowRgn(hwnd,actual).0>0;
-        let proof=SurfaceProof{theme:if light{"light"}else{"dark"}.into(),corner_radius:if embedded{radius}else{0},width:rect.right,height:rect.bottom,
-            corner_cut:has_region&&!PtInRegion(actual,0,0).as_bool(),center_included:!has_region||PtInRegion(actual,rect.right/2,rect.bottom/2).as_bool()};
+        let proof=SurfaceProof{theme:if light{"light"}else{"dark"}.into(),corner_radius:radius,width:rect.right,height:rect.bottom,
+            hwnd:host.0 as isize,screen:[screen.left,screen.top,screen.right-screen.left,screen.bottom-screen.top],parent_matches:GetParent(hwnd).is_ok_and(|actual|actual.0 as isize==parent),controller_bounds:[controller_bounds.left,controller_bounds.top,controller_bounds.right,controller_bounds.bottom],
+            corner_cut:has_region&&!PtInRegion(actual,0,0).as_bool(),bottom_corner_cut:has_region&&!PtInRegion(actual,0,rect.bottom-1).as_bool(),center_included:!has_region||PtInRegion(actual,rect.right/2,rect.bottom/2).as_bool()};
         let _=DeleteObject(actual);
         if let Some(state)=VIEW_STATUS.lock().unwrap().get_mut(&label){if (state.target=="embedded")==embedded{state.surface=Some(proof);}}
     }).map_err(|e|e.to_string())
@@ -56,7 +68,7 @@ pub fn refresh_surfaces(app:&AppHandle){
 }
 
 #[derive(Clone,serde::Serialize)]
-struct SurfaceProof { theme:String,corner_radius:i32,width:i32,height:i32,corner_cut:bool,center_included:bool }
+struct SurfaceProof { theme:String,corner_radius:i32,width:i32,height:i32,corner_cut:bool,bottom_corner_cut:bool,center_included:bool,hwnd:isize,screen:[i32;4],parent_matches:bool,controller_bounds:[i32;4] }
 #[derive(Clone,serde::Serialize)]
 struct ViewStatus { service:String, target:String, phase:String, code:Option<i32>, navigation:u64, #[serde(skip)] instance:u64, #[serde(skip)] revealed_navigation:Option<u64>, #[serde(skip_serializing_if="Option::is_none")] surface:Option<SurfaceProof> }
 pub fn status()->serde_json::Value { serde_json::json!(VIEW_STATUS.lock().unwrap().values().cloned().collect::<Vec<_>>()) }
@@ -96,6 +108,9 @@ fn observe_navigation(app:&AppHandle,view:&tauri::Webview,service:&str,target:&s
                 if success.as_bool(){if let Some((_,_,target,_))=current.as_ref(){if let Some(view)=completed_app.get_webview(&completed_label){let _=apply_surface(&completed_app,&view,target);}}}
                 let _=controller.SetIsVisible(success.as_bool()&&can_present&&wants_visible(&completed_label));
                 publish_for(&completed_app,&completed_label,if success.as_bool(){"loaded"}else{"error"},if success.as_bool(){None}else{Some(code.0)},Some(id),Some(instance));
+                // Controller visibility alone cannot reveal a child HWND that
+                // was hidden while loading or reparenting.
+                if let Some(view)=completed_app.get_webview(&completed_label){let _=if success.as_bool()&&can_present&&wants_visible(&completed_label){view.show()}else{view.hide()};}
             }Ok(())
         }));
         let mut start_token=0;let mut completed_token=0;
@@ -117,6 +132,20 @@ fn view_url(service:&str)->Result<reqwest::Url,String>{
 }
 fn checked_bounds(x:f64,y:f64,width:f64,height:f64)->Result<(),String>{
     if ![x,y,width,height].iter().all(|n|n.is_finite())||x<0.||y<0.||width<=0.||height<=0.{Err("Invalid AI view bounds".into())}else{Ok(())}
+}
+
+// DOM bounds are CSS pixels. The island WebView has its own UI zoom on top
+// of monitor DPI; the separate shell uses only monitor DPI. Pass the entire
+// physical rectangle so Wry never reads coordinates from the previous parent
+// between set_position and set_size after reparenting a child WebView.
+fn css_bounds(window:&tauri::Window,x:f64,y:f64,width:f64,height:f64)->Result<Rect,String>{
+    checked_bounds(x,y,width,height)?;
+    let factor=if window.label()=="main"{
+        crate::win::WindowManager::effective_scale(windows::Win32::Foundation::HWND(window.hwnd().map_err(|e|e.to_string())?.0 as _))
+    }else{window.scale_factor().map_err(|e|e.to_string())?};
+    let values=[x,y,width,height].map(|value|(value*factor).round());
+    if values.iter().any(|value|!value.is_finite()||*value>i32::MAX as f64){return Err("AI view bounds exceed native coordinates".into());}
+    Ok(Rect{position:PhysicalPosition::new(values[0] as i32,values[1] as i32).into(),size:PhysicalSize::new(values[2].max(1.) as u32,values[3].max(1.) as u32).into()})
 }
 
 fn service_url(service:&str)->Result<reqwest::Url,String>{
@@ -182,18 +211,19 @@ pub fn embed(app:&AppHandle,service:&str,x:f64,y:f64,width:f64,height:f64,focus:
     let is_popped=popped().as_deref()==Some(service);
     hide_views(app,if is_popped{None}else{Some(service)})?;
     if is_popped{return Ok(());}
+    let main=app.get_window("main").ok_or("Main window is unavailable")?;
+    let bounds=css_bounds(&main,x,y,width,height)?;
     let label=format!("web-ai-{service}");
     let webview=if let Some(view)=app.get_webview(&label){
         let main=app.get_window("main").ok_or("Main window is unavailable")?;
         retarget(app,&view,&main,"embedded")?;view
     }else{
         let window=app.get_window("main").ok_or("Main window is unavailable")?;
-        let view=window.add_child(tauri::webview::WebviewBuilder::new(&label,WebviewUrl::External(reqwest::Url::parse("about:blank").unwrap())).initialization_script(surface_script(app,"embedded")).focused(false),LogicalPosition::new(x,y),LogicalSize::new(width,height)).map_err(|e|e.to_string())?;
+        let view=window.add_child(tauri::webview::WebviewBuilder::new(&label,WebviewUrl::External(reqwest::Url::parse("about:blank").unwrap())).initialization_script(surface_script(app,"embedded")).focused(false),bounds.position,bounds.size).map_err(|e|e.to_string())?;
         view.hide().map_err(|e|e.to_string())?;
         observe_navigation(app,&view,service,"embedded",url)?;view
     };
-    webview.set_position(LogicalPosition::new(x,y)).map_err(|e|e.to_string())?;
-    webview.set_size(LogicalSize::new(width,height)).map_err(|e|e.to_string())?;
+    webview.set_bounds(bounds).map_err(|e|e.to_string())?;
     apply_surface(app,&webview,"embedded")?;
     if !accept_word(word){webview.hide().map_err(|e|e.to_string())?;return view_activity(app,&webview,false);}
     show_view(app,&webview)?;
@@ -304,12 +334,13 @@ pub fn window_attach(app:&AppHandle,service:&str,x:f64,y:f64,width:f64,height:f6
     if popped().as_deref()!=Some(service){return Ok(());}
     hide_pop_views(app,Some(service))?;
     let window=app.get_window("web-ai-window").ok_or("AI window is not open")?;
+    let bounds=css_bounds(&window,x,y,width,height)?;
     let label=format!("web-ai-{service}");
     let view=if let Some(view)=app.get_webview(&label){retarget(app,&view,&window,"window")?;view}else{
-        let view=window.add_child(tauri::webview::WebviewBuilder::new(&label,WebviewUrl::External(reqwest::Url::parse("about:blank").unwrap())).initialization_script(surface_script(app,"window")).focused(false),LogicalPosition::new(x,y),LogicalSize::new(width,height)).map_err(|e|e.to_string())?;
+        let view=window.add_child(tauri::webview::WebviewBuilder::new(&label,WebviewUrl::External(reqwest::Url::parse("about:blank").unwrap())).initialization_script(surface_script(app,"window")).focused(false),bounds.position,bounds.size).map_err(|e|e.to_string())?;
         view.hide().map_err(|e|e.to_string())?;observe_navigation(app,&view,service,"window",url)?;view
     };
-    view.set_position(LogicalPosition::new(x,y)).map_err(|e|e.to_string())?;view.set_size(LogicalSize::new(width,height)).map_err(|e|e.to_string())?;apply_surface(app,&view,"window")?;show_view(app,&view)
+    view.set_bounds(bounds).map_err(|e|e.to_string())?;apply_surface(app,&view,"window")?;show_view(app,&view)
 }
 pub fn window_present(app:&AppHandle,service:&str)->Result<(),String>{
     let _operation=WINDOW_OPERATION.lock().unwrap();
@@ -331,11 +362,12 @@ pub fn window_reveal(app:&AppHandle,service:&str,navigation:u64)->Result<bool,St
     if view.window().label()!="web-ai-window"{return Ok(false);}
     let instance=VIEW_STATUS.lock().unwrap().get(&label).map(|state|state.instance);
     let (sender,receiver)=mpsc::channel();
+    let reveal_view=view.clone();
     view.with_webview(move|platform|unsafe{
         let allow={let mut states=VIEW_STATUS.lock().unwrap();states.get_mut(&label).is_some_and(|state|{
             if Some(state.instance)==instance&&state.target=="window"&&state.phase=="loaded"&&state.navigation==navigation&&wants_visible(&label){state.revealed_navigation=Some(navigation);true}else{false}
         })};
-        let result=if allow{platform.controller().SetIsVisible(true).map(|_|true).map_err(|error|error.to_string())}else{Ok(false)};
+        let result=if allow{platform.controller().SetIsVisible(true).map_err(|error|error.to_string()).and_then(|_|reveal_view.show().map(|_|true).map_err(|error|error.to_string()))}else{Ok(false)};
         let _=sender.send(result);
     }).map_err(|error|error.to_string())?;
     receiver.recv_timeout(std::time::Duration::from_secs(2)).map_err(|_|"AI page presentation timed out".to_owned())?
