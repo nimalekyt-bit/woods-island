@@ -1,6 +1,11 @@
 // Lucide icon geometry, ISC license; see THIRD_PARTY_NOTICES.md.
 import { React } from "../react";
 import { n as createIcon } from "../compat/shared.js";
+export const PanelsTopLeft = createIcon({name:"panels-top-left",size:24,node:[
+  ["rect", {width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],
+  ["path", {d:"M3 9h18",key:"1pudct"}],
+  ["path", {d:"M9 21V9",key:"1oto5p"}]
+]});
 export const Music2 = createIcon({name:"music-2",size:24,node:[
   ["circle", { cx: "8", cy: "18", r: "4", key: "1fc0mg" }],
   ["path", { d: "M12 18V2l7 4", key: "g04rme" }]
@@ -105,6 +110,11 @@ export const Download = createIcon({name:"download",size:24,node:[
   ["line", { x1: "12", x2: "12", y1: "15", y2: "3", key: "1vk2je" }]
 ]});
 export const Check = createIcon({name:"check",size:24,node:[["path", { d: "M20 6 9 17l-5-5", key: "1gmf2c" }]]});
+export const Link2 = createIcon({name:"link-2",size:24,node:[
+  ["path",{d:"M9 17H7A5 5 0 0 1 7 7h2",key:"1mdhnl"}],
+  ["path",{d:"M15 7h2a5 5 0 0 1 0 10h-2",key:"1kvlxg"}],
+  ["line",{x1:"8",x2:"16",y1:"12",y2:"12",key:"13dsd"}]
+]});
 export const ShieldCheck = createIcon({name:"shield-check",size:24,node:[
   [
     "path",
