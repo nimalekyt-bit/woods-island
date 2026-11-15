@@ -67,6 +67,76 @@ async function assertPassiveForeground(client) {
   return {tauriFocused,foregroundPid,testProcessPid:proc.pid,noActivate:true};
 }
 
+// Read the HWND rectangle independently of the provider's CDP screenshot and
+// of the application's cached surface proof. This also runs against old EXEs.
+function readWebAiHosts() {
+  const source = `
+using System; using System.Text; using System.Collections.Generic; using System.Runtime.InteropServices;
+public class WoodsQaHosts {
+  public delegate bool Callback(IntPtr hwnd, IntPtr data);
+  [StructLayout(LayoutKind.Sequential)] public struct Rect { public int left,top,right,bottom; }
+  [StructLayout(LayoutKind.Sequential)] public struct Point { public int x,y; }
+  [DllImport("user32.dll")] static extern bool EnumWindows(Callback cb,IntPtr data);
+  [DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr hwnd,Callback cb,IntPtr data);
+  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hwnd,out uint pid);
+  [DllImport("user32.dll")] static extern IntPtr GetParent(IntPtr hwnd);
+  [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr hwnd,out Rect rect);
+  [DllImport("user32.dll")] static extern bool GetClientRect(IntPtr hwnd,out Rect rect);
+  [DllImport("user32.dll")] static extern bool ClientToScreen(IntPtr hwnd,ref Point point);
+  [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr hwnd);
+  [DllImport("user32.dll")] static extern IntPtr GetWindowLongPtrW(IntPtr hwnd,int index);
+  [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern int GetClassName(IntPtr hwnd,StringBuilder text,int size);
+  [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern int GetWindowText(IntPtr hwnd,StringBuilder text,int size);
+  [DllImport("user32.dll")] static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
+  [DllImport("gdi32.dll")] static extern IntPtr CreateRectRgn(int left,int top,int right,int bottom);
+  [DllImport("user32.dll")] static extern int GetWindowRgn(IntPtr hwnd,IntPtr region);
+  [DllImport("gdi32.dll")] static extern int GetRgnBox(IntPtr region,out Rect rect);
+  [DllImport("gdi32.dll")] static extern bool PtInRegion(IntPtr region,int x,int y);
+  [DllImport("gdi32.dll")] static extern bool DeleteObject(IntPtr region);
+  public class Host { public long hwnd,parent,root; public string title; public bool ownVisible,rootVisible,topCut,bottomCut; public int[] screen,origin,client,rootScreen,region; }
+  public static List<Host> Read(uint pid) {
+    SetThreadDpiAwarenessContext(new IntPtr(-4));
+    var hosts=new List<Host>();
+    EnumWindows((root,data)=>{ uint owner; GetWindowThreadProcessId(root,out owner); if(owner!=pid)return true;
+      var title=new StringBuilder(256);GetWindowText(root,title,256);Rect rootScreen;GetWindowRect(root,out rootScreen);
+      EnumChildWindows(root,(hwnd,unused)=>{
+        var name=new StringBuilder(256);GetClassName(hwnd,name,256);
+        if(name.ToString()!="WRY_WEBVIEW")return true;
+        var parent=GetParent(hwnd);Rect screen,client;var origin=new Point();
+        if(!GetWindowRect(hwnd,out screen)||!GetClientRect(parent,out client)||!ClientToScreen(parent,ref origin))throw new Exception("Cannot read native host geometry");
+        var region=CreateRectRgn(0,0,0,0);var hasRegion=GetWindowRgn(hwnd,region)>0;Rect box;GetRgnBox(region,out box);
+        var topCut=hasRegion&&!PtInRegion(region,0,0);var bottomCut=hasRegion&&!PtInRegion(region,0,screen.bottom-screen.top-1);DeleteObject(region);
+        hosts.Add(new Host{hwnd=hwnd.ToInt64(),parent=parent.ToInt64(),root=root.ToInt64(),title=title.ToString(),ownVisible=(GetWindowLongPtrW(hwnd,-16).ToInt64()&0x10000000)!=0,rootVisible=IsWindowVisible(root),topCut=topCut,bottomCut=bottomCut,region=hasRegion?new[]{box.left,box.top,box.right,box.bottom}:null,screen=new[]{screen.left,screen.top,screen.right-screen.left,screen.bottom-screen.top},origin=new[]{origin.x,origin.y},client=new[]{client.right,client.bottom},rootScreen=new[]{rootScreen.left,rootScreen.top}});return true;
+      },IntPtr.Zero);return true;
+    },IntPtr.Zero);return hosts;
+  }
+}`;
+  const command=`$ErrorActionPreference='Stop'; Add-Type -TypeDefinition @'\n${source}\n'@; ConvertTo-Json -Depth 5 -Compress -InputObject @([WoodsQaHosts]::Read(${proc.pid}))`;
+  const result=spawnSync('powershell.exe',['-NoProfile','-EncodedCommand',Buffer.from(command,'utf16le').toString('base64')],{encoding:'utf8',windowsHide:true});
+  assert.equal(result.status,0,result.stderr);
+  return JSON.parse(result.stdout.trim());
+}
+async function sampleWebAiHost(client,service,target) {
+  const selector=target==='embedded'?`[data-web-ai-slot="${service}"]`:'[data-web-ai-content]';
+  const dom=await client.evaluate(`(()=>{const slot=document.querySelector(${JSON.stringify(selector)}),r=slot?.getBoundingClientRect(),style=slot&&getComputedStyle(slot);return r?{rect:[r.x,r.y,r.width,r.height],viewport:[innerWidth,innerHeight],border:style.borderTopColor,background:style.backgroundColor}:null})()`);
+  assert(dom&&dom.rect[2]>0&&dom.rect[3]>0,'Real provider slot is missing');
+  const windowPosition=await client.invoke('plugin:window|outer_position',{label:target==='embedded'?'main':'web-ai-window'});
+  const surface=(await client.invoke('web_ai_status')).find(row=>row.service===service&&row.target===target)?.surface;
+  const observedHosts=readWebAiHosts();
+  // Passive QA deliberately keeps the shell root hidden. Its child HWND still
+  // has authoritative physical coordinates and must carry its own visible bit.
+  const hosts=observedHosts.filter(h=>h.rootScreen[0]===windowPosition.x&&h.rootScreen[1]===windowPosition.y&&h.parent===h.root&&(!surface?.hwnd||h.hwnd===surface.hwnd));
+  const candidates=hosts.map(host=>{
+    const factor=host.client[0]/dom.viewport[0];
+    const expected=dom.rect.map((value,i)=>Math.round(value*factor)+(i<2?host.origin[i]:0));
+    return {host,dom,factor,expected,delta:host.screen.map((value,i)=>value-expected[i])};
+  });
+  const match=candidates.find(row=>row.delta.every(value=>Math.abs(value)<=2)&&row.host.ownVisible&&row.host.topCut===(target==='embedded')&&row.host.bottomCut&&row.host.region?.[0]===0&&row.host.region?.[1]===0&&Math.abs(row.host.region[2]-row.host.screen[2])<=1&&Math.abs(row.host.region[3]-row.host.screen[3])<=1);
+  const controllerMatches=!surface?.controller_bounds||(surface.parent_matches&&surface.controller_bounds[0]===0&&surface.controller_bounds[1]===0&&surface.controller_bounds[2]===surface.width&&surface.controller_bounds[3]===surface.height);
+  const controllerFitsHost=!surface?.controller_bounds||!!match&&surface.controller_bounds[2]===match.host.screen[2]&&surface.controller_bounds[3]===match.host.screen[3];
+  return {service,target,match:!!match&&controllerMatches&&controllerFitsHost,candidates,surface,...(!match?{windowPosition,observedHosts}:{})};
+}
+
 // Runs in the real WebView2 page. Leaf bounds include stroke and all four
 // transformed corners, so rotated shoes and the tail's round caps are covered.
 function readAttachedPaint() {
@@ -1289,6 +1359,52 @@ async function quit(client) {
       await main.evaluate(`import('/assets/runtime-debug.js').then(({O})=>O.webAiHide())`);
     }
   });
+  await check('Web AI native host matches real DOM slot through scale and reparent',async()=>{
+    const settings=await main.invoke('settings_get');
+    const before=await main.evaluate(`import('/assets/runtime-debug.js').then(({ot})=>{const s=ot.getState();return {expanded:s.expanded,tab:s.tab,chatService:s.chatService,holdOpen:s.holdOpen,license:s.license}})`);
+    const samples=[];
+    try{
+      await main.invoke('settings_set',{settings:{reducedMotion:'reduce'}});
+      const scales=process.env.WOODS_TEST_WEBAI_SCALES?process.env.WOODS_TEST_WEBAI_SCALES.split(',').map(Number):[80,100,125,150,200];
+      assert(scales.length&&scales.every(scale=>[80,100,125,150,200].includes(scale)),'Invalid Web AI scale matrix');
+      for(const theme of ['dark','light'])for(const service of ['gemini','deepseek'])for(const scale of scales){
+        await main.invoke('settings_set',{settings:{scale,theme}});
+        await main.evaluate(`import('/assets/runtime-debug.js').then(({ot})=>ot.setState({expanded:true,tab:'chat',chatService:${JSON.stringify(service)},holdOpen:true,license:{...ot.getState().license,pro:true}}))`);
+        await waitFor(main,`window.__TAURI_INTERNALS__.invoke('web_ai_status').then(s=>s.some(s=>s.service===${JSON.stringify(service)}&&s.target==='embedded'&&s.phase==='loaded'))`,'real embedded slot');
+        await pause(400);
+        samples.push({theme,scale,stage:'embedded',...await sampleWebAiHost(main,service,'embedded')});
+        await main.invoke('web_ai_window',{service});
+        const pages=await pagesReady(p=>p.url.endsWith('/web-ai.html'));
+        const shell=await attach(pages.find(p=>p.url.endsWith('/web-ai.html')));
+        await waitFor(shell,`document.querySelector('[data-web-ai-status]')?.dataset.webAiStatus==='loaded'&&!document.querySelector('.webai-placeholder')`,'presented native host');
+        await pause(200);
+        samples.push({theme,scale,stage:'pop-out',...await sampleWebAiHost(shell,service,'window')});
+        await shell.invoke('plugin:window|set_size',{label:'web-ai-window',value:{Logical:{width:640,height:480}}});
+        await pause(250);
+        samples.push({theme,scale,stage:'resized',...await sampleWebAiHost(shell,service,'window')});
+        await shell.invoke('plugin:window|set_position',{label:'web-ai-window',value:{Physical:{x:120,y:160}}});
+        await pause(200);
+        samples.push({theme,scale,stage:'moved',...await sampleWebAiHost(shell,service,'window')});
+        await main.invoke('web_ai_window_close',{returnToPill:true});await waitForWindowClosed('/web-ai.html');
+        await waitFor(main,`window.__TAURI_INTERNALS__.invoke('web_ai_status').then(s=>s.some(s=>s.service===${JSON.stringify(service)}&&s.target==='embedded'&&s.phase==='loaded'))`,'returned provider');
+        await pause(400);
+        samples.push({theme,scale,stage:'returned',...await sampleWebAiHost(main,service,'embedded')});
+      }
+      await assertPassiveForeground(main);
+      await fs.writeFile(path.join(directory,'web-ai-native-geometry.json'),JSON.stringify(samples,null,2));
+      assert(samples.every(row=>row.match),'Native host differs from real DOM slot: '+JSON.stringify(samples.filter(row=>!row.match)));
+      for(const row of samples.filter(row=>row.target==='embedded'))for(const candidate of row.candidates){
+        assert.equal(candidate.dom.border,row.theme==='light'?'rgb(216, 217, 221)':'rgb(59, 62, 67)','Embedded border must use its own theme colour');
+        assert.equal(candidate.dom.background,row.theme==='light'?'rgb(246, 246, 247)':'rgb(23, 25, 28)','No black/white uncovered slot background');
+      }
+      return {samples,physicalTolerance:2,independentWin32:true};
+    }finally{
+      await fs.writeFile(path.join(directory,'web-ai-native-geometry.json'),JSON.stringify(samples,null,2));
+      await main.invoke('web_ai_window_close');await waitForWindowClosed('/web-ai.html');
+      await main.invoke('settings_set',{settings:{theme:settings.theme,scale:settings.scale,reducedMotion:settings.reducedMotion}});
+      await main.evaluate(`import('/assets/runtime-debug.js').then(async({ot,O})=>{ot.setState(${JSON.stringify(before)});await O.webAiHide()})`);
+    }
+  });
   await check('Web AI embedded surface clips native corners and follows theme without losing the draft',async()=>{
     const settings=await main.invoke('settings_get');
     const before=await main.evaluate(`import('/assets/runtime-debug.js').then(({ot})=>{const s=ot.getState();return {expanded:s.expanded,tab:s.tab,chatService:s.chatService,holdOpen:s.holdOpen,license:s.license}})`);
@@ -1413,7 +1529,9 @@ async function quit(client) {
       const gemini=await attach(pages.find(p=>p.url===webAiUrl+'/gemini'));
       assert.equal(await gemini.evaluate(`document.visibilityState`),'visible','The provider must be visible after the shell fade');
       assert.equal(await gemini.evaluate(`document.documentElement.hasAttribute('data-woods-ai-theme')`),false,'Embedded presentation must be removed in the pop-out');
-      assert.equal((await main.invoke('web_ai_status')).find(s=>s.service==='gemini').surface.corner_cut,false,'Embedded native clipping must be removed in the pop-out');
+      const popSurface=(await main.invoke('web_ai_status')).find(s=>s.service==='gemini').surface;
+      assert.equal(popSurface.corner_cut,false,'The separate window must meet the toolbar with square top corners');
+      assert.equal(popSurface.bottom_corner_cut,true,'Native bottom corners must follow the rounded shell frame');
       const currentNavigation=(await main.invoke('web_ai_status')).find(s=>s.service==='gemini'&&s.target==='window').navigation;
       assert.equal(await main.invoke('web_ai_window_reveal',{service:'gemini',navigation:currentNavigation+1}),false,'A stale navigation must not reveal a page');
       await gemini.evaluate(`document.querySelector('input').value='Сохранённый черновик'`);
