@@ -1,0 +1,49 @@
+name: Publish website release metadata
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Accepted stable version; leave empty to use latest stable'
+        type: string
+        required: false
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: website-release-metadata
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.event_name != 'release' || (!github.event.release.draft && !github.event.release.prerelease)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - name: Verify and publish stable website metadata
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REQUESTED_VERSION: ${{ inputs.version }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+        shell: pwsh
+        run: |
+          $version=$env:REQUESTED_VERSION
+          if (-not $version -and $env:EVENT_TAG) { $version=$env:EVENT_TAG -replace '^v','' }
+          if (-not $version) {
+            $headers=@{ Authorization='Bearer '+$env:GITHUB_TOKEN; Accept='application/vnd.github+json' }
+            $version=(Invoke-RestMethod 'https://api.github.com/repos/nimalekyt-bit/woods-island/releases/latest' -Headers $headers).tag_name -replace '^v',''
+          }
+          node scripts/finalize-release.mjs $version --publish
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: verified-website-release-metadata
+          path: dist-release-metadata/website-release.json
+          if-no-files-found: error

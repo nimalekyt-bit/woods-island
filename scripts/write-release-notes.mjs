@@ -1,0 +1,11 @@
+import { readFile, writeFile } from 'node:fs/promises';
+import assert from 'node:assert/strict';
+import { validateContent } from './release-contract.mjs';
+const root=new URL('../',import.meta.url);
+const packageJson=JSON.parse(await readFile(new URL('package.json',root),'utf8'));
+const content=validateContent(JSON.parse(await readFile(new URL(`releases/${packageJson.version}/release.json`,root),'utf8')));
+assert.equal(content.version,packageJson.version);
+const target=new URL(`RELEASE_NOTES_${content.version}.md`,root);
+if(process.argv.includes('--check'))assert.equal((await readFile(target,'utf8')).replaceAll('\r\n','\n'),content.githubNotes,'Release notes differ from canonical content');
+else await writeFile(target,content.githubNotes);
+console.log(`Canonical release notes ${content.version} verified.`);

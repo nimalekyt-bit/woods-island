@@ -4,10 +4,13 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { dirname, basename, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { validateContent } from './release-contract.mjs';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const installer = resolve(process.argv[2] || 'missing-installer');
 const packageJson = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
 const version = packageJson.version;
+const releaseContent = validateContent(JSON.parse(await readFile(join(root, 'releases', version, 'release.json'), 'utf8')));
+if (releaseContent.version !== version) throw Error('Release content version mismatch');
 if (!/^\d+\.\d+\.\d+$/.test(version)) throw Error('A stable release version is required');
 const name = `Woods-Island-${version}-windows-x64-Setup.exe`;
 if (basename(installer) !== name) throw Error('Installer filename/version mismatch');
@@ -31,7 +34,7 @@ if (config.plugins?.updater?.requireSignedVersion !== true) throw Error('Signed 
 if (config.plugins?.updater?.windows?.installMode !== 'quiet')
   throw Error('Quiet update installation is required to avoid a hidden language selector');
 const update = {
-  version, notes: 'Чаты Gemini и DeepSeek: перенос между пилюлей и окном с сохранением черновика и прокрутки, тема и скругления встроенного чата, исправления отображения и навигации. / Gemini and DeepSeek chats: move between the pill and a window while keeping drafts and scroll position, embedded chat theme and rounded corners, display and navigation fixes.',
+  version, notes: releaseContent.updaterNotes,
   pub_date: new Date().toISOString(),
   platforms: { 'windows-x86_64': {
     signature, url: `https://github.com/nimalekyt-bit/woods-island/releases/download/v${version}/${name}`,

@@ -38,3 +38,5 @@ runtime-manifest.json
 !social/*.png
 !runtime/characters/assets/**/*.png
 
+# Verified metadata output is generated and uploaded by release-metadata.yml.
+dist-release-metadata/
