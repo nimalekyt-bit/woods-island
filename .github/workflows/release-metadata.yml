@@ -1,5 +1,7 @@
 name: Publish website release metadata
 on:
+  schedule:
+    - cron: '2,17,32,47 * * * *'
   release:
     types: [published]
   workflow_dispatch:
@@ -20,30 +22,46 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
+      - name: Select stable release and recover missing metadata
+        id: stable
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REQUESTED_VERSION: ${{ inputs.version }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+          EVENT_NAME: ${{ github.event_name }}
+        shell: pwsh
+        run: |
+          $headers=@{ Authorization='Bearer '+$env:GITHUB_TOKEN; Accept='application/vnd.github+json' }
+          $latest=Invoke-RestMethod 'https://api.github.com/repos/nimalekyt-bit/woods-island/releases/latest' -Headers $headers
+          $version=$env:REQUESTED_VERSION
+          if (-not $version -and $env:EVENT_TAG) { $version=$env:EVENT_TAG -replace '^v','' }
+          if (-not $version) { $version=$latest.tag_name -replace '^v','' }
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid stable version' }
+          $required=$env:EVENT_NAME -ne 'schedule' -or -not ($latest.assets.name -contains 'website-release.json')
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "required=$($required.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          if (-not $required) { Write-Host 'Stable metadata already exists; scheduled run is a no-op' }
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        if: steps.stable.outputs.required == 'true'
         with:
           ref: main
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        if: steps.stable.outputs.required == 'true'
         with:
           node-version: 22
       - name: Verify and publish stable website metadata
+        if: steps.stable.outputs.required == 'true'
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          REQUESTED_VERSION: ${{ inputs.version }}
-          EVENT_TAG: ${{ github.event.release.tag_name }}
+          SELECTED_VERSION: ${{ steps.stable.outputs.version }}
         shell: pwsh
         run: |
-          $version=$env:REQUESTED_VERSION
-          if (-not $version -and $env:EVENT_TAG) { $version=$env:EVENT_TAG -replace '^v','' }
-          if (-not $version) {
-            $headers=@{ Authorization='Bearer '+$env:GITHUB_TOKEN; Accept='application/vnd.github+json' }
-            $version=(Invoke-RestMethod 'https://api.github.com/repos/nimalekyt-bit/woods-island/releases/latest' -Headers $headers).tag_name -replace '^v',''
-          }
-          node scripts/finalize-release.mjs $version --publish
+          node scripts/finalize-release.mjs $env:SELECTED_VERSION --publish
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: steps.stable.outputs.required == 'true'
         with:
           name: verified-website-release-metadata
           path: dist-release-metadata/website-release.json
