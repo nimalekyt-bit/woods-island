@@ -5,6 +5,7 @@ import { github, download } from './release-github.mjs';
 import { assetNames, validateContent, validateReleaseIdentity, sha256 } from './release-contract.mjs';
 const root=new URL('../',import.meta.url);
 const version=process.argv[2];assert(/^\d+\.\d+\.\d+$/.test(version),'Usage: node scripts/finalize-release.mjs <stable-version> [--publish]');
+assert.equal(execFileSync('git',['rev-parse','--is-shallow-repository'],{cwd:root,encoding:'utf8'}).trim(),'false','Full Git history is required to identify the editorial revision; fetch with --unshallow');
 const content=validateContent(JSON.parse(await readFile(new URL(`releases/${version}/release.json`,root),'utf8')));
 assert.equal(content.version,version);
 const release=await github(`releases/tags/v${version}`);
