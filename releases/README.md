@@ -8,6 +8,8 @@ The editorial record intentionally does not contain its own Git commit hash or a
 
 The metadata workflow runs when an accepted stable release is published. All five existing payloads must already be uploaded. It accepts neither draft nor prerelease, verifies both installer scenarios and downloads/hashes each payload before adding the website sidecar. Existing binaries, release history, `latest.json` and signatures are not replaced. Rerunning with identical metadata is a no-op; changing an existing sidecar fails for inspection.
 
+An existing sidecar pins its accepted full CI run, so later diagnostics or full rebuilds do not change its identity. For new metadata, diagnostic artifact-reuse runs cannot shadow a qualifying full installer run. The complete sidecar must fit within 256 KiB before upload; oversized editorial content fails without publishing unusable metadata.
+
 Every 15 minutes a lightweight stable-release check recovers missing metadata, including suppressed `GITHUB_TOKEN` release events and temporarily incomplete uploads. Existing metadata makes a scheduled run a no-op. Manual dispatch remains available for immediate publication or a full repeated verification. All recovery paths retain the same installer and checksum gates. GitHub may delay scheduled runs. This workflow does not approve or publish an untested application build.
 
 ```sh

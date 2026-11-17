@@ -37,6 +37,7 @@ const sums=new Map([...small.checksums.toString('utf8').matchAll(/^([a-f0-9]{64}
 for(const kind of ['setup','portable','updater','signature'])assert.equal(sums.get(assets[kind].name),assets[kind].sha256,'Published sums mismatch');
 for(const kind of ['setup','portable'])await download(assets[kind].url,assets[kind]);
 const bytes=Buffer.from(JSON.stringify(manifest,null,2)+'\n');
+assert(bytes.length<=262144,'Website metadata exceeds 256 KiB; shorten editorial content before publication');
 await mkdir(new URL('dist-release-metadata/',root),{recursive:true});await writeFile(new URL('dist-release-metadata/website-release.json',root),bytes);
 if(process.argv.includes('--publish')) {
   if(current.length){assert.equal(current[0].digest,'sha256:'+sha256(bytes),'Published website manifest differs; inspect before any revision');console.log('Existing website metadata verified; no changes.');}
