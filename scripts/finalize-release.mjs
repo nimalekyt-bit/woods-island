@@ -23,7 +23,7 @@ for(const [kind,name] of Object.entries(assetNames(version))) {
   const asset=matches[0];assert(/^sha256:[a-f0-9]{64}$/.test(asset.digest),'GitHub SHA256 required');
   assets[kind]={name,bytes:asset.size,sha256:asset.digest.slice(7),url:asset.browser_download_url};
 }
-const contentRevision=execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim();
+const contentRevision=execFileSync('git',['log','-1','--format=%H','--',`releases/${version}/release.json`],{cwd:root,encoding:'utf8'}).trim();
 const committed=await github(`contents/releases/${version}/release.json?ref=${contentRevision}`);
 assert.deepEqual(JSON.parse(Buffer.from(committed.content,'base64').toString('utf8')),content,'Content must already be committed and pushed');
 const manifest={schemaVersion:1,releaseId:release.id,tag:release.tag_name,publishedAt:release.published_at,sourceRevision:source.sha,acceptanceRunId:run.id,contentRevision,content,assets};
