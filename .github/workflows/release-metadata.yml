@@ -58,6 +58,8 @@ jobs:
           SELECTED_VERSION: ${{ steps.stable.outputs.version }}
         shell: pwsh
         run: |
+          node --test scripts/release-acceptance.test.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node scripts/finalize-release.mjs $env:SELECTED_VERSION --publish
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
