@@ -8,6 +8,10 @@ const { spawn } = require("node:child_process");
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const supplied = path.resolve(process.argv[2]);
 const port = 9354;
+const hostedDebug = process.env.WOODS_HOSTED_WEBVIEW_DEBUG === "1";
+if (hostedDebug) {
+  assert(process.env.GITHUB_ACTIONS === "true" && process.env.RUNNER_ENVIRONMENT === "github-hosted" && process.env.RUNNER_OS === "Windows" && process.env.GITHUB_REPOSITORY === "nimalekyt-bit/woods-island" && process.env.RUNNER_TRACKING_ID && process.env.RUNNER_TEMP, "Hosted WebView2 debugging cannot be used locally");
+}
 let proc, ws;
 async function requireFreePort(value) {
   await new Promise((resolve, reject) => {
@@ -67,8 +71,10 @@ async function requireFreePort(value) {
       WOODS_ISLAND_STEAM_PATH: directory,
       WOODS_ISLAND_MUSIC_PORT: String(port + 1),
       APPDATA: path.join(directory, "appdata"),
-      WEBVIEW2_USER_DATA_FOLDER: path.join(directory, "webview"),
-      WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}`,
+      ...(!hostedDebug ? {
+        WEBVIEW2_USER_DATA_FOLDER: path.join(directory, "webview"),
+        WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}`,
+      } : {}),
     },
   });
   let page;

@@ -7,8 +7,8 @@
   "site": {
     "seoDescription": "Жидкая чёрная пилюля вверху экрана: музыка, загрузки, таймер, буфер обмена, полка для файлов, командная строка, OBS Studio и ИИ. Публичный выпуск {{version}} для Windows 10 и 11.",
     "summary": {
-      "ru": "Заряд устройств в острове и ручной замер Logitech G435 через LIGHTSPEED.",
-      "en": "Peripheral batteries in the island and manual Logitech G435 measurement over LIGHTSPEED."
+      "ru": "{{version}} · заряд устройств и ручной замер G435 через LIGHTSPEED.",
+      "en": "{{version}} · peripheral batteries and manual G435 readings over LIGHTSPEED."
     },
     "groups": [
       {

@@ -62,14 +62,23 @@ jobs:
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: src-tauri -> target
+          cache-on-failure: true
       - name: Rust regression tests
         run: cargo +1.98.1 test --release --locked -j 1 --manifest-path src-tauri/Cargo.toml
       - name: Build Windows executable
         run: cargo +1.98.1 build --release --locked -j 1 --manifest-path src-tauri/Cargo.toml
       - name: Verify native Windows icons
         run: node scripts/verify-windows-icons.mjs src-tauri/icons/icon.ico src-tauri/target/release/woods-island.exe src-tauri/target/release/woods-island-pet-import.exe
+      - name: Upload Windows executable
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: woods-island-windows-exe
+          path: src-tauri/target/release/woods-island.exe
+          if-no-files-found: error
+          retention-days: 14
       - name: Verify peripheral UI and scroll recovery
-        run: node scripts/verify-peripherals.cjs src-tauri/target/release/woods-island.exe
+        shell: pwsh
+        run: ./scripts/verify-peripherals-hosted.ps1 -Executable src-tauri/target/release/woods-island.exe
       - name: Prepare recording tools
         if: github.event_name == 'workflow_dispatch'
         shell: pwsh
@@ -116,13 +125,6 @@ jobs:
           path: dist-installer/
           if-no-files-found: error
           retention-days: 7
-      - name: Upload Windows executable
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: woods-island-windows-exe
-          path: src-tauri/target/release/woods-island.exe
-          if-no-files-found: error
-          retention-days: 14
   installer:
     if: always() && github.event_name == 'workflow_dispatch' && (needs.windows.result == 'success' || inputs.artifact_run_id != '')
     needs: windows
