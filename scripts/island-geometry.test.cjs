@@ -75,6 +75,20 @@ test('Palette rows, external chat viewport and home sizes retain boundaries', ()
   assert.deepEqual(geometry.calculateIslandGeometry(fixture({ expanded: true, tall: true, externalChat: true, viewportHeight: 600, homeSize: [600, 342] })), { mode: 'expanded', w: 680, h: 540, wrap: false });
 });
 
+test('Peripheral cards fit the available viewport and retain a scrollable device row', () => {
+  assert.deepEqual(geometry.homeWithPeripherals([680,342],42,1080),[680,394]);
+  assert.deepEqual(geometry.homeWithPeripherals([680,342],380,480),[680,420]);
+  assert.deepEqual(geometry.homeWithPeripherals([680,342],0,480),[680,342]);
+  assert.equal(geometry.homeWithPeripherals(null,200,480),null);
+  assert.equal(geometry.peripheralListHeight(342,1080),240);
+  assert.equal(geometry.peripheralListHeight(342,600),68);
+  assert.equal(geometry.peripheralListHeight(342,480),62);
+  const history=transitions.updateSizeHistory({w:680,h:342,fold:transitions.LIQUID_FOLDED},680,740);
+  const selected=transitions.selectSizeTransition('expanded',false,true,history.fold,true);
+  assert.deepEqual(selected.height,history.fold.height);
+  assert.deepEqual(selected.width,transitions.LIQUID_OPEN);
+});
+
 test('Lyrics wrapping is derived from reserved song width and capped at 680 px', () => {
   const short = geometry.calculateIslandGeometry(fixture({ mediaLive: true, mediaPill: 'lyrics', widgets: { words: 176 } }));
   const long = geometry.calculateIslandGeometry(fixture({ mediaLive: true, mediaPill: 'lyrics', widgets: { words: 1000 } }));

@@ -1,4 +1,5 @@
 import { ObsidianVaultSettings } from '../components/ObsidianVaultSettings';
+import { PeripheralSettings } from '../peripherals/PeripheralSettings';
 import { React as WoodsReact } from '../react';
 import { ConnectionSettings, UpdateSettings, UploadKeySettings } from '../components/ReliabilitySettings';
 import { WeatherTimezoneSettings, WeatherDataSources } from '../components/WeatherTimezoneSettings';
@@ -698,6 +699,7 @@ function at({ s: e, save: t }) {
               s ? n(`Лаунчер выключен в «Модулях»`, `The launcher is off in Modules`) : void 0,
             ),
           }),
+          (0, U.jsx)(PeripheralSettings, {preferences:e, save:t, ru:n('ru','en')==='ru'}),
         ],
       }),
       (0, U.jsx)(it, { s: e }),

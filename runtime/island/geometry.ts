@@ -47,6 +47,14 @@ export const BASE_SIZES = {
 export function chatHeight(viewportHeight: number): number {
   return Math.max(BASE_SIZES.chat[1], Math.min(780, Math.floor(viewportHeight) - 60, Math.floor((viewportHeight - 2) / 1.1)));
 }
+
+export function peripheralListHeight(homeHeight: number, viewportHeight: number): number {
+  return Math.max(62, Math.min(240, Math.floor(viewportHeight - homeHeight - 190)));
+}
+export function homeWithPeripherals(home: Size | null, panelHeight: number, viewportHeight: number): Size | null {
+  if (!home || panelHeight <= 0) return home;
+  return [home[0], Math.min(home[1] + panelHeight + 10, Math.max(200, Math.floor(viewportHeight) - 60))];
+}
 export function paletteHeight(rows: number, answer: boolean): number {
   return answer ? 330 : 56 + Math.max(0, rows) * 42 + (rows > 0 ? 8 : 0);
 }

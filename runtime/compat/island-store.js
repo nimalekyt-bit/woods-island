@@ -1,5 +1,6 @@
 import { creatures } from '../characters/drawings/creatures';
 import { focusInputAfterActivation } from '../island/input-focus';
+import { peripheralEventEnabled, samePeripheralNotice } from '../peripherals/model';
 import { things } from '../characters/drawings/things';
 import { genericDrawings } from '../characters/drawings/generic';
 import { CharacterSprite } from '../characters/CharacterSprite';
@@ -222,6 +223,7 @@ var O = {
     launcher: 2200,
     volume: 1500,
     device: 2200,
+    peripheralEvent: 4000,
     layout: 900,
     caps: 1400,
     mic: 3500,
@@ -300,6 +302,10 @@ var useIslandStore = ce((e, t) => ({
     layoutCode: ``,
     vdesk: null,
     battery: null,
+    peripherals: null,
+    peripheralCardOpen: false,
+    peripheralPanelHeight: 0,
+    peripheralListHeight: 240,
     update: null,
     updating: null,
     shelf: [],
@@ -341,6 +347,7 @@ var useIslandStore = ce((e, t) => ({
     setHoldOpen: (t) => e({ holdOpen: t }),
     pushPeek: (n) => {
       let r = t();
+      if (n.kind === 'peripheralEvent' && !peripheralEventEnabled(n, r.settings ?? {})) return;
       if (n.kind === `agentAsk`) {
         let i = { ...n, id: ++M };
         if (r.peek?.kind === `agentAsk`) {
@@ -353,19 +360,23 @@ var useIslandStore = ce((e, t) => ({
         return;
       }
       if (r.expanded || r.palette) return;
-      let i = { ...n, id: T(r.peek, n.kind, ++M) };
-      !r.peek || r.peek.kind === i.kind
+      if (n.kind === 'peripheralEvent' && r.peek && A.has(r.peek.kind)) {
+        e({queue:[...r.queue.filter(p => !samePeripheralNotice(p,n)),{...n,id:++M}]});
+        return;
+      }
+      let i = { ...n, id: samePeripheralNotice(r.peek ?? {}, n) ? T(r.peek, n.kind, ++M) : ++M };
+      !r.peek || samePeripheralNotice(r.peek, i)
         ? (e({ peek: i }), P(t, i.id, j(i.kind, t)))
         : k.has(i.kind) || A.has(i.kind) || A.has(r.peek.kind)
           ? (e({
               peek: i,
-              queue: [...(k.has(r.peek.kind) ? [] : [r.peek]), ...r.queue.filter((e) => e.kind !== i.kind)],
+              queue: [...(k.has(r.peek.kind) ? [] : [r.peek]), ...r.queue.filter((e) => !samePeripheralNotice(e, i))],
             }),
             P(t, i.id, j(i.kind, t)))
-          : e({ queue: [...r.queue.filter((e) => e.kind !== i.kind), i] });
+          : e({ queue: [...r.queue.filter((e) => !samePeripheralNotice(e, i)), i] });
     },
     nextPeek: () => {
-      let [n, ...r] = t().queue;
+      let [n, ...r] = t().queue.filter(n => n.kind !== 'peripheralEvent' || peripheralEventEnabled(n, t().settings ?? {}));
       e({ peek: n ?? null, queue: r });
       let i = n?.kind === `update` || n?.kind === `news` ? 12e3 : n && A.has(n.kind) ? O[n.kind] : 2500;
       n && P(t, n.id, j(n.kind, t, Math.min(O[n.kind], i)));

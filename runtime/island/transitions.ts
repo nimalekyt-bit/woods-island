@@ -23,8 +23,10 @@ export function updateSizeHistory(previous: SizeHistory, w: number, h: number): 
   if (previous.w === w && previous.h === h) return previous;
   return { w, h, fold: { default: LIQUID_FOLDED, width: amplitudeSpring(Math.abs(w - previous.w), 16), height: amplitudeSpring(Math.abs(h - previous.h), 7) } };
 }
-export function selectSizeTransition(mode: IslandMode, lyrics: boolean, liquid: boolean, folded: SizeTransition): SizeTransition {
+export function selectSizeTransition(mode: IslandMode, lyrics: boolean, liquid: boolean, folded: SizeTransition, boundedHeight = false): SizeTransition {
   if (mode === 'liveMedia' && lyrics) return LYRICS_SIZE;
   const open = mode === 'expanded' || mode === 'drop' || mode === 'palette';
+  if (liquid && open && boundedHeight && 'height' in folded)
+    return {default:LIQUID_OPEN,width:LIQUID_OPEN,height:folded.height};
   return liquid ? open ? LIQUID_OPEN : folded : open ? PLAIN_OPEN : PLAIN_FOLDED;
 }

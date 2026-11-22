@@ -11,6 +11,7 @@ pub mod network;
 pub mod webai;
 pub mod notifications;
 pub mod telemetry;
+pub mod peripherals;
 pub mod steam;
 pub mod notes;
 pub mod ai;
@@ -107,6 +108,22 @@ fn default_settings() -> Value {
     "clockSeconds": false,
     "clockFormat": "auto",
     "showBattery": true,
+    "showPeripherals": true,
+    "peripheralHidden": [],
+    "peripheralLimit": 3,
+    "peripheralUnknown": true,
+    "peripheralCharging": true,
+    "peripheralSort": "type",
+    "peripheralAlerts": false,
+    "peripheralLowThreshold": 20,
+    "peripheralNotifyLow": true,
+    "peripheralNotifyCharging": true,
+    "peripheralNotifyUnplugged": true,
+    "peripheralNotifyFull": true,
+    "peripheralNotifyConnection": false,
+    "peripheralNotifyDisconnection": false,
+    "peripheralNames": "{}",
+    "peripheralMuted": [],
     "mediaPill": "normal",
     "lyrics": false,
     "lyricsInPlayer": true,
@@ -707,6 +724,17 @@ async fn wifi_leave()->Result<bool,String>{tauri::async_runtime::spawn_blocking(
 
 #[tauri::command]
 async fn bt_devices()->Vec<Value>{tauri::async_runtime::spawn_blocking(network::bt_devices).await.unwrap_or_default()}
+
+#[tauri::command]
+fn peripherals_get()->Value{peripherals::snapshot()}
+
+#[tauri::command]
+fn peripherals_refresh(){peripherals::request_refresh();}
+
+#[tauri::command]
+async fn peripherals_g435_measure(id:String,allow_audio_pause:bool,app:AppHandle)->Result<Value,String>{
+    tauri::async_runtime::spawn_blocking(move||peripherals::measure_g435(&id,allow_audio_pause,&app)).await.map_err(|_|"g435Io".to_string())?
+}
 
 #[tauri::command]
 async fn bt_switch(id:Option<String>,on:Option<bool>)->Result<bool,String>{let id=id.ok_or("Bluetooth device ID is required")?;tauri::async_runtime::spawn_blocking(move||network::bt_switch(&id,on.unwrap_or(true))).await.map_err(|e|e.to_string())?.map(|_|true)}
@@ -1351,6 +1379,7 @@ pub fn run() {
             start_update_monitor(app.handle().clone(), state_clone.clone());
             notifications::start(app.handle().clone(), state_clone.clone());
             telemetry::start(app.handle().clone(), state_clone.clone());
+            peripherals::start(app.handle().clone(), state_clone.clone());
             network::start_controls_monitor(app.handle().clone(), state_clone.clone());
             let hotkey_errors = register_hotkeys(app.handle(), &state_clone.settings.lock().unwrap().clone());
             *state_clone.hotkey_errors.lock().unwrap()=hotkey_errors.clone();
@@ -1448,6 +1477,9 @@ pub fn run() {
             wifi_join,
             wifi_leave,
             bt_devices,
+            peripherals_get,
+            peripherals_refresh,
+            peripherals_g435_measure,
             bt_switch,
             vpn_chip,
             vpn_refresh,

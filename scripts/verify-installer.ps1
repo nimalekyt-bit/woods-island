@@ -57,7 +57,7 @@ function Shortcut-Paths {
   })
 }
 function Profile-Proofs {
-  @('settings.json','woods_island.db','installer-qa-sentinel.json') | ForEach-Object {
+  @('settings.json','woods_island.db','installer-qa-sentinel.json','peripheral-manual.json') | ForEach-Object {
     $file=Join-Path $taskDataDir $_
     Assert-True (Test-Path -LiteralPath $file -PathType Leaf) "Profile fixture missing: $_"
     File-Proof $file
@@ -375,6 +375,8 @@ try {
   if ($Scenario -eq 'MissingRuntime') { Remove-RunnerWebViewRuntime } else { Assert-True (-not [string]::IsNullOrWhiteSpace((WebView-Version))) 'ExistingRuntime precondition failed' }
   [IO.File]::WriteAllText((Join-Path $taskDataDir 'settings.json'),$taskPortableMigrationSettings,[Text.UTF8Encoding]::new($false))
   [IO.File]::WriteAllText((Join-Path $taskDataDir 'installer-qa-sentinel.json'),'{"fixture":"preserve-isolated-user-profile"}',[Text.UTF8Encoding]::new($false))
+  $taskManualFixture=@{'container:installer-qa-g435'=@{millivolts=4002;estimatedPercent=80;readAt=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()}} | ConvertTo-Json -Depth 4
+  [IO.File]::WriteAllText((Join-Path $taskDataDir 'peripheral-manual.json'),$taskManualFixture,[Text.UTF8Encoding]::new($false))
   if ($PreviousInstallerPath) {
     $previousSetup=File-Proof (Resolve-Path -LiteralPath $PreviousInstallerPath).Path
     $previousExe=File-Proof (Resolve-Path -LiteralPath $PreviousExePath).Path

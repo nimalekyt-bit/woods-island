@@ -117,9 +117,17 @@ fn serve_once(body: Vec<u8>, declared_length: usize) -> (String, thread::JoinHan
             }
         };
         assert!(peer.ip().is_loopback());
+        // Windows can inherit the listener's nonblocking mode on accept.
+        stream.set_nonblocking(false).unwrap();
         stream.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
         stream.set_write_timeout(Some(Duration::from_secs(2))).unwrap();
-        let mut request=[0;4096];let count=stream.read(&mut request).unwrap();
+        let mut request=[0;4096];let mut count=0;
+        while !request[..count].windows(4).any(|part|part==b"\r\n\r\n") {
+            assert!(count<request.len(),"Loopback request headers exceeded the bound");
+            let read=stream.read(&mut request[count..]).unwrap();
+            assert!(read>0,"Loopback request closed before its headers arrived");
+            count+=read;
+        }
         assert!(std::str::from_utf8(&request[..count]).unwrap().starts_with("GET /fixture.txt "));
         write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {declared_length}\r\nConnection: close\r\n\r\n").unwrap();
         stream.write_all(&body).unwrap();stream.flush().unwrap();stream.shutdown(Shutdown::Write).unwrap();

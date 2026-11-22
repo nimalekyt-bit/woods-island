@@ -15,6 +15,7 @@ const seconds = Number(process.env.WOODS_PERF_SECONDS || 20);
 const port = Number(process.env.WOODS_PERF_PORT || 9460);
 const scratchRoot = path.resolve(process.env.WOODS_PERF_TEMP || path.join(root, '.qa-temp', 'performance-work'));
 const hidden = process.env.WOODS_PERF_HIDE === '1';
+const peripheralComparison = process.env.WOODS_PERF_PERIPHERALS === '1';
 const reportPath = path.resolve(process.env.WOODS_PERF_REPORT || path.join(root, '.qa-temp', 'performance.json'));
 let proc, ws, fixtureTimer;
 const exceptions = [];
@@ -39,7 +40,7 @@ async function run(label,source) {
   await fs.mkdir(scratchRoot,{recursive:true});
   const directory=await fs.mkdtemp(path.join(scratchRoot,`woods-perf-${label}-`)),data=path.join(directory,'data');await fs.mkdir(data);
   const exe=path.join(directory,'woods-island.exe');await fs.copyFile(source,exe);
-  await fs.writeFile(path.join(data,'settings.json'),JSON.stringify({autostart:false,obsStatus:false,showClock:true,clockSeconds:false,character:'liquid',liquidWith:false,lyrics:false,mediaPill:'normal',checkUpdates:false,moduleWeather:false,autoHide:false,hideInFullscreen:false}));
+  await fs.writeFile(path.join(data,'settings.json'),JSON.stringify({firstRun:false,offsetX:hidden?10000:0,showPeripherals:peripheralComparison?label==='candidate':true,peripheralAlerts:false,autostart:false,obsStatus:false,showClock:true,clockSeconds:false,character:'liquid',liquidWith:false,lyrics:false,mediaPill:'normal',checkUpdates:false,moduleWeather:false,autoHide:false,hideInFullscreen:false}));
   proc=spawn(exe,[],{cwd:directory,windowsHide:true,stdio:'ignore',env:{...process.env,TEMP:directory,TMP:directory,WOODS_ISLAND_DATA_DIR:data,WOODS_ISLAND_AGENT_HOME:path.join(directory,'agent-home'),WOODS_ISLAND_MUSIC_PORT:String(port+1),WOODS_ISLAND_STEAM_PATH:path.join(directory,'steam'),WOODS_ISLAND_PASSIVE_QA:'1',WEBVIEW2_USER_DATA_FOLDER:path.join(directory,'webview'),WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS:`--remote-debugging-port=${port}`}});
   let pages;for(let i=0;i<100;i++){try{pages=await(await fetch(`http://127.0.0.1:${port}/json`)).json();if(pages.some(p=>p.url==='http://tauri.localhost/'))break;}catch{}await pause(200);}
   const client=await connect(pages.find(p=>p.url==='http://tauri.localhost/').webSocketDebuggerUrl);
@@ -51,8 +52,14 @@ async function run(label,source) {
   await publish();fixtureTimer=setInterval(()=>void publish().catch(()=>{}),1000);await pause(1000);
   await client.invoke('media_pick',{id:'ru.yandex.desktop.music.mod.connector'});
   await pause(8000);
-  await client.evaluate(`(async()=>{window.__perfEvents={};for(const event of ['media:update','media:bands','media:level','downloads:update','agents:update','controls:changed']){window.__perfEvents[event]=0;const handler=window.__TAURI_INTERNALS__.transformCallback(()=>window.__perfEvents[event]++);await window.__TAURI_INTERNALS__.invoke('plugin:event|listen',{event,target:{kind:'Any'},handler});}})()`);
+  await client.evaluate(`(async()=>{window.__perfEvents={};for(const event of ['media:update','media:bands','media:level','downloads:update','agents:update','controls:changed','peripherals:update']){window.__perfEvents[event]=0;const handler=window.__TAURI_INTERNALS__.transformCallback(()=>window.__perfEvents[event]++);await window.__TAURI_INTERNALS__.invoke('plugin:event|listen',{event,target:{kind:'Any'},handler});}})()`);
   const result={sha256:createHash('sha256').update(await fs.readFile(source)).digest('hex'),scenarios:{}};
+  if(peripheralComparison) {
+    const snapshot=await client.invoke('peripherals_get');
+    if(label==='baseline')assert.equal(snapshot.revision,0,'Disabled peripheral scanner must not run');
+    else assert(snapshot.revision>0,'Enabled peripheral scanner must complete');
+    result.hardware=snapshot;
+  }
   for(const phase of ['idle','music','paused']) {
     if(phase==='music') {
       fixturePlaying=true;fixtureAt=Date.now();await publish();await pause(3500);
@@ -83,6 +90,10 @@ async function run(label,source) {
     result.scenarios[phase]={durationSeconds:duration,cpuMachinePercent:100*sum/duration/os.cpus().length,cpuOneCorePercent:100*sum/duration,meanWorkingMiB:mean('workingBytes')/1048576,meanPrivateMiB:mean('privateBytes')/1048576,maxWorkingMiB:Math.max(...list.map(s=>s.workingBytes))/1048576,processes:Math.max(...list.map(s=>s.processes)),names:[...new Set(list.flatMap(s=>s.names))],jsTaskSeconds:metric(after,'TaskDuration')-metric(before,'TaskDuration'),jsHeapMiB:metric(after,'JSHeapUsedSize')/1048576,events,samples:list};
     console.log(`${label}/${phase}: CPU ${result.scenarios[phase].cpuMachinePercent.toFixed(3)}%, private ${result.scenarios[phase].meanPrivateMiB.toFixed(1)} MiB; ${list[0].processes} processes`);
   }
+  if(peripheralComparison) {
+    result.finalPeripheralRevision=(await client.invoke('peripherals_get')).revision;
+    if(label==='baseline')assert.equal(result.finalPeripheralRevision,0,'Disabled peripheral polling resumed');
+  }
   clearInterval(fixtureTimer);fixtureTimer=null;
   await client.evaluate('void window.__TAURI_INTERNALS__.invoke("quit");true');
   for(let i=0;i<100&&proc.exitCode===null;i++)await pause(100);assert.equal(proc.exitCode,0);ws.close();ws=null;proc=null;await pause(1000);
@@ -93,7 +104,7 @@ async function run(label,source) {
   assert(Number.isInteger(seconds)&&seconds>=12&&seconds<=120,'Measurement seconds must be 12–120');
   assert(Number.isInteger(port)&&port>=1024&&port<65535,'Use two valid non-privileged local ports');
   const previous=await run('baseline',baseline),current=await run('candidate',candidate);
-  const report={date:new Date().toISOString(),logicalProcessors:os.cpus().length,windowHidden:hidden,method:'Sequential isolated profiles. Idle is a forced paused connector fixture, music is playing metadata, paused follows music. CPU sums the native app and descendants. The existing Windows audio output is only observed; this harness never changes playback, volume, device or personal profile. Hidden mode measures a hidden HUD and must not be reported as visible-HUD performance.',baseline:previous,candidate:current,frontendExceptions:exceptions};
+  const report={date:new Date().toISOString(),logicalProcessors:os.cpus().length,windowHidden:hidden,peripheralComparison,method:'Sequential isolated profiles. Peripheral comparison uses the same executable with polling disabled/enabled. Idle is a forced paused connector fixture, music is playing metadata, paused follows music. CPU sums the native app and descendants observed by the sampler; short-lived scanners can fall between samples and require separate measurement. The existing Windows audio output is only observed; this harness never changes playback, volume, device or personal profile. Hidden mode measures a hidden HUD and must not be reported as visible-HUD performance.',baseline:previous,candidate:current,frontendExceptions:exceptions};
   await fs.mkdir(path.dirname(reportPath), { recursive:true });
   await fs.writeFile(reportPath,JSON.stringify(report,null,2)+'\n');
   assert.equal(exceptions.length,0,'No frontend exceptions');
@@ -109,7 +120,7 @@ async function run(label,source) {
       assert(b.events['media:update']<=2,'Unchanged paused metadata is deduplicated');
     }
   }
-  console.log('PASS process tree performance budgets; report saved in .qa-temp/performance.json');
+  console.log(`PASS process tree performance budgets; report saved in ${reportPath}`);
 })().catch(error=>{console.error(error);process.exitCode=1;}).finally(async()=>{
   clearInterval(fixtureTimer);ws?.close();
   if(proc&&proc.exitCode===null){

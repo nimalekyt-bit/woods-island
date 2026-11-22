@@ -1,0 +1,499 @@
+[
+  {
+    "pid": 4359,
+    "cid": 4,
+    "mid": 1,
+    "name": "EM903",
+    "wireless": false
+  },
+  {
+    "pid": 4360,
+    "cid": 4,
+    "mid": 1,
+    "name": "EM903",
+    "wireless": true
+  },
+  {
+    "pid": 4370,
+    "cid": 10,
+    "mid": 1,
+    "name": "A950 PRO",
+    "wireless": false
+  },
+  {
+    "pid": 4372,
+    "cid": 10,
+    "mid": 1,
+    "name": "A950 PRO",
+    "wireless": true
+  },
+  {
+    "pid": 4372,
+    "cid": 10,
+    "mid": 3,
+    "name": "A950 PRO Mg",
+    "wireless": true
+  },
+  {
+    "pid": 4372,
+    "cid": 10,
+    "mid": 4,
+    "name": "A950G",
+    "wireless": true
+  },
+  {
+    "pid": 4372,
+    "cid": 10,
+    "mid": 39,
+    "name": "A950G",
+    "wireless": true
+  },
+  {
+    "pid": 4373,
+    "cid": 10,
+    "mid": 1,
+    "name": "A950 PRO",
+    "wireless": true
+  },
+  {
+    "pid": 4373,
+    "cid": 10,
+    "mid": 4,
+    "name": "A950G",
+    "wireless": true
+  },
+  {
+    "pid": 4373,
+    "cid": 10,
+    "mid": 39,
+    "name": "A950G",
+    "wireless": true
+  },
+  {
+    "pid": 4375,
+    "cid": 10,
+    "mid": 3,
+    "name": "A950 PRO Mg",
+    "wireless": false
+  },
+  {
+    "pid": 4376,
+    "cid": 10,
+    "mid": 4,
+    "name": "A950G",
+    "wireless": false
+  },
+  {
+    "pid": 4404,
+    "cid": 4,
+    "mid": 4,
+    "name": "CM610 PRO",
+    "wireless": false
+  },
+  {
+    "pid": 4405,
+    "cid": 4,
+    "mid": 3,
+    "name": "CM670 PRO",
+    "wireless": true
+  },
+  {
+    "pid": 4405,
+    "cid": 4,
+    "mid": 4,
+    "name": "CM610 PRO",
+    "wireless": true
+  },
+  {
+    "pid": 4406,
+    "cid": 4,
+    "mid": 3,
+    "name": "CM670 PRO",
+    "wireless": false
+  },
+  {
+    "pid": 4435,
+    "cid": 10,
+    "mid": 5,
+    "name": "A950 PRO Mg",
+    "wireless": false
+  },
+  {
+    "pid": 4436,
+    "cid": 10,
+    "mid": 5,
+    "name": "A950 PRO Mg",
+    "wireless": true
+  },
+  {
+    "pid": 4436,
+    "cid": 10,
+    "mid": 11,
+    "name": "A950 AIR",
+    "wireless": true
+  },
+  {
+    "pid": 4436,
+    "cid": 10,
+    "mid": 13,
+    "name": "A950 Wing",
+    "wireless": true
+  },
+  {
+    "pid": 4436,
+    "cid": 10,
+    "mid": 15,
+    "name": "A980PRO",
+    "wireless": true
+  },
+  {
+    "pid": 4436,
+    "cid": 10,
+    "mid": 21,
+    "name": "A950 Ultra",
+    "wireless": true
+  },
+  {
+    "pid": 4438,
+    "cid": 10,
+    "mid": 7,
+    "name": "Wrangler 8",
+    "wireless": true
+  },
+  {
+    "pid": 4450,
+    "cid": 4,
+    "mid": 6,
+    "name": "LM129",
+    "wireless": false
+  },
+  {
+    "pid": 4451,
+    "cid": 4,
+    "mid": 6,
+    "name": "LM129",
+    "wireless": true
+  },
+  {
+    "pid": 4451,
+    "cid": 10,
+    "mid": 27,
+    "name": "EM911T",
+    "wireless": true
+  },
+  {
+    "pid": 4464,
+    "cid": 10,
+    "mid": 12,
+    "name": "EM950T",
+    "wireless": false
+  },
+  {
+    "pid": 4468,
+    "cid": 10,
+    "mid": 9,
+    "name": "A950 AIR",
+    "wireless": false
+  },
+  {
+    "pid": 4469,
+    "cid": 4,
+    "mid": 9,
+    "name": "A950 AIR",
+    "wireless": true
+  },
+  {
+    "pid": 4469,
+    "cid": 10,
+    "mid": 9,
+    "name": "A950 AIR",
+    "wireless": true
+  },
+  {
+    "pid": 4469,
+    "cid": 10,
+    "mid": 12,
+    "name": "EM950T",
+    "wireless": true
+  },
+  {
+    "pid": 4469,
+    "cid": 10,
+    "mid": 25,
+    "name": "A950GM",
+    "wireless": true
+  },
+  {
+    "pid": 4469,
+    "cid": 10,
+    "mid": 33,
+    "name": "A950 AIR",
+    "wireless": true
+  },
+  {
+    "pid": 4469,
+    "cid": 10,
+    "mid": 37,
+    "name": "LM180T",
+    "wireless": true
+  },
+  {
+    "pid": 4485,
+    "cid": 10,
+    "mid": 11,
+    "name": "A950 AIR",
+    "wireless": false
+  },
+  {
+    "pid": 4499,
+    "cid": 4,
+    "mid": 9,
+    "name": "A950 AIR",
+    "wireless": false
+  },
+  {
+    "pid": 4502,
+    "cid": 10,
+    "mid": 13,
+    "name": "A950 Wing",
+    "wireless": false
+  },
+  {
+    "pid": 4503,
+    "cid": 10,
+    "mid": 7,
+    "name": "Wrangler 8",
+    "wireless": false
+  },
+  {
+    "pid": 4626,
+    "cid": 10,
+    "mid": 15,
+    "name": "A980PRO",
+    "wireless": false
+  },
+  {
+    "pid": 4631,
+    "cid": 10,
+    "mid": 21,
+    "name": "A950 Ultra",
+    "wireless": false
+  },
+  {
+    "pid": 4633,
+    "cid": 10,
+    "mid": 19,
+    "name": "AE6 PRO",
+    "wireless": true
+  },
+  {
+    "pid": 4633,
+    "cid": 10,
+    "mid": 22,
+    "name": "AE7 PRO",
+    "wireless": true
+  },
+  {
+    "pid": 4646,
+    "cid": 10,
+    "mid": 18,
+    "name": "AE6",
+    "wireless": false
+  },
+  {
+    "pid": 4647,
+    "cid": 10,
+    "mid": 18,
+    "name": "AE6",
+    "wireless": true
+  },
+  {
+    "pid": 4647,
+    "cid": 10,
+    "mid": 20,
+    "name": "AE7",
+    "wireless": true
+  },
+  {
+    "pid": 4659,
+    "cid": 10,
+    "mid": 19,
+    "name": "AE6 PRO",
+    "wireless": false
+  },
+  {
+    "pid": 4661,
+    "cid": 10,
+    "mid": 22,
+    "name": "AE7 PRO",
+    "wireless": false
+  },
+  {
+    "pid": 4676,
+    "cid": 10,
+    "mid": 25,
+    "name": "A950GM",
+    "wireless": false
+  },
+  {
+    "pid": 4677,
+    "cid": 10,
+    "mid": 26,
+    "name": "A950GD",
+    "wireless": false
+  },
+  {
+    "pid": 4678,
+    "cid": 10,
+    "mid": 26,
+    "name": "A950GD",
+    "wireless": true
+  },
+  {
+    "pid": 4678,
+    "cid": 10,
+    "mid": 40,
+    "name": "A950GD",
+    "wireless": true
+  },
+  {
+    "pid": 4678,
+    "cid": 10,
+    "mid": 41,
+    "name": "A950GD",
+    "wireless": true
+  },
+  {
+    "pid": 4679,
+    "cid": 10,
+    "mid": 27,
+    "name": "EM911T",
+    "wireless": false
+  },
+  {
+    "pid": 4688,
+    "cid": 10,
+    "mid": 29,
+    "name": "AE7",
+    "wireless": false
+  },
+  {
+    "pid": 4695,
+    "cid": 10,
+    "mid": 29,
+    "name": "AE7",
+    "wireless": true
+  },
+  {
+    "pid": 4704,
+    "cid": 10,
+    "mid": 34,
+    "name": "Ultra 07",
+    "wireless": false
+  },
+  {
+    "pid": 4705,
+    "cid": 10,
+    "mid": 34,
+    "name": "Ultra 07",
+    "wireless": true
+  },
+  {
+    "pid": 4705,
+    "cid": 10,
+    "mid": 35,
+    "name": "AE6",
+    "wireless": true
+  },
+  {
+    "pid": 4705,
+    "cid": 10,
+    "mid": 36,
+    "name": "AE6",
+    "wireless": true
+  },
+  {
+    "pid": 4705,
+    "cid": 10,
+    "mid": 38,
+    "name": "AE6",
+    "wireless": true
+  },
+  {
+    "pid": 4705,
+    "cid": 10,
+    "mid": 47,
+    "name": "AE6",
+    "wireless": true
+  },
+  {
+    "pid": 4706,
+    "cid": 10,
+    "mid": 33,
+    "name": "A950 AIR",
+    "wireless": false
+  },
+  {
+    "pid": 4708,
+    "cid": 10,
+    "mid": 35,
+    "name": "AE6",
+    "wireless": false
+  },
+  {
+    "pid": 4709,
+    "cid": 10,
+    "mid": 36,
+    "name": "AE6",
+    "wireless": false
+  },
+  {
+    "pid": 4710,
+    "cid": 10,
+    "mid": 38,
+    "name": "AE6",
+    "wireless": false
+  },
+  {
+    "pid": 4721,
+    "cid": 10,
+    "mid": 37,
+    "name": "LM180T",
+    "wireless": false
+  },
+  {
+    "pid": 4739,
+    "cid": 10,
+    "mid": 39,
+    "name": "A950G",
+    "wireless": false
+  },
+  {
+    "pid": 4740,
+    "cid": 10,
+    "mid": 41,
+    "name": "A950GD",
+    "wireless": false
+  },
+  {
+    "pid": 4742,
+    "cid": 10,
+    "mid": 40,
+    "name": "A950GD",
+    "wireless": false
+  },
+  {
+    "pid": 4761,
+    "cid": 10,
+    "mid": 47,
+    "name": "AE6",
+    "wireless": false
+  },
+  {
+    "pid": 4897,
+    "cid": 10,
+    "mid": 20,
+    "name": "AE7",
+    "wireless": false
+  }
+]

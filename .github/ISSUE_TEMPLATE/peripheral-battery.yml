@@ -1,0 +1,48 @@
+name: Заряд периферии / Peripheral battery
+description: Поддержка устройства или неверные данные заряда и подключения
+title: "[Battery] "
+body:
+  - type: input
+    id: model
+    attributes:
+      label: Модель и аппаратная ревизия / Model and revision
+      placeholder: DAREU A950 Air V3
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Версия Woods Island и Windows / App and Windows version
+    validations:
+      required: true
+  - type: dropdown
+    id: transport
+    attributes:
+      label: Подключение / Connection
+      options:
+        - USB-приёмник / USB receiver
+        - Bluetooth
+        - Кабель USB / USB cable
+        - Кабель и приёмник одновременно / Cable and receiver together
+    validations:
+      required: true
+  - type: input
+    id: usb_ids
+    attributes:
+      label: USB VID:PID, если известны / USB IDs if known
+      description: Укажите идентификаторы приёмника и кабеля отдельно. Серийный номер не нужен.
+      placeholder: "Receiver 260D:1154; cable 260D:1185"
+  - type: textarea
+    id: observations
+    attributes:
+      label: Что показывает устройство / Actual readings
+      description: Какой заряд показывает официальный драйвер? Что показывает остров? Меняются ли показания при зарядке, выключении, сне и переподключении?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Как повторить / Reproduction
+      description: Укажите последовательность действий и включённые настройки виджета и уведомлений.
+    validations:
+      required: true

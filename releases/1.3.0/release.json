@@ -1,0 +1,447 @@
+{
+  "schemaVersion": 1,
+  "productId": "woods-island",
+  "version": "1.3.0",
+  "githubNotes": "# Woods Island 1.3.0\n\nНа главной странице появился заряд устройств: компактная строка и подробная карточка с настройками имён, видимости и уведомлений.\n\n- Поддерживаемые устройства обновляются через Windows или собственные HID-адаптеры. Для DAREU A950 Air V3 проверены приёмник и USB-кабель.\n- Logitech G435 через LIGHTSPEED получил ручную кнопку «Измерить заряд». Перед запуском приложение предупреждает о краткой паузе звука и микрофона. Процент приблизительный, рассчитан по напряжению; показание хранится 24 часа с отметкой времени. Фонового опроса G435 нет. Проверен приёмник 046D:0ACB, ревизия 0008.\n- Зарядка, связь с устройством и устаревшее показание отображаются отдельно. Недоступный процент не подменяется нулём. FL680 видна в списке, но чтение её заряда пока не поддерживается.\n- Убраны стандартные полосы прокрутки и стрелки по краям главной панели. Вертикальная прокрутка содержимого сохранена.\n\nОбновление через Setup сохраняет настройки. Portable обновляется вручную. Поддержка зависит от модели, ревизии и подключения; полный список и ограничения описаны в docs/peripheral-support.md.\n\n---\n\nThe Home page now shows peripheral battery levels in a compact row and an expanded card, with device names, visibility controls and notifications.\n\n- Supported devices use Windows telemetry or dedicated HID adapters. The DAREU A950 Air V3 receiver and USB cable have been tested.\n- Logitech G435 over LIGHTSPEED has a manual Measure battery action. A notice explains the brief audio and microphone interruption before starting. The percentage is an approximate voltage estimate; the reading is retained for 24 hours with its timestamp. G435 is never polled in the background. Tested receiver: 046D:0ACB, revision 0008.\n- Charging, radio connection and saved readings have separate states. Unavailable battery levels are not shown as zero. FL680 appears in the list, but its battery cannot currently be read.\n- Removed native scrollbar tracks and arrows from the Home panel while retaining vertical scrolling.\n\nSetup updates preserve settings. Portable requires a manual update. Support depends on the model, revision and connection; see docs/peripheral-support.md for the support matrix.\n",
+  "updaterNotes": "Заряд устройств на главной, настройки и уведомления, ручной приблизительный замер Logitech G435 через LIGHTSPEED с предупреждением о паузе звука. Исправлены полосы прокрутки главной панели. / Peripheral battery levels, preferences and notifications, manual approximate G435 LIGHTSPEED measurement with an audio-pause notice, and Home scrollbar fixes.",
+  "site": {
+    "seoDescription": "Жидкая чёрная пилюля вверху экрана: музыка, загрузки, таймер, буфер обмена, полка для файлов, командная строка, OBS Studio и ИИ. Публичный выпуск {{version}} для Windows 10 и 11.",
+    "summary": {
+      "ru": "Заряд устройств в острове и ручной замер Logitech G435 через LIGHTSPEED.",
+      "en": "Peripheral batteries in the island and manual Logitech G435 measurement over LIGHTSPEED."
+    },
+    "groups": [
+      {
+        "id": "peripheral-battery",
+        "icon": "connections",
+        "title": {
+          "ru": "Заряд устройств",
+          "en": "Peripheral batteries"
+        },
+        "items": [
+          {
+            "ru": [
+              "На главной появилась ",
+              {
+                "strong": "строка устройств и подробная карточка"
+              },
+              ". Имена, видимость и уведомления настраиваются отдельно."
+            ],
+            "en": [
+              "Home now has a ",
+              {
+                "strong": "device row and expanded card"
+              },
+              ". Customize names, visibility and notifications."
+            ]
+          },
+          {
+            "ru": [
+              "Для ",
+              {
+                "strong": "DAREU A950 Air V3"
+              },
+              " проверены заряд и зарядка через приёмник и USB-кабель. Поддержка других моделей зависит от их протокола."
+            ],
+            "en": [
+              {
+                "strong": "DAREU A950 Air V3"
+              },
+              " battery and charging have been tested through its receiver and USB cable. Other models depend on their protocol."
+            ]
+          },
+          {
+            "ru": [
+              {
+                "strong": "Logitech G435 через LIGHTSPEED"
+              },
+              " измеряется вручную после предупреждения о короткой паузе звука и микрофона. Процент приблизительный, по напряжению; показание сохраняется на 24 часа с отметкой времени."
+            ],
+            "en": [
+              {
+                "strong": "Logitech G435 over LIGHTSPEED"
+              },
+              " is measured manually after an audio and microphone interruption notice. The percentage is a voltage estimate, retained for 24 hours with its timestamp."
+            ]
+          },
+          {
+            "ru": [
+              "Недоступный заряд отображается честно: ",
+              {
+                "strong": "FL680 видна без процента"
+              },
+              ". Зарядка и состояние связи не выводятся из сохранённого замера."
+            ],
+            "en": [
+              "Unavailable levels are shown explicitly: ",
+              {
+                "strong": "FL680 is visible without a percentage"
+              },
+              ". Saved readings do not imply charging or a live radio connection."
+            ]
+          }
+        ]
+      },
+      {
+        "id": "home-scrolling",
+        "icon": "appearance",
+        "title": {
+          "ru": "Главная панель",
+          "en": "Home panel"
+        },
+        "items": [
+          {
+            "ru": [
+              "Убраны стандартные полосы прокрутки и стрелки по краям. ",
+              {
+                "strong": "Прокрутка вниз сохранена"
+              },
+              " для раскрытого списка и небольших экранов."
+            ],
+            "en": [
+              "Removed native scrollbar tracks and arrows. ",
+              {
+                "strong": "Vertical scrolling remains available"
+              },
+              " for expanded lists and small screens."
+            ]
+          }
+        ]
+      }
+    ],
+    "updateInstructions": {
+      "ru": "Открой «Настройки → Обновления» или установи Setup {{version}} поверх текущей версии. Настройки сохраняются. Portable обновляй после закрытия острова, заменив файлы из нового ZIP.",
+      "en": "Open Settings → Updates or install Setup {{version}} over your current version. Settings are preserved. To update Portable, close the island and replace its files from the new ZIP."
+    },
+    "extra": {
+      "ru": "G435: ручной замер с краткой паузой звука; фоновый опрос выключен. Процент приблизительный. FL680: заряд пока недоступен.",
+      "en": "G435: manual measurement briefly interrupts audio; no background polling. Its percentage is approximate. FL680 battery reading is currently unavailable."
+    },
+    "faqUpdate": {
+      "ru": "В установленной версии {{version}} открой «Настройки → Обновления». Приложение проверит и скачает новый выпуск; после проверки подписи пакета нажми «Установить». Автозагрузку можно отключить. Для перехода с 1.1.1 сначала скачай Setup с этой страницы. Portable обновляй вручную после закрытия острова.",
+      "en": "In the installed {{version}} app, open Settings → Updates. The app checks for and downloads a new release; after the package signature check, choose Install. You can turn automatic downloads off. To upgrade from 1.1.1, download Setup from this page first. Update Portable manually after closing the island."
+    },
+    "history": [
+      {
+        "version": "1.2.2",
+        "summary": {
+          "ru": "{{version}} · положение чата и оформление",
+          "en": "{{version}} · chat positioning and appearance"
+        },
+        "groups": [
+          {
+            "id": "connections",
+            "icon": "connections",
+            "title": {
+              "ru": "Подключения и перенос",
+              "en": "Connections and moving chats"
+            },
+            "items": [
+              {
+                "ru": [
+                  "Для ",
+                  {
+                    "strong": "Gemini и DeepSeek"
+                  },
+                  " видны загрузка и ошибка подключения. Если сервис не отвечает, можно повторить попытку или открыть его в браузере."
+                ],
+                "en": [
+                  {
+                    "strong": "Gemini and DeepSeek"
+                  },
+                  " show loading and connection errors. Retry or open the service in your browser if it does not respond."
+                ]
+              },
+              {
+                "ru": [
+                  "Между пилюлей и отдельным окном переносится ",
+                  {
+                    "strong": "та же страница"
+                  },
+                  ": с черновиком, местом прокрутки и сессией."
+                ],
+                "en": [
+                  "Move ",
+                  {
+                    "strong": "the same page"
+                  },
+                  " between the pill and a separate window, keeping your draft, scroll position and session."
+                ]
+              },
+              {
+                "ru": [
+                  "Чат ",
+                  {
+                    "strong": "заполняет свою рамку"
+                  },
+                  " при изменении масштаба пилюли. Содержимое больше не смещается относительно интерфейса."
+                ],
+                "en": [
+                  "The chat ",
+                  {
+                    "strong": "fills its frame"
+                  },
+                  " when you change the island scale. The page stays aligned with the interface."
+                ]
+              },
+              {
+                "ru": [
+                  "После переноса, изменения размера и перемещения чат ",
+                  {
+                    "strong": "остаётся внутри отдельного окна"
+                  },
+                  ". Вернуть его в пилюлю можно из шапки."
+                ],
+                "en": [
+                  "The chat ",
+                  {
+                    "strong": "stays inside the separate window"
+                  },
+                  " after transfer, resizing and moving. Return it to the pill from the header."
+                ]
+              }
+            ]
+          },
+          {
+            "id": "appearance",
+            "icon": "appearance",
+            "title": {
+              "ru": "Оформление чата",
+              "en": "Chat appearance"
+            },
+            "items": [
+              {
+                "ru": [
+                  "Убрана ",
+                  {
+                    "strong": "яркая белая обводка"
+                  },
+                  " встроенного чата. Скругления встроенного чата учитывают масштаб интерфейса; нижние углы страницы в отдельном окне следуют его рамке. Сохранена тонкая прокрутка."
+                ],
+                "en": [
+                  "Removed the ",
+                  {
+                    "strong": "bright white outline"
+                  },
+                  " around embedded chats. Embedded corners follow your interface scale; the page’s bottom corners in a separate window follow its frame. The slim scrollbar remains."
+                ]
+              },
+              {
+                "ru": [
+                  "Оформление следует ",
+                  {
+                    "strong": "светлой или тёмной теме острова"
+                  },
+                  ". Смена темы сохраняет состояние страницы и не требует перезагрузки."
+                ],
+                "en": [
+                  "The chat follows the island’s ",
+                  {
+                    "strong": "light or dark theme"
+                  },
+                  ". Changing themes keeps the page state without a reload."
+                ]
+              },
+              {
+                "ru": [
+                  "При переносе в отдельное окно ",
+                  {
+                    "strong": "оформление встроенного режима снимается"
+                  },
+                  ", и сайт использует собственные стили."
+                ],
+                "en": [
+                  "Moving to a separate window ",
+                  {
+                    "strong": "removes the embedded styling"
+                  },
+                  ", so the website uses its own appearance."
+                ]
+              },
+              {
+                "ru": [
+                  "Исправлен ",
+                  {
+                    "strong": "первый показ страницы"
+                  },
+                  " после загрузки и переноса. Сатиновый фон и исходный маскот сохранены; переход учитывает уменьшение движения."
+                ],
+                "en": [
+                  "Fixed the ",
+                  {
+                    "strong": "first presentation of the page"
+                  },
+                  " after loading and transfer. The satin background and original mascot remain; transitions respect reduced motion."
+                ]
+              }
+            ]
+          }
+        ],
+        "updateInstructions": {
+          "ru": "Версия 1.2.1 снята со стабильного распространения из-за смещения чата. Обновись через Setup {{version}} или «Настройки → Обновления». Portable обновляй после закрытия острова, заменив файлы из нового ZIP.",
+          "en": "Version 1.2.1 was withdrawn from stable distribution because of the chat positioning defect. Update with Setup {{version}} or Settings → Updates. To update Portable, close the island and replace its files from the new ZIP."
+        }
+      },
+      {
+        "version": "1.2.0",
+        "summary": {
+          "ru": "Ранее в 1.2.0",
+          "en": "Previously in 1.2.0"
+        },
+        "groups": [
+          {
+            "id": "updates",
+            "icon": "updates",
+            "title": {
+              "ru": "Обновления и подключения",
+              "en": "Updates and connections"
+            },
+            "items": [
+              {
+                "ru": [
+                  "Установленная копия ",
+                  {
+                    "strong": "проверяет новые выпуски"
+                  },
+                  " и может скачивать их в фоне. Установку запускаешь кнопкой."
+                ],
+                "en": [
+                  "The installed app ",
+                  {
+                    "strong": "checks for releases"
+                  },
+                  " and can download them in the background. You choose when to install."
+                ]
+              },
+              {
+                "ru": [
+                  "Перед установкой приложение ",
+                  {
+                    "strong": "проверяет подпись пакета"
+                  },
+                  ". Во время загрузки видны прогресс и кнопка отмены."
+                ],
+                "en": [
+                  "The app ",
+                  {
+                    "strong": "checks the package signature"
+                  },
+                  " before installation. Downloads show progress and a cancel button."
+                ]
+              },
+              {
+                "ru": [
+                  "В «Подключениях» можно ",
+                  {
+                    "strong": "проверить готовность модулей"
+                  },
+                  " и открыть нужные настройки."
+                ],
+                "en": [
+                  {
+                    "strong": "Check module readiness"
+                  },
+                  " and open the relevant settings from Connections."
+                ]
+              },
+              {
+                "ru": [
+                  "Для отчёта об ошибке можно скопировать версии и состояния модулей ",
+                  {
+                    "strong": "без ключей, истории и личных путей"
+                  },
+                  "."
+                ],
+                "en": [
+                  "Copy versions and module statuses for a bug report, ",
+                  {
+                    "strong": "without keys, history or personal paths"
+                  },
+                  "."
+                ]
+              }
+            ]
+          },
+          {
+            "id": "data",
+            "icon": "data",
+            "title": {
+              "ru": "Данные и поведение",
+              "en": "Data and behavior"
+            },
+            "items": [
+              {
+                "ru": [
+                  "При повреждении профиля приложение пробует ",
+                  {
+                    "strong": "восстановить резервную копию"
+                  },
+                  " и сообщает о проблеме."
+                ],
+                "en": [
+                  "If profile data is damaged, the app tries to ",
+                  {
+                    "strong": "restore a backup"
+                  },
+                  " and reports the problem."
+                ]
+              },
+              {
+                "ru": [
+                  "Очистка буфера ",
+                  {
+                    "strong": "удаляет незакреплённые записи"
+                  },
+                  " вместе с изображениями и миниатюрами. Ключ загрузки изображений хранится под защитой Windows."
+                ],
+                "en": [
+                  "Clearing clipboard history ",
+                  {
+                    "strong": "removes unpinned entries"
+                  },
+                  ", images and thumbnails. Windows encryption protects the image upload key."
+                ]
+              },
+              {
+                "ru": [
+                  "Переключателями можно ",
+                  {
+                    "strong": "пользоваться с клавиатуры"
+                  },
+                  "; персонажи учитывают настройку Windows для уменьшения анимации."
+                ],
+                "en": [
+                  "Use settings switches ",
+                  {
+                    "strong": "with the keyboard"
+                  },
+                  ". Characters respect the Windows reduced motion preference."
+                ]
+              },
+              {
+                "ru": [
+                  "Погода учитывает ",
+                  {
+                    "strong": "часовой пояс выбранного города"
+                  },
+                  ". При необходимости его можно задать вручную."
+                ],
+                "en": [
+                  "Weather follows the ",
+                  {
+                    "strong": "selected city's time zone"
+                  },
+                  ". You can set it manually when needed."
+                ]
+              }
+            ]
+          }
+        ],
+        "updateInstructions": {
+          "ru": "Для перехода с 1.1.1 установи 1.2.0 через Setup. Следующие выпуски установленной копии доступны в «Настройки → Обновления»; автозагрузку можно отключить. Portable обновляется вручную: закрой остров и замени файлы из нового ZIP.",
+          "en": "To upgrade from 1.1.1, install 1.2.0 using Setup. Future updates for the installed app appear in Settings → Updates; automatic downloads can be disabled. Update Portable manually: close the island and replace the files from the new ZIP."
+        }
+      }
+    ]
+  }
+}

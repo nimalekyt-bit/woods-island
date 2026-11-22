@@ -7,11 +7,11 @@
 **Dynamic Island для Windows · Woods Personal Corp**
 
 [![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-18181b)](https://github.com/nimalekyt-bit/woods-island/releases)
-[![Version](https://img.shields.io/badge/version-1.2.2-18181b)](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.2.2)
+[![Version](https://img.shields.io/badge/version-1.3.0-18181b)](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.3.0)
 ![RU / EN](https://img.shields.io/badge/interface-RU%20%7C%20EN-18181b)
 
 
-[**Скачать установщик**](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.2.2) · [**Сообщить об ошибке**](https://github.com/nimalekyt-bit/woods-island/issues/new/choose) · [**Woods**](https://t.me/woodskilla)
+[**Скачать установщик**](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.3.0) · [**Сообщить об ошибке**](https://github.com/nimalekyt-bit/woods-island/issues/new/choose) · [**Woods**](https://t.me/woodskilla)
 
 [**Сайт**](https://island.woodslab.top/) · [**Портфолио автора**](https://me.woodslab.top/) · [**Woods Lab**](https://woodslab.top/) · [**support@woodslab.top**](mailto:support@woodslab.top)
 
@@ -77,6 +77,14 @@ MET Norway не требует ключа. Старый кэш и некорре
 На снимке — пустое состояние до выбора города.
 После выбора города прогноз запрашивается по его координатам.
 
+## Заряд устройств
+
+На главной — строка устройств и подробная карточка. Для поддерживаемых моделей
+доступны автоматический заряд, настройки имён, видимости и уведомлений.
+Logitech G435 через LIGHTSPEED измеряется вручную с предупреждением о паузе звука;
+процент приблизительный. FL680 отображается без процента.
+[Поддерживаемые устройства и ограничения](docs/peripheral-support.md).
+
 ## Что внутри
 
 <table>
@@ -113,8 +121,8 @@ MET Norway не требует ключа. Старый кэш и некорре
 
 ## Установка
 
-Скачай **Woods-Island-1.2.2-windows-x64-Setup.exe** из
-[релиза](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.2.2),
+Скачай **Woods-Island-1.3.0-windows-x64-Setup.exe** из
+[релиза](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.3.0),
 пройди установку и запусти Woods Island через ярлык. Требуются **Windows 10/11 x64**.
 FFmpeg для MP4/GIF входит в комплект. Если WebView2 Runtime отсутствует,
 установщик скачает его у Microsoft — для этого нужен интернет.
@@ -127,7 +135,7 @@ Rust, Node.js и инструменты разработки для запуск
 Установщик пока без цифровой подписи, поэтому Windows SmartScreen может показать
 предупреждение. Перед запуском сравни SHA256 с **SHA256SUMS.txt** в выпуске.
 
-Для запуска без установки есть **Woods-Island-1.2.2-windows-x64-portable.zip**:
+Для запуска без установки есть **Woods-Island-1.3.0-windows-x64-portable.zip**:
 распакуй и запусти `woods-island.exe`, сохрани папку `bin` рядом с ним.
 Portable требует установленного WebView2 и обновляется вручную.
 
@@ -201,6 +209,14 @@ are rejected without crashing the panel. Missing data is marked unavailable.
 
 This screenshot shows the empty state before a city is selected.
 
+## Peripheral batteries
+
+Home shows a device row and expanded card, with names, visibility and notifications.
+Supported models provide automatic telemetry. Logitech G435 over LIGHTSPEED is
+measured manually with an audio-pause notice; its percentage is approximate.
+FL680 is visible without a battery percentage.
+[Support matrix and limitations](docs/peripheral-support.md).
+
 ## Inside
 
 <table>
@@ -225,8 +241,8 @@ The launcher, command bar, dictation and OBS/Steam/terminal-agent events are ava
 
 ## Install
 
-Download **Woods-Island-1.2.2-windows-x64-Setup.exe** from the
-[release](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.2.2),
+Download **Woods-Island-1.3.0-windows-x64-Setup.exe** from the
+[release](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.3.0),
 complete installation and launch Woods Island from its shortcut.
 Requires **Windows 10/11 x64**. FFmpeg is included for recording.
 If WebView2 Runtime is missing, Setup downloads it from Microsoft and needs
@@ -239,7 +255,7 @@ To upgrade from 1.1.1, install this release with Setup first; your settings are 
 Setup is currently unsigned, so Windows SmartScreen may display a warning.
 Compare its SHA256 with **SHA256SUMS.txt** in the release before running it.
 
-For use without installation, extract **Woods-Island-1.2.2-windows-x64-portable.zip**
+For use without installation, extract **Woods-Island-1.3.0-windows-x64-portable.zip**
 and run `woods-island.exe`; keep `bin` alongside it. Portable requires an installed
 WebView2 Runtime and is updated manually. Use your own AI key or local model.
 

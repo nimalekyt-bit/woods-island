@@ -109,6 +109,8 @@ unsafe extern "system" fn island_subclass_proc(
     _ref_data: usize,
 ) -> LRESULT {
     match msg {
+        0x0219 => { crate::peripherals::request_refresh(); } // WM_DEVICECHANGE
+        0x0218 if matches!(wparam.0, 7 | 18) => { crate::peripherals::request_refresh(); } // Resume broadcast
         WM_SHOWWINDOW => { crate::audio::set_spectrum_visible(wparam.0 != 0); }
         WM_NCCALCSIZE => {
             // When wParam is TRUE, returning 0 removes all non-client frame (titlebar, borders).
@@ -279,7 +281,7 @@ impl WindowManager {
             let mut info = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
             if GetMonitorInfoW(monitor, &mut info).as_bool() && info.rcMonitor.left == left && info.rcMonitor.top == top {
                 if below_taskbar { y = info.rcWork.top; }
-                if tall { canvas_h = (info.rcMonitor.bottom - y).max(canvas_h); }
+                if tall { canvas_h = (info.rcMonitor.bottom - y).max(1); }
             }
             let x = left + (width - canvas_w) / 2 + (offset_x as f64 * scale).round() as i32;
             *BASE_CANVAS.lock().unwrap() = Some((x, y, canvas_w, canvas_h));

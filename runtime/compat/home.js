@@ -1,4 +1,6 @@
 import { CollapsedTrack, MediaTitle } from '../components/CollapsedTrack';
+import { PeripheralPanel } from '../peripherals/PeripheralPanel';
+import '../components/home-scroll.css';
 import { weatherDate } from '../weather/date';
 import { NormalMediaPill } from '../components/NormalMediaPill';
 import { LyricsMediaPill } from '../components/LyricsMediaPill';
@@ -4287,6 +4289,19 @@ function gh({ id: e, tall: t, span: n }) {
       });
   }
 }
+function HomePeripherals() {
+  const snapshot = useIslandStore(s => s.peripherals);
+  const preferences = useIslandStore(s => s.settings);
+  const expanded = useIslandStore(s => s.peripheralCardOpen);
+  const listHeight = useIslandStore(s => s.peripheralListHeight);
+  const onHeight = ReactRuntime.useCallback(height => {
+    if (useIslandStore.getState().peripheralPanelHeight !== height) useIslandStore.setState({peripheralPanelHeight: height});
+  }, []);
+  const onToggle = ReactRuntime.useCallback(() => useIslandStore.setState({peripheralCardOpen: !useIslandStore.getState().peripheralCardOpen}), []);
+  const onSave = ReactRuntime.useCallback(patch => i.settingsSet(patch), []);
+  if (preferences?.showPeripherals === false || preferences?.homeHidden?.includes('peripherals')) return null;
+  return jsxRuntime.jsx(PeripheralPanel, {snapshot, preferences: preferences ?? {}, expanded, listHeight, ru: r('ru','en') === 'ru', onHeight, onToggle, onSave});
+}
 function Home() {
   let e = useIslandStore((e) => e.settings),
     t = useIslandStore((e) => e.media !== null),
@@ -4295,7 +4310,7 @@ function Home() {
       mediaModule: e?.moduleMedia !== !1,
       launcherModule: e?.moduleLauncher !== !1,
     });
-  if (n.empty)
+  if (n.empty && (e?.showPeripherals === false || e?.homeHidden?.includes('peripherals')))
     return (0, jsxRuntime.jsxs)(`div`, {
       "data-home-empty": !0,
       className: `flex h-full flex-col items-center justify-center gap-3 text-center text-[12.5px] text-ink-3`,
@@ -4333,11 +4348,12 @@ function Home() {
             : null;
   return (0, jsxRuntime.jsxs)(`div`, {
     "data-home": n.main ? (n.aside ? `aside` : `main`) : `tiles`,
-    className: `flex h-full min-h-0 flex-col gap-2.5`,
+    className: `home-scroll flex h-full min-h-0 flex-col gap-2.5`,
     children: [
       n.main
         ? (0, jsxRuntime.jsxs)(`div`, {
             className: `flex min-h-0 flex-1 gap-2.5`,
+            style: {minHeight: Math.max((n.main === 'player' && (e?.homePlayer ?? 'soft') !== 'compact' ? ve.playerBig : ve.card) + (n.volume ? ve.volumeGap + ve.volume : 0), n.rows * ve.tileMin + Math.max(0,n.rows - 1) * ve.tileGap)},
             children: [
               (0, jsxRuntime.jsxs)(`div`, {
                 className: `flex min-h-0 min-w-0 flex-1 flex-col gap-2`,
@@ -4353,10 +4369,11 @@ function Home() {
           })
         : (0, jsxRuntime.jsxs)(jsxRuntime.Fragment, {
             children: [
-              s && (0, jsxRuntime.jsx)(`div`, { className: `min-h-0 flex-1`, children: s }),
+              s && (0, jsxRuntime.jsx)(`div`, { className: `min-h-0 flex-1`, style:{minHeight:n.rows === 1 ? ve.tileOne : n.rows * ve.tile + (n.rows - 1) * ve.tileGap}, children: s }),
               n.volumeRow && (0, jsxRuntime.jsx)(Zm, {}),
             ],
           }),
+      (0, jsxRuntime.jsx)(HomePeripherals, {}),
       n.launcher && (0, jsxRuntime.jsx)(Launcher, {}),
     ],
   });

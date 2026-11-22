@@ -8,6 +8,10 @@ import { createMediaEventController } from '../media/events';
 import { createIslandInteractions, hasPersistentActivity } from '../island/interactions';
 import { LazyNoteEditor as ek } from '../components/LazyNoteEditor';
 import { ProgramIcon } from '../components/ProgramIcon';
+import { invoke as peripheralInvoke } from '../ipc/client';
+import { normalizePeripherals, createPeripheralEvents, sameNamedDevices, peripheralName, peripheralEventEnabled } from '../peripherals/model';
+import { DeviceIcon } from '../peripherals/DeviceIcon';
+import { homeWithPeripherals, peripheralListHeight } from '../island/geometry';
 // Compatibility application source; migrate components incrementally.
 import { AgentQuestion } from "../components/AgentQuestion";
 import {
@@ -10043,6 +10047,24 @@ function wj({ peek: e }) {
     r = useIslandStore((e) => e.installUpdate),
     i = cr();
   switch (e.kind) {
+    case 'peripheralEvent': {
+      const titles = {
+        low:o('Низкий заряд устройства','Device battery is low'),
+        charging:o('Зарядка началась','Charging started'),
+        unplugged:o('Зарядка остановлена','Charging stopped'),
+        full:o('Заряд достиг 100%','Battery reached 100%'),
+        connected:o('Связь с устройством восстановлена','Device connection restored'),
+        disconnected:o('Потеряна связь с устройством','Device connection lost'),
+        usbConnected:e.device.transport==='receiver'?o('USB-приёмник подключён','USB receiver connected'):o('USB-устройство подключено','USB device connected'),
+        usbDisconnected:e.device.transport==='receiver'?o('USB-приёмник отключён','USB receiver disconnected'):o('USB-устройство отключено','USB device disconnected'),
+      };
+      return jsxRuntime.jsx(aj, {
+        icon: jsxRuntime.jsx($, {tone:'bg-orange-400/20 text-orange-300', children:jsxRuntime.jsx(DeviceIcon,{kind:e.device.kind,size:20})}),
+        title: titles[e.event],
+        sub: `${peripheralName(e.device,useIslandStore.getState().settings??{})}${e.device.percent===null?'':` · ${e.device.percent}%`}`,
+        onClick: () => {useIslandStore.setState({peripheralCardOpen:true}); useIslandStore.getState().open('click','home');},
+      });
+    }
     case `copied`: {
       let n = e.clip,
         r = n.kind === `image`;
@@ -10370,11 +10392,10 @@ var jj = 428;
 function Mj() {
   let e = useIslandStore(
     (e) =>
-      e.expanded &&
-      e.license.pro &&
-      e.tab === `chat` &&
-      e.chatService !== `island` &&
-      e.webAiPopped !== e.chatService,
+      e.expanded && (
+        (e.license.pro && e.tab === `chat` && e.chatService !== `island` && e.webAiPopped !== e.chatService) ||
+        (e.tab === 'home' && e.peripheralPanelHeight > 0 && e.settings?.showPeripherals !== false)
+      ),
   );
   (0, ReactRuntime.useEffect)(() => {
     if (e) {
@@ -10457,6 +10478,7 @@ function useIslandGeometry(e) {
     _ = useIslandStore((e) => e.settings?.lyrics === !0 && e.settings.lyricsInHome !== !1),
     v = Yt((e) => e.status === `ready` && !!e.lyrics && !e.lyrics.instrumental),
     S = useIslandStore((e) => e.headerMin),
+    peripheralHeight = useIslandStore((e) => e.peripheralPanelHeight),
     C = u
       ? Un(Bn(d, { media: f, mediaModule: m, launcherModule: h }), {
           big: g,
@@ -10498,11 +10520,16 @@ function useIslandGeometry(e) {
     Se = useIslandStore((e) => e.settings?.lyrics === !0 && e.settings.lyricsInPlayer !== !1),
     Ce = Yt((e) => (e.status === `ready` ? e.lineW : 0)),
     we = xe ? Ce : 0;
+  const listHeight = peripheralListHeight(C?.[1] ?? 336, l);
+  ReactRuntime.useEffect(() => {
+    if (useIslandStore.getState().peripheralListHeight !== listHeight)
+      useIslandStore.setState({peripheralListHeight:listHeight});
+  }, [listHeight]);
   const geometry = calculateIslandGeometry({
     palette: t, expanded: r, dragOver: !!i, dropZoneCount: a,
     peek: !!o, dictating: fe, recording: de, updating: ue, downloads: pe,
     mediaLive: ce, shelfCount: le, status: !!ve,
-    paletteMeasure: e, tall: !!s, externalChat: c, viewportHeight: l, homeSize: C,
+    paletteMeasure: e, tall: !!s, externalChat: c, viewportHeight: l, homeSize: homeWithPeripherals(C, peripheralHeight, l),
     peekContent: o ? {
       kind: o.kind, noteBody: o.kind === 'notification' ? o.note.body : undefined,
       agentMessage: o.kind === 'agent' ? o.agent.message : undefined,
@@ -10528,6 +10555,17 @@ function useRuntimeEvents() {
     let e = useIslandStore,
       c = () => e.getState().settings;
     let disposed = false;
+    const peripheralEvents = createPeripheralEvents();
+    const acceptPeripherals = (payload, notify = true) => {
+      if (disposed) return;
+      const snapshot = normalizePeripherals(payload);
+      const previous = normalizePeripherals(e.getState().peripherals);
+      if (snapshot.revision < previous.revision) return;
+      e.setState({peripherals: snapshot});
+      const events = peripheralEvents(snapshot, c() ?? {});
+      if (notify) for (const event of events) e.getState().pushPeek({kind:'peripheralEvent', ...event});
+    };
+    peripheralInvoke('peripherals_get').then(payload => acceptPeripherals(payload, false)).catch(() => {});
     const interactions = createIslandInteractions({
       getState: e.getState,
       setState: e.setState,
@@ -10583,6 +10621,7 @@ function useRuntimeEvents() {
         .catch(() => {}));
     let l = (e) => c()?.[e] !== !1,
       d = [
+        T('peripherals:update', acceptPeripherals),
         T(`hover`, interactions.hover),
         T(`outside-click`, interactions.outsideClick),
         T(`island:palette`, interactions.togglePalette),
@@ -10736,7 +10775,11 @@ function useRuntimeEvents() {
         T(`island:desktop`, (t) => e.setState({ desktop: t })),
         T(`island:keep`, (t) => e.setState({ keep: t })),
         T(`cursor:near`, Jn),
-        T(`settings:changed`, (t) => e.setState({ settings: t })),
+        T(`settings:changed`, (t) => {
+          const state = e.getState();
+          e.setState({settings: t, queue: state.queue.filter(n => n.kind !== 'peripheralEvent' || peripheralEventEnabled(n, t))});
+          if (state.peek?.kind === 'peripheralEvent' && !peripheralEventEnabled(state.peek, t)) e.getState().nextPeek();
+        }),
         T(`shelf:changed`, (t) => e.setState({ shelf: t })),
         T(`launcher:changed`, (t) => e.setState({ launcher: t })),
         xr().onDragDropEvent((n) => {
@@ -10910,7 +10953,7 @@ function IslandApp() {
   let le = Math.min(c / 2, k ? 32 : 26),
     ue = (0, ReactRuntime.useRef)({ w: s, h: c, fold: LIQUID_FOLDED });
   ue.current = updateSizeHistory(ue.current, s, c);
-  let de = selectSizeTransition(a, useIslandStore.getState().settings?.mediaPill === 'lyrics', g, ue.current.fold),
+  let de = selectSizeTransition(a, useIslandStore.getState().settings?.mediaPill === 'lyrics', g, ue.current.fold, useIslandStore.getState().tab === 'home' && useIslandStore.getState().peripheralPanelHeight > 0),
     fe = oi(s),
     pe = li(fe, (e) => b(e, window.devicePixelRatio));
   ((0, ReactRuntime.useLayoutEffect)(() => {
