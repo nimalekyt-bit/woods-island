@@ -70,6 +70,8 @@ for(const expected of payloads){
 }
 release=await api('releases/'+release.id);assert.deepEqual(release.assets.map(a=>a.name).sort(),payloads.map(a=>a.name).sort());
 await gates();assert.equal((await api('commits/v'+version)).sha,sourceRevision);
-release=await api('releases/'+release.id,'PATCH',{draft:false,prerelease:false,make_latest:'true'});assert(!release.draft&&!release.prerelease);assert.equal((await api('releases/latest')).id,release.id);
-const report={version,sourceRevision,acceptanceRunId,mainRunId,exeSha256:exeEntry.sha256,payloads,releaseId:release.id,url:release.html_url,publishedAt:release.published_at,workerRevision:process.env.GITHUB_SHA};
+// Leave the verified draft for the owner's final API publication. Its release event
+// then triggers the existing metadata workflow without a GITHUB_TOKEN event suppression.
+assert(release.draft);
+const report={version,sourceRevision,acceptanceRunId,mainRunId,exeSha256:exeEntry.sha256,payloads,releaseId:release.id,url:release.html_url,draft:true,preparedAt:new Date().toISOString(),workerRevision:process.env.GITHUB_SHA};
 await writeFile('release-receipt.json',JSON.stringify(report,null,2));console.log('RELEASE_RECEIPT '+JSON.stringify(report));
