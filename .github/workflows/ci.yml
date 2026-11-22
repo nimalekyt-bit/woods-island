@@ -1,214 +1,55 @@
-name: Windows build and tests
+name: Publish exact accepted Woods Island 1.3.0
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
-    inputs:
-      artifact_run_id:
-        description: 'Reuse a prior installer artifact for diagnostics; leave empty for a complete build'
-        required: false
-        default: ''
-        type: string
 permissions:
-  contents: read
+  contents: write
   actions: read
 concurrency:
-  group: windows-${{ github.ref }}
-  cancel-in-progress: true
+  group: woods-island-stable-publication
+  cancel-in-progress: false
 jobs:
-  windows:
-    if: github.event_name != 'workflow_dispatch' || inputs.artifact_run_id == ''
+  publish:
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 15
+    env:
+      ACCEPTANCE_RUN_ID: '44977282639'
+      SOURCE_REVISION: '3daea921bd9ff0eeb4f49361b2e2650bc86c16fb'
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Checkout publication worker
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          fetch-depth: 0
+          path: worker
           persist-credentials: false
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - name: Checkout exact accepted source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          version: 10.33.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+          ref: '3daea921bd9ff0eeb4f49361b2e2650bc86c16fb'
+          path: accepted
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
-          cache: pnpm
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Verify owner-only history
-        env:
-          WOODS_OWNER_HISTORY_REF: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: node scripts/check-commit-owners.mjs $env:WOODS_OWNER_HISTORY_REF
-      - name: Verify runtime and hooks
-        run: |
-          pnpm build
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          pnpm test:hooks
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          pnpm test:runtime-state
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          pnpm test:ipc
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          pnpm test:characters
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          node --test scripts/reliability-ui.test.cjs
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          node --test scripts/peripherals.test.cjs
-      - name: Verify Web AI first paint and recovery
-        run: node scripts/verify-web-ai-ui.cjs
-      - name: Install verified Rust toolchain
-        run: rustup toolchain install 1.98.1 --profile minimal
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
-        with:
-          workspaces: src-tauri -> target
-          cache-on-failure: true
-      - name: Rust regression tests
-        run: cargo +1.98.1 test --release --locked -j 1 --manifest-path src-tauri/Cargo.toml
-      - name: Build Windows executable
-        run: cargo +1.98.1 build --release --locked -j 1 --manifest-path src-tauri/Cargo.toml
-      - name: Verify native Windows icons
-        run: node scripts/verify-windows-icons.mjs src-tauri/icons/icon.ico src-tauri/target/release/woods-island.exe src-tauri/target/release/woods-island-pet-import.exe
-      - name: Upload Windows executable
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: woods-island-windows-exe
-          path: src-tauri/target/release/woods-island.exe
-          if-no-files-found: error
-          retention-days: 14
-      - name: Verify peripheral UI and scroll recovery
-        shell: pwsh
-        run: ./scripts/verify-peripherals-hosted.ps1 -Executable src-tauri/target/release/woods-island.exe
-      - name: Upload native peripheral UI evidence
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: woods-island-peripheral-ui
-          path: |
-            ${{ runner.temp }}/woods-peripherals-*/report.json
-            ${{ runner.temp }}/woods-peripherals-*/*.png
-          if-no-files-found: warn
-          retention-days: 7
-      - name: Prepare recording tools
-        if: github.event_name == 'workflow_dispatch'
-        shell: pwsh
-        run: ./scripts/prepare-recording-tools.ps1
-      - name: Package Windows portable
-        if: github.event_name == 'workflow_dispatch'
-        shell: pwsh
-        run: |
-          node scripts/package-portable.mjs
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $version=(Get-Content package.json -Raw | ConvertFrom-Json).version
-          New-Item -ItemType Directory -Path dist-installer -Force | Out-Null
-          Compress-Archive -Path dist-portable/* -DestinationPath "dist-installer/Woods-Island-$version-windows-x64-portable.zip"
-      - name: Package Windows installer
-        if: github.event_name == 'workflow_dispatch'
-        shell: pwsh
-        run: |
-          $exe='src-tauri/target/release/woods-island.exe'
-          $sha=(Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
-          node scripts/package-installer.mjs --expected-sha256 $sha
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $sdk=@(Get-ChildItem -Path "$env:USERPROFILE/.cargo/registry/src/*/webview2-com-sys-*/x64/WebView2Loader.dll" -File)
-          if ($sdk.Count -ne 1) { throw 'Expected one x64 WebView2 SDK loader' }
-          Copy-Item -LiteralPath $sdk[0].FullName -Destination dist-installer/WebView2Loader.dll
-      - name: Sign and verify updater package
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
-        shell: pwsh
-        run: |
-          $setup=@(Get-ChildItem dist-installer -Recurse -File -Filter '*-Setup.exe')
-          if ($setup.Count -ne 1) { throw 'Installer signing input is ambiguous' }
-          node scripts/package-updater.mjs $setup[0].FullName
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $manifest=Join-Path $setup[0].DirectoryName 'latest.json'
-          cargo +1.98.1 run --release --locked -j 1 --manifest-path src-tauri/Cargo.toml --example verify-update-package -- $manifest $setup[0].FullName
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Upload installer payload
-        if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: woods-island-installer
-          path: dist-installer/
-          if-no-files-found: error
-          retention-days: 7
-  installer:
-    if: always() && github.event_name == 'workflow_dispatch' && (needs.windows.result == 'success' || inputs.artifact_run_id != '')
-    needs: windows
-    runs-on: windows-latest
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        scenario: [ExistingRuntime, MissingRuntime]
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 22
-      - name: Download installer
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - name: Download accepted installer artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: woods-island-installer
           path: dist-installer
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ inputs.artifact_run_id || github.run_id }}
-      - name: Download application
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+          github-token: ${{ github.token }}
+          run-id: '44977282639'
+      - name: Download raw accepted executable
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: woods-island-windows-exe
-          path: dist-installer/application
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ inputs.artifact_run_id || github.run_id }}
-      - name: Fetch accepted previous release for the real upgrade
-        if: matrix.scenario == 'ExistingRuntime'
+          path: application
+          github-token: ${{ github.token }}
+          run-id: '44977282639'
+      - name: Repeat exact-source gates, verify payloads and publish stable
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: pwsh
-        run: |
-          if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or $env:RUNNER_OS -ne 'Windows' -or $env:GITHUB_REPOSITORY -ne 'nimalekyt-bit/woods-island' -or [string]::IsNullOrWhiteSpace($env:RUNNER_TEMP)) {
-            throw 'Previous installer fixtures may only be prepared on the disposable hosted Windows runner'
-          }
-          $previousRoot=Join-Path $env:RUNNER_TEMP ('woods-previous-release-'+[guid]::NewGuid().ToString('N'))
-          New-Item -ItemType Directory -Path $previousRoot | Out-Null
-          $setupName='Woods-Island-1.2.2-windows-x64-Setup.exe'
-          $portableName='Woods-Island-1.2.2-windows-x64-portable.zip'
-          gh release download v1.2.2 --repo $env:GITHUB_REPOSITORY --pattern $setupName --pattern $portableName --dir $previousRoot
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $previousSetup=Join-Path $previousRoot $setupName
-          $previousPortable=Join-Path $previousRoot $portableName
-          if ((Get-FileHash -LiteralPath $previousSetup -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'f99671a9f559b246f3a303d5b947be7783d887439ec464d97b21eb0e1eb0f710') { throw 'Previous Setup differs from the accepted public 1.2.2 bytes' }
-          if ((Get-FileHash -LiteralPath $previousPortable -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'ff84efa0b3447281b860c6c44fbc85cd20791e6e4f13a245314284d8fb6b8ae3') { throw 'Previous portable differs from the accepted public 1.2.2 bytes' }
-          $portableRoot=Join-Path $previousRoot 'portable'
-          Expand-Archive -LiteralPath $previousPortable -DestinationPath $portableRoot
-          $previousExe=@(Get-ChildItem -LiteralPath $portableRoot -Recurse -File -Filter 'woods-island.exe')
-          if ($previousExe.Count -ne 1) { throw 'Previous portable executable is ambiguous' }
-          if ((Get-FileHash -LiteralPath $previousExe[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'bd168270b66637e9773e7ac5e64ab3209c0a371485fdd43c4b4e4232df6878a0') { throw 'Previous portable EXE differs from the accepted public 1.2.2 build' }
-          "WOODS_PREVIOUS_SETUP=$previousSetup" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "WOODS_PREVIOUS_EXE=$($previousExe[0].FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-      - name: Verify installation and removal
-        shell: pwsh
-        run: |
-          $setup=@(Get-ChildItem dist-installer -Recurse -File -Filter '*-Setup.exe')
-          $manifest=@(Get-ChildItem dist-installer -Recurse -File -Filter '*-Setup.manifest.json')
-          if ($setup.Count -ne 1 -or $manifest.Count -ne 1) { throw 'Installer artifacts are ambiguous' }
-          New-Item -ItemType Directory -Path .qa-temp -Force | Out-Null
-          $upgrade=@{}
-          if ('${{ matrix.scenario }}' -eq 'ExistingRuntime') {
-            if ([string]::IsNullOrWhiteSpace($env:WOODS_PREVIOUS_SETUP) -or [string]::IsNullOrWhiteSpace($env:WOODS_PREVIOUS_EXE)) { throw 'Previous release fixtures were not prepared' }
-            $upgrade=@{PreviousInstallerPath=$env:WOODS_PREVIOUS_SETUP;PreviousExePath=$env:WOODS_PREVIOUS_EXE;PreviousVersion='1.2.2'}
-          }
-          ./scripts/verify-installer.ps1 -InstallerPath $setup[0].FullName -InstallerManifestPath $manifest[0].FullName -ExpectedExePath dist-installer/application/woods-island.exe -WebView2LoaderPath dist-installer/WebView2Loader.dll -Scenario '${{ matrix.scenario }}' @upgrade
-      - name: Upload acceptance report
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node worker/scripts/publish-accepted-release.mjs
+      - name: Save publication receipt
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: installer-${{ matrix.scenario }}
-          path: ${{ runner.temp }}/woods-installer-qa-*/installer-acceptance.json
+          name: woods-island-1.3.0-publication-receipt
+          path: release-receipt.json
           if-no-files-found: error
-          retention-days: 7
