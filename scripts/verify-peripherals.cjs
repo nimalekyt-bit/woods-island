@@ -12,7 +12,7 @@ const hostedDebug = process.env.WOODS_HOSTED_WEBVIEW_DEBUG === "1";
 if (hostedDebug) {
   assert(process.env.GITHUB_ACTIONS === "true" && process.env.RUNNER_ENVIRONMENT === "github-hosted" && process.env.RUNNER_OS === "Windows" && process.env.GITHUB_REPOSITORY === "nimalekyt-bit/woods-island" && process.env.RUNNER_TRACKING_ID && process.env.RUNNER_TEMP, "Hosted WebView2 debugging cannot be used locally");
 }
-let proc, ws;
+let proc, ws, mainWs;
 async function requireFreePort(value) {
   await new Promise((resolve, reject) => {
     const server = net.createServer();
@@ -103,7 +103,7 @@ async function requireFreePort(value) {
   const errors = [],
     pending = new Map();
   let id = 0;
-  ws.addEventListener("message", (e) => {
+  const receive = (e) => {
     const m = JSON.parse(e.data);
     if (m.method === "Runtime.exceptionThrown")
       errors.push(m.params.exceptionDetails.text);
@@ -114,7 +114,8 @@ async function requireFreePort(value) {
     if (m.error || m.result?.exceptionDetails)
       p.reject(Error(JSON.stringify(m.error || m.result.exceptionDetails)));
     else p.resolve(m.result);
-  });
+  };
+  ws.addEventListener("message", receive);
   const command = (method, params = {}) =>
     new Promise((resolve, reject) => {
       const n = ++id;
@@ -438,6 +439,51 @@ async function requireFreePort(value) {
     stopped.revision,
     "Disabled refresh started scanner",
   );
+  // Verify the new Settings layout in the actual embedded WebView2 as well.
+  // This remains the isolated QA process/profile, never the owner's open app.
+  await invoke("open_settings", { section: "modules" });
+  let settingsPage;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    settingsPage = (await (await fetch(`http://127.0.0.1:${port}/json`)).json())
+      .find((page) => page.url.endsWith("/settings.html"));
+    if (settingsPage) break;
+    await pause(100);
+  }
+  assert(settingsPage, "Native Settings WebView unavailable");
+  mainWs = ws;
+  ws = new WebSocket(settingsPage.webSocketDebuggerUrl);
+  await new Promise((resolve, reject) => {
+    ws.addEventListener("open", resolve, { once: true });
+    ws.addEventListener("error", reject, { once: true });
+  });
+  ws.addEventListener("message", receive);
+  await command("Runtime.enable");
+  await waitFor('!!document.querySelector(".peripheral-settings")', "Battery settings did not render");
+  const toggleSetting = async (label) => {
+    await evaluate(`document.querySelector('.peripheral-settings button[aria-label=${JSON.stringify(label)}]').click()`);
+    await pause(250);
+  };
+  await toggleSetting("Показывать на главной");
+  assert.equal((await invoke("settings_get")).showPeripherals, true);
+  await toggleSetting("Уведомления устройств");
+  assert.equal((await invoke("settings_get")).peripheralAlerts, true);
+  await waitFor('document.querySelectorAll(".peripheral-settings [role=switch]").length===10', "Notification switches did not render");
+  const settingsGeometry = [];
+  for (const width of [820, 660]) {
+    await invoke("plugin:window|set_size", { label: "settings", value: { Logical: { width, height: 720 } } });
+    await pause(300);
+    const geometry = await evaluate('(()=>{const section=document.querySelector(".peripheral-settings"),rect=section.getBoundingClientRect(),parent=section.parentElement.getBoundingClientRect();return {width:rect.width,parentWidth:parent.width,overflow:section.scrollWidth>section.clientWidth+1,checkboxes:section.querySelectorAll("input[type=checkbox]").length,switches:[...section.querySelectorAll("[role=switch]")].map(b=>({width:b.getBoundingClientRect().width,height:b.getBoundingClientRect().height,label:b.getAttribute("aria-label")}))};})()');
+    assert(Math.abs(geometry.width - geometry.parentWidth) < 1, "Battery Settings must use full module width");
+    assert.equal(geometry.overflow, false);
+    assert.equal(geometry.checkboxes, 0);
+    assert(geometry.switches.every((button) => button.width === 44 && button.height === 24 && button.label));
+    settingsGeometry.push({ windowWidth: width, ...geometry });
+    await evaluate('document.querySelector(".peripheral-settings").scrollIntoView({block:"start"})');
+    const png = await command("Page.captureScreenshot", { format: "png" });
+    await fs.writeFile(path.join(directory, `settings-batteries-${width}.png`), Buffer.from(png.data, "base64"));
+  }
+  await toggleSetting("Показывать на главной");
+  assert.equal((await invoke("settings_get")).showPeripherals, false);
   assert.deepEqual(errors, []);
   await fs.writeFile(
     path.join(directory, "report.json"),
@@ -448,6 +494,7 @@ async function requireFreePort(value) {
         size,
         dpi,
         dpiUsesFixture,
+        settingsGeometry,
         hardware,
         manualHistoryRestored: !!manualEvidence,
         screenshots: [
@@ -480,5 +527,6 @@ async function requireFreePort(value) {
   })
   .finally(() => {
     if (ws) ws.close();
+    if (mainWs) mainWs.close();
     if (proc && proc.exitCode === null) proc.kill();
   });

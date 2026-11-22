@@ -699,7 +699,6 @@ function at({ s: e, save: t }) {
               s ? n(`Лаунчер выключен в «Модулях»`, `The launcher is off in Modules`) : void 0,
             ),
           }),
-          (0, U.jsx)(PeripheralSettings, {preferences:e, save:t, ru:n('ru','en')==='ru'}),
         ],
       }),
       (0, U.jsx)(it, { s: e }),
@@ -3979,6 +3978,9 @@ function zt() {
                         ),
                         stacked: !0,
                         children: (0, U.jsx)(at, { s: e, save: H }),
+                      }),
+                      (0, U.jsx)(PeripheralSettings, {
+                        preferences: e, save: H, ru: n('ru', 'en') === 'ru', Row: J, Toggle: Y,
                       }),
                       (0, U.jsx)(J, {
                         since: `1.2.10`,

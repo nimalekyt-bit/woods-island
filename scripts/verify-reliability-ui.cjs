@@ -3,7 +3,7 @@
 const fs=require('node:fs/promises'),path=require('node:path'),http=require('node:http'),assert=require('node:assert/strict');
 const root=path.resolve(__dirname,'..');
 const esbuild=require(require.resolve('esbuild',{paths:[path.dirname(require.resolve('vite/package.json'))]}));
-const {chromium}=require(process.env.WOODS_PLAYWRIGHT_MODULE||'playwright');
+const {chromium}=require(process.env.WOODS_PLAYWRIGHT_MODULE||'playwright-core');
 const scratch=path.join(root,'.qa-temp','reliability-shell');
 let browser,server;
 (async()=>{
@@ -127,13 +127,58 @@ let browser,server;
   await page.getByRole('button',{name:pick('Установить','Install update'),exact:true}).waitFor();
   const clipped=await page.locator('[data-update-settings] button').evaluateAll(buttons=>buttons.some(button=>{const rect=button.getBoundingClientRect();return rect.width>0&&(rect.left<212||rect.right>innerWidth);}));assert.equal(clipped,false);
   await screenshot('updates-narrow');
+  // Exercise peripheral preferences through the same production rows and switches
+  // as the other modules. IPC remains a browser fixture, with no hardware access.
+  await page.locator('[data-nav=modules]').click();
+  const batteries=page.getByRole('region',{name:pick('Заряд устройств','Device batteries'),exact:true});
+  await batteries.waitFor();
+  const show=batteries.getByRole('switch',{name:pick('Показывать на главной','Show on Home'),exact:true});
+  if(await show.getAttribute('aria-checked')==='false')await show.click();
+  const alerts=batteries.getByRole('switch',{name:pick('Уведомления устройств','Device notifications'),exact:true});
+  if(await alerts.getAttribute('aria-checked')==='false')await alerts.click();
+  await batteries.getByRole('switch',{name:pick('Отключение устройства','Device disconnected'),exact:true}).waitFor();
+  assert.equal(await batteries.locator('input[type=checkbox]').count(),0);
+  assert.equal(await batteries.getByRole('switch').count(),10);
+  const connection=batteries.getByRole('switch',{name:pick('Подключение устройства','Device connected'),exact:true});
+  await connection.click();assert.equal(await page.evaluate(()=>window.saved.peripheralNotifyConnection),true);
+  const disconnection=batteries.getByRole('switch',{name:pick('Отключение устройства','Device disconnected'),exact:true});
+  await disconnection.click();assert.equal(await page.evaluate(()=>window.saved.peripheralNotifyDisconnection),true);
+  const limit=batteries.getByRole('combobox',{name:pick('Устройств в компактной строке','Devices in the compact row'),exact:true});
+  await limit.selectOption('6');assert.equal(await page.evaluate(()=>window.saved.peripheralLimit),6);
+  await batteries.getByRole('combobox',{name:pick('Порядок устройств','Device order'),exact:true}).selectOption('charge');
+  assert.equal(await page.evaluate(()=>window.saved.peripheralSort),'charge');
+  await batteries.getByRole('combobox',{name:pick('Порог низкого заряда','Low battery threshold'),exact:true}).selectOption('15');
+  assert.equal(await page.evaluate(()=>window.saved.peripheralLowThreshold),15);
+  await alerts.click();assert.equal(await page.evaluate(()=>window.saved.peripheralAlerts),false);
+  assert.equal(await disconnection.count(),0);
+  await alerts.click();await disconnection.waitFor();assert.equal(await disconnection.getAttribute('aria-checked'),'true');
+  await show.click();assert.equal(await page.evaluate(()=>window.saved.showPeripherals),false);
+  assert.equal(await batteries.getByRole('switch').count(),1);
+  await show.focus();await page.keyboard.press('Space');await alerts.waitFor();
+  assert.equal(await page.evaluate(()=>window.saved.showPeripherals),true);
+  for(const width of [820,660]){
+   await page.setViewportSize({width,height:720});
+   const geometry=await batteries.evaluate(section=>{
+    const rect=section.getBoundingClientRect(),parent=section.parentElement.getBoundingClientRect();
+    const controls=[...section.querySelectorAll('button[role=switch],select')];
+    return {width:rect.width,parentWidth:parent.width,scrollWidth:section.scrollWidth,clientWidth:section.clientWidth,
+     overflow:controls.some(control=>{const r=control.getBoundingClientRect();return r.left<rect.left||r.right>rect.right;}),
+     switches:controls.filter(control=>control.getAttribute('role')==='switch').map(control=>{const r=control.getBoundingClientRect();return {width:r.width,height:r.height,label:control.getAttribute('aria-label')};})};
+   });
+   assert(Math.abs(geometry.width-geometry.parentWidth)<1,'Battery settings must use the whole module width');
+   assert(geometry.scrollWidth<=geometry.clientWidth+1&&!geometry.overflow,'Battery controls must fit the narrow settings window');
+   assert(geometry.switches.every(control=>control.width===44&&control.height===24&&control.label),'Battery switches must match the shared accessible module controls');
+   await show.scrollIntoViewIfNeeded();await screenshot('peripherals-'+width);
+   await disconnection.scrollIntoViewIfNeeded();await screenshot('peripheral-notifications-'+width);
+  }
+  await page.locator('[data-nav=updates]').click();
   await page.evaluate(()=>window.__TAURI_INTERNALS__.invoke('settings_set',{settings:{language:window.saved.language==='ru'?'en':'ru'}}));
   await page.locator('[data-nav=updates][data-now=true]').waitFor();
   await page.getByRole('button',{name:pick('Install update','Установить'),exact:true}).waitFor();
   assert.equal(await page.locator('[data-update-settings]').count(),1,'Changing language preserves the active section');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
-  assert.deepEqual(errors,[]);results.push({language:lang,shell:['820x720','660x600'],checks:24,errors:0,overflow:false});
+  assert.deepEqual(errors,[]);results.push({language:lang,shell:['820x720','660x600'],verified:['Existing settings flows','Peripheral switch and selector persistence','Conditional notification settings','Keyboard switch activation','Full-width layout and 44x24 accessible switches at 820/660px'],errors:0,overflow:false});
   await context.close();
  }
- await fs.writeFile(path.join(scratch,'report.json'),JSON.stringify({pass:true,results},null,2));console.log(JSON.stringify({pass:true,checks:48,report:path.join(scratch,'report.json')}));
+ await fs.writeFile(path.join(scratch,'report.json'),JSON.stringify({pass:true,results},null,2));console.log(JSON.stringify({pass:true,languages:2,peripheralWidths:[820,660],report:path.join(scratch,'report.json')}));
 })().catch(error=>{console.error(error);process.exitCode=1;}).finally(async()=>{await browser?.close();if(server)await new Promise(resolve=>server.close(resolve));});

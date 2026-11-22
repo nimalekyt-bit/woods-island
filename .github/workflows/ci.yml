@@ -54,6 +54,8 @@ jobs:
           node --test scripts/reliability-ui.test.cjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node --test scripts/peripherals.test.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/verify-reliability-ui.cjs
       - name: Verify Web AI first paint and recovery
         run: node scripts/verify-web-ai-ui.cjs
       - name: Install verified Rust toolchain
@@ -176,19 +178,19 @@ jobs:
           }
           $previousRoot=Join-Path $env:RUNNER_TEMP ('woods-previous-release-'+[guid]::NewGuid().ToString('N'))
           New-Item -ItemType Directory -Path $previousRoot | Out-Null
-          $setupName='Woods-Island-1.2.2-windows-x64-Setup.exe'
-          $portableName='Woods-Island-1.2.2-windows-x64-portable.zip'
-          gh release download v1.2.2 --repo $env:GITHUB_REPOSITORY --pattern $setupName --pattern $portableName --dir $previousRoot
+          $setupName='Woods-Island-1.3.0-windows-x64-Setup.exe'
+          $portableName='Woods-Island-1.3.0-windows-x64-portable.zip'
+          gh release download v1.3.0 --repo $env:GITHUB_REPOSITORY --pattern $setupName --pattern $portableName --dir $previousRoot
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $previousSetup=Join-Path $previousRoot $setupName
           $previousPortable=Join-Path $previousRoot $portableName
-          if ((Get-FileHash -LiteralPath $previousSetup -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'f99671a9f559b246f3a303d5b947be7783d887439ec464d97b21eb0e1eb0f710') { throw 'Previous Setup differs from the accepted public 1.2.2 bytes' }
-          if ((Get-FileHash -LiteralPath $previousPortable -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'ff84efa0b3447281b860c6c44fbc85cd20791e6e4f13a245314284d8fb6b8ae3') { throw 'Previous portable differs from the accepted public 1.2.2 bytes' }
+          if ((Get-FileHash -LiteralPath $previousSetup -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'd08286d73120e250bdae6780d234ebc4905601e778c4874e92601e7f28a0074a') { throw 'Previous Setup differs from the accepted public 1.3.0 bytes' }
+          if ((Get-FileHash -LiteralPath $previousPortable -Algorithm SHA256).Hash.ToLowerInvariant() -ne '6de746a2e8aa98b37052f8d13258914e4f22c6596a5918550b5d99e66bf04724') { throw 'Previous portable differs from the accepted public 1.3.0 bytes' }
           $portableRoot=Join-Path $previousRoot 'portable'
           Expand-Archive -LiteralPath $previousPortable -DestinationPath $portableRoot
           $previousExe=@(Get-ChildItem -LiteralPath $portableRoot -Recurse -File -Filter 'woods-island.exe')
           if ($previousExe.Count -ne 1) { throw 'Previous portable executable is ambiguous' }
-          if ((Get-FileHash -LiteralPath $previousExe[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'bd168270b66637e9773e7ac5e64ab3209c0a371485fdd43c4b4e4232df6878a0') { throw 'Previous portable EXE differs from the accepted public 1.2.2 build' }
+          if ((Get-FileHash -LiteralPath $previousExe[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'ddbea99ba9fc023c56c1a7ea85ce50b4b05e0390d7e231a59caf4e39ed72f331') { throw 'Previous portable EXE differs from the accepted public 1.3.0 build' }
           "WOODS_PREVIOUS_SETUP=$previousSetup" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "WOODS_PREVIOUS_EXE=$($previousExe[0].FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Verify installation and removal
@@ -201,7 +203,7 @@ jobs:
           $upgrade=@{}
           if ('${{ matrix.scenario }}' -eq 'ExistingRuntime') {
             if ([string]::IsNullOrWhiteSpace($env:WOODS_PREVIOUS_SETUP) -or [string]::IsNullOrWhiteSpace($env:WOODS_PREVIOUS_EXE)) { throw 'Previous release fixtures were not prepared' }
-            $upgrade=@{PreviousInstallerPath=$env:WOODS_PREVIOUS_SETUP;PreviousExePath=$env:WOODS_PREVIOUS_EXE;PreviousVersion='1.2.2'}
+            $upgrade=@{PreviousInstallerPath=$env:WOODS_PREVIOUS_SETUP;PreviousExePath=$env:WOODS_PREVIOUS_EXE;PreviousVersion='1.3.0'}
           }
           ./scripts/verify-installer.ps1 -InstallerPath $setup[0].FullName -InstallerManifestPath $manifest[0].FullName -ExpectedExePath dist-installer/application/woods-island.exe -WebView2LoaderPath dist-installer/WebView2Loader.dll -Scenario '${{ matrix.scenario }}' @upgrade
       - name: Upload acceptance report

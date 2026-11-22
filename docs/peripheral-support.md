@@ -33,6 +33,8 @@ Home provides a compact row and an expanded card. Device names, visibility, sort
 
 Automatic charging, low-battery and connection notifications use fresh confirmed telemetry and the configured preferences. A manual G435 estimate does not generate automatic charging or low-battery notifications from its saved voltage.
 
+Enable device notifications and the connection/disconnection switches in **Settings → Modules → Device batteries**. Notifications also appear in the collapsed Island. Ordinary polling runs every 60 seconds; a detected loss triggers a confirmation scan after 15 seconds. A rapid off/on cycle between scans may not be observed. USB receiver attachment/removal has its own wording. DAREU A950 Air V3 power-off/on with the receiver left attached has been checked separately from USB presence.
+
 ## Reporting an unsupported device
 
 Use the **Peripheral battery** issue template. Include model, revision, Windows/app version, cable or receiver connection, VID:PID if known, and observed readings. Do not include serial numbers, credentials, full hardware dumps or private profile files.

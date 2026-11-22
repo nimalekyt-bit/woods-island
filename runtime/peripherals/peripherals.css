@@ -278,60 +278,11 @@
   color: var(--color-ink-2);
 }
 .peripheral-settings {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  min-width: 0;
-  color: var(--color-ink);
-  font-size: 12px;
-}
-.peripheral-settings header {
-  font-size: 13px;
-  font-weight: 500;
-}
-.peripheral-setting {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-}
-.peripheral-setting > span {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  width: 100%;
   min-width: 0;
 }
-.peripheral-setting small {
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--color-ink-2);
-}
-.peripheral-setting select,
-.peripheral-setting input[type="number"] {
-  background: var(--color-tile);
-  border: 1px solid var(--color-line);
-  border-radius: 8px;
-  padding: 6px 9px;
-  color: var(--color-ink);
-  min-width: 86px;
-  max-width: 180px;
-}
-.peripheral-setting select option {
-  background: var(--color-sheet);
-  color: var(--color-ink);
-}
-.peripheral-setting input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--color-accent);
-  flex: none;
-}
-.peripheral-settings-options {
-  display: flex;
-  flex-direction: column;
-  gap: 13px;
-  padding-top: 12px;
-  border-top: 1px solid var(--color-line);
+.peripheral-settings select {
+  max-width: 190px;
 }
 @media (prefers-reduced-motion: reduce) {
   .peripheral-chevron {
