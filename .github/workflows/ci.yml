@@ -74,6 +74,15 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         shell: pwsh
         run: ./scripts/prepare-recording-tools.ps1
+      - name: Package Windows portable
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: |
+          node scripts/package-portable.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $version=(Get-Content package.json -Raw | ConvertFrom-Json).version
+          New-Item -ItemType Directory -Path dist-installer -Force | Out-Null
+          Compress-Archive -Path dist-portable/* -DestinationPath "dist-installer/Woods-Island-$version-windows-x64-portable.zip"
       - name: Package Windows installer
         if: github.event_name == 'workflow_dispatch'
         shell: pwsh

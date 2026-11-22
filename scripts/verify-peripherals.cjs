@@ -232,6 +232,20 @@ async function requireFreePort(value) {
     0,
   );
   await capture("battery-card");
+  await evaluate('document.querySelector("[data-peripheral-device=g435] .peripheral-manual button").scrollIntoView({block:"nearest"})');
+  const manualButton = await evaluate(
+    '(()=>{const b=document.querySelector("[data-peripheral-device=g435] .peripheral-manual button"),r=b.getBoundingClientRect(),s=getComputedStyle(b);return {x:r.x+r.width/2,y:r.y+r.height/2,width:r.width,height:r.height,paddingLeft:parseFloat(s.paddingLeft),paddingRight:parseFloat(s.paddingRight)};})()',
+  );
+  assert(manualButton.paddingLeft >= 7 && manualButton.paddingRight >= 7, "Manual button needs space around its hover text");
+  await command("Input.dispatchMouseEvent", {type:"mouseMoved",x:manualButton.x,y:manualButton.y});
+  await pause(200);
+  const hoveredButton = await evaluate(
+    '(()=>{const b=document.querySelector("[data-peripheral-device=g435] .peripheral-manual button"),r=b.getBoundingClientRect();return {width:r.width,height:r.height,hover:b.matches(":hover")};})()',
+  );
+  assert(hoveredButton.hover, "Manual button hover must be exercised in the native WebView");
+  assert(Math.abs(hoveredButton.width-manualButton.width)<1 && Math.abs(hoveredButton.height-manualButton.height)<1, "Hover must not move or resize the button");
+  await capture("manual-measure-hover");
+  await command("Input.dispatchMouseEvent", {type:"mouseMoved",x:0,y:0});
   // The first click only exposes the interruption notice. QA never sends bridge commands.
   await evaluate(
     'document.querySelector("[data-peripheral-device=g435] .peripheral-manual button").click()',
