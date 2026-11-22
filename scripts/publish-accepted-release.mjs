@@ -41,7 +41,7 @@ assert.equal(sha(await readFile(select(setup))),manifest.installer.sha256);
 const exeEntry=manifest.files.find(f=>f.name==='woods-island.exe');assert(exeEntry);
 assert.equal(sha(await readFile(raw)),exeEntry.sha256,'Raw accepted EXE differs from installer manifest');
 const portableRoot=resolve('verified-portable');
-execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command','Expand-Archive -LiteralPath $env:WOODS_PUBLISH_ZIP -DestinationPath $env:WOODS_PUBLISH_PORTABLE'],{windowsHide:true,env:{...process.env,WOODS_PUBLISH_ZIP:select(portable),WOODS_PUBLISH_PORTABLE:portableRoot}});
+execFileSync('pwsh.exe',['-NoProfile','-NonInteractive','-Command','$ErrorActionPreference="Stop"; Expand-Archive -LiteralPath $env:WOODS_PUBLISH_ZIP -DestinationPath $env:WOODS_PUBLISH_PORTABLE'],{windowsHide:true,env:{...process.env,WOODS_PUBLISH_ZIP:select(portable),WOODS_PUBLISH_PORTABLE:portableRoot}});
 const portableManifest=JSON.parse(await readFile(join(portableRoot,'manifest.json'),'utf8'));assert.equal(portableManifest.version,version);
 assert.deepEqual((await walk(portableRoot)).map(p=>relative(portableRoot,p).replaceAll('\\','/')).sort(),[...portableManifest.files.map(f=>f.name),'README.txt','manifest.json'].sort());
 for(const entry of portableManifest.files){assert(!entry.name.includes('..')&&!entry.name.startsWith('/')&&!entry.name.includes(':'));const bytes=await readFile(join(portableRoot,entry.name));assert.equal(bytes.length,entry.bytes);assert.equal(sha(bytes),entry.sha256);}
