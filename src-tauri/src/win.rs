@@ -243,6 +243,7 @@ impl WindowManager {
             let mut fullscreen = false;
             let mut desktop = false;
             let mut executable = String::new();
+            let mut bounds = serde_json::Value::Null;
             if !foreground.0.is_null() && foreground != island {
                 let mut class_name = [0u16; 256];
                 let size = windows::Win32::UI::WindowsAndMessaging::GetClassNameW(foreground, &mut class_name);
@@ -252,8 +253,9 @@ impl WindowManager {
                 let mut info = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
                 if !desktop && GetMonitorInfoW(monitor, &mut info).as_bool() {
                     if let Some(rect) = Self::get_window_rect(foreground) {
+                        bounds = serde_json::json!([rect.left,rect.top,rect.right,rect.bottom]);
                         let m = info.rcMonitor;
-                        fullscreen = rect.left <= m.left && rect.top <= m.top && rect.right >= m.right && rect.bottom >= m.bottom;
+                        fullscreen = MonitorFromWindow(island, MONITOR_DEFAULTTONEAREST)==monitor && rect.left <= m.left && rect.top <= m.top && rect.right >= m.right && rect.bottom >= m.bottom;
                     }
                 }
                 use windows::Win32::System::Threading::{OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION};
@@ -266,7 +268,7 @@ impl WindowManager {
                     let _ = windows::Win32::Foundation::CloseHandle(process);
                 }
             }
-            serde_json::json!({"fullscreen": fullscreen, "desktop": desktop, "executable": executable, "pid": pid})
+            serde_json::json!({"fullscreen": fullscreen, "desktop": desktop, "executable": executable, "pid": pid,"bounds":bounds})
         }
     }
 

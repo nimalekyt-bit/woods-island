@@ -1,7 +1,9 @@
+import { MediaSourcePicker } from '../media/MediaSources';
 import { CollapsedTrack, MediaTitle } from '../components/CollapsedTrack';
 import { PeripheralPanel } from '../peripherals/PeripheralPanel';
 import '../components/home-scroll.css';
 import { weatherDate } from '../weather/date';
+import { placePatch } from '../weather/places';
 import { NormalMediaPill } from '../components/NormalMediaPill';
 import { LyricsMediaPill } from '../components/LyricsMediaPill';
 // Compatibility application source; migrate components incrementally.
@@ -563,9 +565,11 @@ var ff = 0,
           .catch((t) => e({ loading: !1, error: String(t) })));
     },
     setPlace: (t) => {
+      const previous = pf.getState().data;
       e({ loading: !0, error: null, data: null });
-      return i.settingsSet({ weatherCity: t.name, weatherLat: t.lat, weatherLon: t.lon, weatherTimezone: `` })
-        .catch((error) => { e({ loading: !1, error: String(error) }); throw error; });
+      return i.settingsSet(placePatch(t))
+        .then(warnings => {if(warnings?.length) throw new Error(warnings.join(`\n`));})
+        .catch((error) => { e({ loading: !1, error: String(error), data: previous }); throw error; });
     },
     received: (t) => {
       if (!validWeatherForecast(t))
@@ -3230,79 +3234,8 @@ function $m({ appId: e, name: t }) {
     className: `h-5 w-full rounded bg-white/10 px-1.5 text-[11px] font-semibold text-ink outline-none`,
   });
 }
-function eh({ onClose: e }) {
-  let [t, n] = (0, ReactRuntime.useState)(null),
-    a = (0, ReactRuntime.useRef)(null);
-  ((0, ReactRuntime.useEffect)(() => {
-    i.mediaSources()
-      .then(n)
-      .catch(() => n([]));
-  }, []),
-    (0, ReactRuntime.useEffect)(() => {
-      let t = (t) => {
-          a.current && !a.current.contains(t.target) && e();
-        },
-        n = (t) => t.key === `Escape` && e();
-      return (
-        window.addEventListener(`pointerdown`, t, !0),
-        window.addEventListener(`keydown`, n),
-        () => {
-          (window.removeEventListener(`pointerdown`, t, !0), window.removeEventListener(`keydown`, n));
-        }
-      );
-    }, [e]));
-  let o = (t) => {
-      (i.mediaPick(t), e());
-    },
-    s = `press flex h-8 w-full shrink-0 items-center gap-2 rounded-lg px-2 text-left hover:bg-white/8`;
-  return (0, jsxRuntime.jsxs)(`div`, {
-    ref: a,
-    "data-media-sources": !0,
-    className: `scroll-thin absolute inset-1.5 z-20 flex flex-col gap-0.5 overflow-y-auto rounded-xl bg-sheet p-1 ring-1 ring-white/10`,
-    children: [
-      (t ?? []).map((e, t) =>
-        (0, jsxRuntime.jsxs)(
-          `button`,
-          {
-            className: s,
-            onClick: () => o(e.id),
-            children: [
-              (0, jsxRuntime.jsx)(`span`, {
-                className: `grid size-4 shrink-0 place-items-center`,
-                children: e.shown && (0, jsxRuntime.jsx)(we, { size: 13, className: `text-accent` }),
-              }),
-              (0, jsxRuntime.jsx)(`span`, {
-                className: `max-w-[40%] shrink-0 truncate text-[10.5px] font-semibold tracking-wider text-ink-3 uppercase`,
-                children: e.name || de(e.id),
-              }),
-              (0, jsxRuntime.jsx)(`span`, {
-                className: `min-w-0 flex-1 truncate text-[12px] text-ink`,
-                children: e.title || r(`Без названия`, `Untitled`),
-              }),
-              e.playing &&
-                (0, jsxRuntime.jsx)(lp, { size: 10, fill: `currentColor`, className: `shrink-0 text-ink-3` }),
-            ],
-          },
-          `${e.id}:${t}`,
-        ),
-      ),
-      t?.some((e) => e.picked) &&
-        (0, jsxRuntime.jsxs)(`button`, {
-          className: `${s} text-[12px] text-ink-2`,
-          onClick: () => o(null),
-          children: [
-            (0, jsxRuntime.jsx)(`span`, { className: `size-4 shrink-0` }),
-            r(`Пусть остров выбирает сам`, `Let the island choose`),
-          ],
-        }),
-      t?.length === 0 &&
-        (0, jsxRuntime.jsx)(`div`, {
-          className: `px-2 py-2 text-[12px] text-ink-3`,
-          children: r(`Плееров не найдено`, `No players found`),
-        }),
-    ],
-  });
-}
+function eh({onClose}) { return (0, jsxRuntime.jsx)(MediaSourcePicker, {onClose}); }
+
 function th() {
   let e = useIslandStore((e) => e.settings?.homePlayer ?? `soft`);
   return e === `compact` ? (0, jsxRuntime.jsx)(HomePlayer, {}) : (0, jsxRuntime.jsx)(rh, { look: e });

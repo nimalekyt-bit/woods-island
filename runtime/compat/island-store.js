@@ -1,3 +1,4 @@
+import { webChatService } from '../web-ai/providers';
 import { creatures } from '../characters/drawings/creatures';
 import { focusInputAfterActivation } from '../island/input-focus';
 import { peripheralEventEnabled, samePeripheralNotice } from '../peripherals/model';
@@ -208,7 +209,7 @@ function D(e, t, n) {
 function ue() {
   try {
     let e = localStorage.getItem(`island-chat-service`);
-    return e === `gemini` || e === `deepseek` ? e : `island`;
+    return webChatService(e);
   } catch {
     return `island`;
   }

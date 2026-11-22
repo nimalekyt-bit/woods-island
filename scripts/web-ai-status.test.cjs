@@ -3,6 +3,12 @@ const assert = require('node:assert/strict');
 const { loadTypeScript } = require('./load-runtime-typescript.cjs');
 const { parseStatus, statusText } = loadTypeScript('runtime/web-ai/status.ts');
 const state = (phase, code = null) => ({ service: 'gemini', target: 'window', phase, code, navigation: 4 });
+
+test('Web chat selection restores ChatGPT and existing providers, and rejects stale values',()=>{
+  const {webChatService}=loadTypeScript('runtime/web-ai/providers.ts');
+  for(const provider of ['chatgpt','gemini','deepseek'])assert.equal(webChatService(provider),provider);
+  for(const provider of [null,'island','unknown','https://example.com'])assert.equal(webChatService(provider),'island');
+});
 test('Web AI accepts native status and rejects malformed events', () => {
   assert.deepEqual(parseStatus(state('error', 7)), state('error', 7));
   for (const value of [null, {}, state('unknown'), { ...state('loaded'), target: 'remote' }, { ...state('loaded'), navigation: NaN }, state('error', '7')]) assert.equal(parseStatus(value), null);

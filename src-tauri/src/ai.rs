@@ -11,15 +11,15 @@ fn endpoint(settings:&Value,path:&str)->Result<String,String>{
     let raw=settings["aiBaseUrl"].as_str().unwrap_or("http://127.0.0.1:11434/v1").trim_end_matches('/');
     let url=reqwest::Url::parse(raw).map_err(|_|"Invalid AI base URL")?;
     if !["http","https"].contains(&url.scheme()){return Err("AI endpoint must use HTTP or HTTPS".into());}
-    if url.scheme()=="http"&&!matches!(url.host_str(),Some("localhost"|"127.0.0.1"|"::1")){return Err("Remote AI endpoints must use HTTPS".into());}
+    if url.scheme()=="http"&&!matches!(url.host_str(),Some("localhost"|"127.0.0.1"|"::1"|"[::1]")){return Err("Remote AI endpoints must use HTTPS".into());}
     Ok(format!("{raw}/{path}"))
 }
-fn client()->Result<reqwest::Client,String>{reqwest::Client::builder().timeout(std::time::Duration::from_secs(120)).connect_timeout(std::time::Duration::from_secs(8)).build().map_err(|e|e.to_string())}
 fn authenticate(request:reqwest::RequestBuilder)->reqwest::RequestBuilder{
     match crate::storage::load_secret("ai").filter(|s|!s.is_empty()){Some(key)=>request.bearer_auth(key),None=>request}
 }
 pub async fn models(settings:&Value)->Result<Vec<Value>,String>{
-    let response=authenticate(client()?.get(endpoint(settings,"models")?)).send().await.map_err(|e|e.to_string())?.error_for_status().map_err(|e|e.to_string())?;
+    let response=authenticate(crate::ai_http::client(settings,30)?.get(endpoint(settings,"models")?)).send().await.map_err(|e|crate::ai_http::network_error(settings,&e))?;
+    if !response.status().is_success(){return Err(crate::ai_http::status_error(settings,response.status()));}
     let data:Value=response.json().await.map_err(|e|e.to_string())?;
     let list=data["data"].as_array().ok_or("Provider did not return an OpenAI-compatible model list")?;
     Ok(list.iter().filter_map(|m|m["id"].as_str().map(|id|json!({"id":id,"name":id}))).collect())
@@ -33,7 +33,7 @@ pub fn start(app:tauri::AppHandle,id:u64,settings:Value,messages:Vec<Value>){
     if let Some(old)=REQUESTS.lock().unwrap().insert(id,token.clone()){old.cancelled.store(true,Ordering::SeqCst);old.signal.notify_one();}
     tauri::async_runtime::spawn(async move{
         let result=stream(&app,id,&settings,messages,&token).await;
-        REQUESTS.lock().unwrap().remove(&id);
+        {let mut requests=REQUESTS.lock().unwrap();if requests.get(&id).is_some_and(|current|Arc::ptr_eq(current,&token)){requests.remove(&id);}}
         if !token.cancelled.load(Ordering::SeqCst){
             match result{Ok(())=>{let _=app.emit("ai:done",id);},Err(message)=>{let _=app.emit("ai:error",json!({"id":id,"message":message}));}}
         }
@@ -62,14 +62,14 @@ pub fn resolve_messages(messages:Vec<Value>)->Result<Vec<Value>,String>{
 }
 
 async fn stream(app:&tauri::AppHandle,id:u64,settings:&Value,messages:Vec<Value>,cancel:&Arc<Cancel>)->Result<(),String>{
-    let messages=resolve_messages(messages)?;
+    let messages=crate::ai_http::with_date(resolve_messages(messages)?,&chrono::Local::now().format("%Y-%m-%dT%H:%M:%S%:z").to_string());
     let model=match settings["aiModel"].as_str().filter(|s|!s.is_empty()){Some(m)=>m.to_owned(),None=>models(settings).await?.first().and_then(|m|m["id"].as_str()).ok_or("No AI model is available")?.to_owned()};
-    let request=authenticate(client()?.post(endpoint(settings,"chat/completions")?)).json(&json!({"model":model,"messages":messages,"stream":true}));
-    let mut response=tokio::select!{response=request.send()=>response.map_err(|e|e.to_string())?,_ = cancel.signal.notified()=>return Ok(())};
-    if !response.status().is_success(){return Err(format!("AI provider returned HTTP {}. Check endpoint, model and your API key.",response.status()));}
+    let request=authenticate(crate::ai_http::client(settings,120)?.post(endpoint(settings,"chat/completions")?)).json(&json!({"model":model,"messages":messages,"stream":true}));
+    let mut response=tokio::select!{response=request.send()=>response.map_err(|e|crate::ai_http::network_error(settings,&e))?,_ = cancel.signal.notified()=>return Ok(())};
+    if !response.status().is_success(){return Err(crate::ai_http::status_error(settings,response.status()));}
     let mut pending=Vec::new();
     loop{
-        let chunk=tokio::select!{chunk=response.chunk()=>chunk.map_err(|e|e.to_string())?,_=cancel.signal.notified()=>return Ok(())};
+        let chunk=tokio::select!{chunk=response.chunk()=>chunk.map_err(|e|crate::ai_http::network_error(settings,&e))?,_=cancel.signal.notified()=>return Ok(())};
         let Some(chunk)=chunk else{break;}; pending.extend_from_slice(&chunk);
         if pending.len()>2*1024*1024{return Err("Invalid AI stream: oversized event".into());}
         while let Some(index)=pending.iter().position(|c|*c==b'\n'){
@@ -128,5 +128,5 @@ pub fn prune(keep:&[String])->Result<(),String>{
 #[cfg(test)] mod tests{
     use super::*;
     #[test] fn stream_parser_preserves_unicode_and_errors(){assert_eq!(parse_chunk(r#"{"choices":[{"delta":{"content":"Привет 🌲"}}]}"#).unwrap(),Some("Привет 🌲".into()));assert!(parse_chunk(r#"{"error":{"message":"quota"}}"#).is_err());}
-    #[test] fn endpoint_prevents_cleartext_remote_api_keys(){assert!(endpoint(&json!({"aiBaseUrl":"http://remote.example/v1"}),"models").is_err());assert_eq!(endpoint(&json!({"aiBaseUrl":"http://127.0.0.1:11434/v1/"}),"models").unwrap(),"http://127.0.0.1:11434/v1/models");}
+    #[test] fn endpoint_prevents_cleartext_remote_api_keys(){assert!(endpoint(&json!({"aiBaseUrl":"http://remote.example/v1"}),"models").is_err());assert_eq!(endpoint(&json!({"aiBaseUrl":"http://127.0.0.1:11434/v1/"}),"models").unwrap(),"http://127.0.0.1:11434/v1/models");assert_eq!(endpoint(&json!({"aiBaseUrl":"http://[::1]:11434/v1"}),"models").unwrap(),"http://[::1]:11434/v1/models");}
 }

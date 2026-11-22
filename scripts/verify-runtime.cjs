@@ -426,6 +426,63 @@ async function quit(client) {
     assert(Array.isArray(await main.invoke('bt_devices')));
     return {notifications:await main.invoke('notifications_access'),vpnProfiles:controls.vpns.length};
   });
+  await check('Weather cities and visibility preferences survive native settings saves',async()=>{
+    const prior=await main.invoke('settings_get');
+    const keys=['weatherCity','weatherLat','weatherLon','weatherTimezone','weatherUtcOffset','weatherPlaces','hideOnlyUnder','fullscreenEdge','releaseHotkeysInFullscreen'];
+    try{
+      await main.invoke('settings_set',{settings:{weatherCity:'Tokyo',weatherLat:35.68,weatherLon:139.76,weatherTimezone:'Asia/Tokyo',weatherUtcOffset:null}});
+      await main.invoke('settings_set',{settings:{weatherCity:'London',weatherLat:51.5,weatherLon:-0.12,weatherTimezone:'Europe/London',weatherUtcOffset:3600,hideOnlyUnder:true,fullscreenEdge:true,releaseHotkeysInFullscreen:true}});
+      const saved=await main.invoke('settings_get'),cities=JSON.parse(saved.weatherPlaces);
+      assert.equal(cities[0].name,'London');assert.equal(cities[1].name,'Tokyo');assert.equal(cities[1].timezone,'Asia/Tokyo');
+      assert.equal(saved.hideOnlyUnder,true);assert.equal(saved.fullscreenEdge,true);assert.equal(saved.releaseHotkeysInFullscreen,true);
+      await main.invoke('settings_set',{settings:{weatherUtcOffset:null}});assert.equal((await main.invoke('settings_get')).weatherUtcOffset,null);
+      await main.invoke('settings_set',{settings:{weatherUtcOffset:999999}});assert.equal((await main.invoke('settings_get')).weatherUtcOffset,null);
+      const disk=JSON.parse(await fs.readFile(path.join(dataDir,'settings.json'),'utf8'));assert.equal(disk.weatherTimezone,'Europe/London');
+      return {recentCities:true,timezone:true,nullableOffset:true,preferences:true};
+    }finally{
+      const patch=Object.fromEntries(keys.map(key=>[key,prior[key]]));
+      await main.invoke('settings_set',{settings:patch});
+      await main.invoke('settings_set',{settings:{weatherPlaces:prior.weatherPlaces}});
+    }
+  });
+  await check('AI proxy keeps credentials in Windows encryption and rejects invalid addresses',async()=>{
+    const prior=await main.invoke('settings_get');
+    try{
+      await main.invoke('ai_proxy_set',{proxy:'http://fixture-user:fixture-password@127.0.0.1:7890'});
+      assert.equal((await main.invoke('settings_get')).aiProxy,'http://127.0.0.1:7890/');
+      const encrypted=await fs.readFile(path.join(dataDir,'ai-proxy.key'));
+      assert(!encrypted.includes(Buffer.from('fixture-password')));assert(!encrypted.includes(Buffer.from('fixture-user')));
+      await main.invoke('settings_set',{settings:{opacityRest:93}});
+      for(const file of ['settings.json','settings.json.bak']){
+        const saved=await fs.readFile(path.join(dataDir,file),'utf8');assert(!saved.includes('fixture-password'));assert(!saved.includes('fixture-user'));
+      }
+      await assert.rejects(main.invoke('ai_proxy_set',{proxy:'http://example.com/private?password=secret'}));
+      assert.equal((await main.invoke('settings_get')).aiProxy,'http://127.0.0.1:7890/');
+      await main.invoke('ai_proxy_set',{proxy:''});assert.equal((await main.invoke('settings_get')).aiProxy,'');
+      await assert.rejects(fs.access(path.join(dataDir,'ai-proxy.key')));
+      return {encryptedCredentials:true,publicSettings:true,invalidRejected:true,remove:true};
+    }finally{await main.invoke('ai_proxy_set',{proxy:prior.aiProxy});}
+  });
+  await check('Open application and browser inventory returns process names',async()=>{
+    const browsers=await main.invoke('installed_browsers'),apps=await main.invoke('open_programs');
+    assert(Array.isArray(browsers)&&Array.isArray(apps));
+    assert(browsers.every(name=>typeof name==='string'&&name.endsWith('.exe')&&!name.includes('\\')));
+    assert(apps.every(app=>typeof app.executable==='string'&&typeof app.name==='string'&&typeof app.title==='string'));
+    return {browsers:browsers.length,apps:apps.length};
+  });
+  await check('Bundled runtime matches the validated production resource manifest',async()=>{
+    const expected=JSON.parse(await fs.readFile(path.join(root,'dist','runtime-manifest.json'),'utf8'));
+    const actual=await main.evaluate('fetch("/runtime-manifest.json").then(response=>response.json())');
+    assert(JSON.stringify(actual)===JSON.stringify(expected),'The executable must embed the latest validated runtime');
+    const hashes=await main.evaluate(`(async()=>{
+      const files=${JSON.stringify(expected.files)};const result=[];
+      for(const file of files){const response=await fetch('/'+file.path);if(!response.ok)throw Error('Bundled file unavailable: '+file.path);
+        const bytes=await response.arrayBuffer(),hash=await crypto.subtle.digest('SHA-256',bytes);
+        result.push({path:file.path,bytes:bytes.byteLength,sha256:[...new Uint8Array(hash)].map(value=>value.toString(16).padStart(2,'0')).join('')});}
+      return result;
+    })()`);
+    assert.deepEqual(hashes,expected.files);return {files:hashes.length,embeddedHashes:true};
+  });
   await check('Settings merge + persist, toggles do not crash', async () => {
     const before = await main.invoke('settings_get');
     const warnings = await main.invoke('settings_set', { settings: { opacityRest: 93, weatherCity: 'Брянск', weatherLat: 53.2424, weatherLon: 34.3668 } });
@@ -598,6 +655,59 @@ async function quit(client) {
     if(first.key===second?.key&&first.playing&&second.playing)assert(second.positionMs>first.positionMs,'Live position should advance');
     await main.invoke('settings_set',{settings:{mediaPill:'normal'}});
     return {live:true,title:first.title,artist:first.artist,position:first.positionMs,nextPosition:second?.positionMs,cover:!!cover};
+  });
+  await check('ChatGPT is selectable in the native chat and opens its isolated provider page',async()=>{
+    try{
+      await main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");ot.setState({expanded:true,tab:"chat",chatService:"island",peek:null,queue:[]});})()');
+      await waitFor(main,'!!document.querySelector("[data-chat-service=chatgpt]")','ChatGPT selector');
+      await main.evaluate('document.querySelector("[data-chat-service=chatgpt]").click()');
+      await waitFor(main,'localStorage.getItem("island-chat-service")==="chatgpt"','Persisted ChatGPT selection');
+      await pagesReady(page=>page.url===webAiUrl+'/chatgpt');
+      await waitFor(main,'window.__TAURI_INTERNALS__.invoke("web_ai_status").then(items=>items.some(item=>item.service==="chatgpt"&&item.phase==="loaded"))','ChatGPT native navigation');
+      assert.equal((await main.invoke('license_status')).source,'free');
+      return {visibleSelector:true,persistedSelection:true,nativeNavigation:true,free:true,providerFixture:true};
+    }finally{
+      await main.evaluate('document.querySelector("[data-chat-service=island]")?.click()');
+      await main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");ot.setState({expanded:false,tab:"home",chatService:"island"});})()');
+    }
+  });
+  await check('Hidden media sources cannot replace the selected player and can be restored',async()=>{
+    const prior=await main.invoke('settings_get'),id='ru.yandex.desktop.music.mod.connector';
+    let timer;
+    const publish=()=>fetch(`http://127.0.0.1:${musicPort}/track`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({trackId:'visibility-fixture',title:'Visibility fixture',artist:'Fixture',duration:300000,progress:10000,isPlaying:true})});
+    try{
+      await main.invoke('settings_set',{settings:{mediaHidden:[]}});
+      const response=await publish();assert(response.ok);timer=setInterval(()=>void publish().catch(()=>{}),1000);
+      await main.invoke('media_pick',{id});assert.equal((await main.invoke('bootstrap')).media.app,id);
+      // Only the source count is a UI fixture; Hide still uses the real native
+      // source and settings commands in this isolated profile.
+      await main.evaluate(`(async()=>{const {ot}=await import('/assets/runtime-debug.js');ot.setState({expanded:true,tab:'home',peek:null,queue:[]});
+        window.__woodsSourceCountFixture=setInterval(()=>{const media=ot.getState().media;if(media)ot.setState({media:{...media,sources:2}});},20);})()`);
+      await waitFor(main,'!!document.querySelector("[data-media-choose]")','Source picker button');
+      await main.evaluate('document.querySelector("[data-media-choose]").click()');
+      await waitFor(main,'!!document.querySelector("[data-media-sources] > div button:last-child")','Source hide button');
+      await main.evaluate('clearInterval(window.__woodsSourceCountFixture);document.querySelector("[data-media-sources] > div button:last-child").click()');
+      await waitFor(main,`window.__TAURI_INTERNALS__.invoke('settings_get').then(settings=>settings.mediaHidden.includes(${JSON.stringify(id)}))`,'Source hidden from its picker');
+      await main.invoke('settings_set',{settings:{mediaHidden:[id.toUpperCase()]}});
+      assert.notEqual((await main.invoke('bootstrap')).media?.app,id);
+      const sources=await main.invoke('media_sources');assert.equal(sources.find(source=>source.id===id).hidden,true);
+      await assert.rejects(main.invoke('media_pick',{id}));
+      const onDisk=JSON.parse(await fs.readFile(path.join(dataDir,'settings.json'),'utf8'));assert.deepEqual(onDisk.mediaHidden,[id.toUpperCase()]);
+      await main.invoke('open_settings',{section:'general'});
+      const pages=await pagesReady(page=>page.url.endsWith('/settings.html'));
+      const settings=await attach(pages.find(page=>page.url.endsWith('/settings.html')));
+      await waitFor(settings,'!!document.querySelector("[data-media-visibility] [role=switch]")','Player visibility settings');
+      await settings.evaluate('document.querySelector("[data-media-visibility] [role=switch]").click()');
+      await waitFor(main,'window.__TAURI_INTERNALS__.invoke("settings_get").then(settings=>settings.mediaHidden.length===0)','Player restored');
+      await main.invoke('media_pick',{id});assert.equal((await main.invoke('bootstrap')).media.app,id);
+      await main.invoke('plugin:window|close',{label:'settings'});await waitForWindowClosed('/settings.html');
+      return {hiddenFromPicker:true,hiddenFromSelection:true,caseInsensitive:true,persisted:true,restoredFromSettings:true,sourceCountFixture:true};
+    }finally{
+      await main.evaluate('clearInterval(window.__woodsSourceCountFixture)');
+      clearInterval(timer);await main.invoke('media_pick',{id:null});
+      await main.invoke('settings_set',{settings:{mediaHidden:prior.mediaHidden}});
+      await publish();
+    }
   });
   await check('Plain island and visible pause collapse after 2500 ms despite repeated metadata',async()=>{
     const prior=await main.invoke('settings_get');let playing=false,timer;
@@ -1678,7 +1788,7 @@ async function quit(client) {
     await new Promise(resolve=>providerServer.listen(0,'127.0.0.1',resolve));
     const prior=await main.invoke('settings_get');
     try{
-      await main.invoke('settings_set',{settings:{aiBaseUrl:`http://127.0.0.1:${providerServer.address().port}/v1`,aiModel:'fixture-model'}});
+      await main.invoke('settings_set',{settings:{aiBaseUrl:`http://127.0.0.1:${providerServer.address().port}/v1`,aiModel:'fixture-model',aiProxy:'socks5h://127.0.0.1:1'}});
       assert.deepEqual(await main.invoke('ai_models'),['fixture-model']);
       for(const name of ['ai:chunk','ai:done','ai:error'])await listen(main,name);
       const id=Date.now()*1000+1;
@@ -1686,11 +1796,13 @@ async function quit(client) {
       await waitFor(main,`window.__woodsEvents['ai:done'].includes(${id})||window.__woodsEvents['ai:error'].some(e=>e.id===${id})`,'AI streaming result');
       assert((await main.evaluate("window.__woodsEvents['ai:done']")).includes(id));
       const chunks=await main.evaluate("window.__woodsEvents['ai:chunk']");assert.equal(chunks.filter(e=>e.id===id).map(e=>e.text).join(''),'Проверка ✓');
-      assert(received[0].messages[0].content.some(c=>c.type==='text'&&c.text.includes('Проверка')),'Attachment text must reach the provider');
+      assert.equal(received[0].messages[0].role,'system');
+      assert.match(received[0].messages[0].content,/Current local date and time.*\d{4}-\d{2}-\d{2}T/);
+      if(attachmentId)assert(received[0].messages.some(message=>Array.isArray(message.content)&&message.content.some(c=>c.type==='text'&&c.text.includes('Проверка'))),'Attachment text must reach the provider');
       const failedId=id+1;
       await main.invoke('ai_chat',{id:failedId,messages:[{role:'user',content:'force-http-error'}]});
       await waitFor(main,`window.__woodsEvents['ai:error'].some(e=>e.id===${failedId})`,'AI error');
-      const error=(await main.evaluate("window.__woodsEvents['ai:error']")).find(e=>e.id===failedId);assert.equal(typeof error.id,'number');assert.match(error.message,/429/);
+      const error=(await main.evaluate("window.__woodsEvents['ai:error']")).find(e=>e.id===failedId);assert.equal(typeof error.id,'number');assert.match(error.message,/лимит|limit/i);
       const cancelledId=id+2;
       await main.invoke('ai_chat',{id:cancelledId,messages:[{role:'user',content:'force-cancel'}]});
       await waitFor(main,`window.__woodsEvents['ai:chunk'].some(e=>e.id===${cancelledId})`,'AI cancellation fixture start');
@@ -1698,7 +1810,7 @@ async function quit(client) {
       await pause(800);
       assert(!(await main.evaluate("window.__woodsEvents['ai:done']")).includes(cancelledId));
       assert(!(await main.evaluate("window.__woodsEvents['ai:error']")).some(e=>e.id===cancelledId));
-    }finally{await main.invoke('settings_set',{settings:{aiBaseUrl:prior.aiBaseUrl,aiModel:prior.aiModel}});await new Promise(resolve=>providerServer.close(resolve));providerServer=null;}
+    }finally{await main.invoke('settings_set',{settings:{aiBaseUrl:prior.aiBaseUrl,aiModel:prior.aiModel,aiProxy:prior.aiProxy}});await new Promise(resolve=>providerServer.close(resolve));providerServer=null;}
   });
   await check('OBS v5 handshake authenticates, reads state and rejects bad password',async()=>{
     let WebSocketServer;

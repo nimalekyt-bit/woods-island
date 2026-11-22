@@ -53,6 +53,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node --test scripts/reliability-ui.test.cjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --test scripts/weather-places.test.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --test scripts/shortcuts.test.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node --test scripts/peripherals.test.cjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node scripts/verify-reliability-ui.cjs
@@ -69,6 +73,11 @@ jobs:
         run: cargo +1.98.1 test --release --locked -j 1 --manifest-path src-tauri/Cargo.toml
       - name: Build Windows executable
         run: cargo +1.98.1 build --release --locked -j 1 --manifest-path src-tauri/Cargo.toml
+      - name: Verify native feature integration and bundled runtime
+        shell: pwsh
+        env:
+          WOODS_TEST_FILTER: 'Bundled runtime|Settings merge|Weather cities|AI proxy keeps|Open application|ChatGPT is|Hidden media|AI models|No unhandled|Explicit quit'
+        run: node scripts/verify-runtime.cjs src-tauri/target/release/woods-island.exe
       - name: Verify native Windows icons
         run: node scripts/verify-windows-icons.mjs src-tauri/icons/icon.ico src-tauri/target/release/woods-island.exe src-tauri/target/release/woods-island-pet-import.exe
       - name: Upload Windows executable

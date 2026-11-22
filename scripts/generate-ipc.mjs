@@ -44,8 +44,8 @@ for (const name of commands) {
 }
 const defaults = JSON.parse(/serde_json::from_str\(r###"([^]*?)"###\)/.exec(rust)[1]);
 const settings = Object.entries(defaults).map(([name, value]) => {
-  const t = Array.isArray(value) ? 'string[]' : typeof value;
-  if (!['boolean', 'number', 'string', 'string[]'].includes(t)) throw new Error(`Untyped setting: ${name}`);
+  const t = name==='weatherUtcOffset' && value===null ? 'number | null' : Array.isArray(value) ? 'string[]' : typeof value;
+  if (!['boolean', 'number', 'string', 'string[]', 'number | null'].includes(t)) throw new Error(`Untyped setting: ${name}`);
   return `  ${name}: ${t};`;
 }).join('\n');
 const entries = Object.entries(signatures).map(([name, { params, result }]) => {

@@ -1,11 +1,20 @@
+import { webChatProviders } from '../web-ai/providers';
+import { MediaVisibilitySettings } from '../media/MediaSources';
 import { ObsidianVaultSettings } from '../components/ObsidianVaultSettings';
 import { PeripheralSettings } from '../peripherals/PeripheralSettings';
 import { React as WoodsReact } from '../react';
 import { ConnectionSettings, UpdateSettings, UploadKeySettings } from '../components/ReliabilitySettings';
 import { WeatherTimezoneSettings, WeatherDataSources } from '../components/WeatherTimezoneSettings';
+import { WeatherPlaces } from '../weather/WeatherPlaces';
+import { placePatch } from '../weather/places';
+import { HotkeyRecorder } from '../keyboard/HotkeyRecorder';
+import { AppListPicker } from '../components/AppListPicker';
+import { AiProxySettings } from '../components/AiProxySettings';
+import { shortcutBindings } from '../keyboard/shortcuts';
 import { PetLibrarySettings } from '../components/PetLibrarySettings';
 import { usePetLibrary } from '../characters/pet-library';
 const WoodsSettingLabel = WoodsReact.createContext('');
+const WoodsShortcutBindings = WoodsReact.createContext([]);
 // Compatibility application source; migrate components incrementally.
 import { woodsAbout, woodsContact, woodsInfoIcon } from "./../components/woods-extensions.js";
 
@@ -1773,71 +1782,11 @@ function Mt({ list: e, baseUrl: t, onPick: i }) {
     ],
   });
 }
-var Nt = {
-  Space: `Space`,
-  Enter: `Enter`,
-  Tab: `Tab`,
-  Backquote: "`",
-  Minus: `-`,
-  Equal: `=`,
-  BracketLeft: `[`,
-  BracketRight: `]`,
-  Semicolon: `;`,
-  Quote: `'`,
-  Comma: `,`,
-  Period: `.`,
-  Slash: `/`,
-  Backslash: `\\`,
-  ArrowUp: `Up`,
-  ArrowDown: `Down`,
-  ArrowLeft: `Left`,
-  ArrowRight: `Right`,
-  PrintScreen: `PrintScreen`,
-  Insert: `Insert`,
-  Home: `Home`,
-  End: `End`,
-  PageUp: `PageUp`,
-  PageDown: `PageDown`,
-};
-function $({ value: e, onChange: t }) {
-  let [r, i] = (0, F.useState)(!1);
-  return (0, U.jsx)(`button`, {
-    onFocus: () => i(!0),
-    onBlur: () => i(!1),
-    onKeyDown: (e) => {
-      if ((e.preventDefault(), e.key === `Escape`)) return e.target.blur();
-      if (e.key === `Backspace` || e.key === `Delete`) return (t(``), e.target.blur());
-      let n;
-      if (
-        ((n = /^Key[A-Z]$/.test(e.code)
-          ? e.code.slice(3)
-          : /^Digit\d$/.test(e.code)
-            ? e.code.slice(5)
-            : /^F\d{1,2}$/.test(e.code)
-              ? e.code
-              : Nt[e.code]),
-        !n)
-      )
-        return;
-      let r = [e.ctrlKey && `Ctrl`, e.altKey && `Alt`, e.shiftKey && `Shift`, e.metaKey && `Super`].filter(
-        Boolean,
-      );
-      (r.length !== 0 || /^F\d/.test(n) || n === `PrintScreen`) && (t([...r, n].join(`+`)), e.target.blur());
-    },
-    className: `flex h-8 min-w-40 items-center justify-center gap-1 rounded-lg px-2 text-[12px] outline-none ${r ? `bg-[#8ea2ff]/20 text-[#c9d2ff] ring-1 ring-[#8ea2ff]/60` : `bg-white/[0.07] text-white hover:bg-white/10`}`,
-    children: r
-      ? n(`Нажми сочетание…`, `Press a combination…`)
-      : e
-        ? fe(e).map((e, t) =>
-            (0, U.jsx)(
-              `kbd`,
-              { className: `rounded bg-white/10 px-1.5 py-0.5 font-sans text-[11px]`, children: e },
-              t,
-            ),
-          )
-        : (0, U.jsx)(`span`, { className: `text-white/40`, children: n(`не назначено`, `not set`) }),
-  });
+function $({value,onChange,label,bindings}) {
+  const rowLabel=WoodsReact.useContext(WoodsSettingLabel),all=WoodsReact.useContext(WoodsShortcutBindings);
+  return (0,U.jsx)(HotkeyRecorder,{value,onChange,label:label||rowLabel||n('Сочетание клавиш','Shortcut'),bindings:bindings?[...all,...bindings]:all});
 }
+function WoodsSettingsProviders({settings,value,children}){return (0,U.jsx)(WoodsShortcutBindings.Provider,{value:shortcutBindings(settings,n),children:(0,U.jsx)(gt.Provider,{value,children})});}
 function Pt({ service: e, save: i }) {
   let a = h(e);
   let c = (e) =>
@@ -1960,7 +1909,7 @@ function It({ onProblems: e }) {
                 title: e.path,
                 children: e.name,
               }),
-              (0, U.jsx)($, { value: a[String(e.id)] ?? ``, onChange: (t) => s(e.id, t) }),
+              (0, U.jsx)($, { value: a[String(e.id)] ?? ``, onChange: (t) => s(e.id, t),label:e.name,bindings:(t??[]).map(item=>({value:a[String(item.id)]??``,label:item.name})) }),
             ],
           },
           e.id,
@@ -2241,14 +2190,16 @@ function zt() {
       t(o),
       (a.current += 1),
       r
-        .settingsSet(o)
+        .settingsSet(n)
         .then((warnings) => { f(warnings); if (warnings?.length) setSaveError(warnings.join(`\n`)); })
         .catch((error) => { setSaveError(String(error)); void r.settingsGet().then((saved) => {i.current=saved; t(saved);}).catch(() => {}); })
         .finally(() => {
           --a.current;
+          if (a.current === 0) void r.settingsGet().then((saved) => { if (a.current === 0) {i.current=saved; t(saved);} }).catch(() => {});
         }));
   };
-  return (0, U.jsx)(gt.Provider, {
+  return (0, U.jsx)(WoodsSettingsProviders, {
+    settings:e,
     value: Ae,
     children: (0, U.jsx)(G.Provider, {
       value: { page: y, go: b },
@@ -2489,6 +2440,9 @@ function zt() {
                           onChange: (e) => H({ showOnDesktop: e }),
                         }),
                       }),
+                      (0,U.jsx)(J,{title:n(`Прятать, только когда окно под островом`,`Hide only while a window is under the island`),hint:n(`Окно в стороне не скрывает остров. Работает для автоскрытия и списка «Прятать».`,`A window off to the side does not hide the island. Applies to auto-hide and the Hide list.`),children:(0,U.jsx)(Y,{value:e.hideOnlyUnder===true,onChange:value=>H({hideOnlyUnder:value})})}),
+                      (0,U.jsx)(J,{title:n(`Выход от верхнего края над полным экраном`,`Reveal from the top edge over fullscreen apps`),hint:n(`Включи, если хочешь возвращать остров курсором над игрой или видео.`,`Enable to reveal the island with the cursor over a game or video.`),children:(0,U.jsx)(Y,{value:e.fullscreenEdge===true,onChange:value=>H({fullscreenEdge:value})})}),
+                      (0,U.jsx)(J,{title:n(`Отпускать клавиши программе на весь экран`,`Release shortcuts to fullscreen apps`),hint:n(`Клавиши инструментов и ярлыков временно освобождаются. Сочетания открытия острова и переключения скрытия остаются доступны.`,`Tool and launcher shortcuts are temporarily released. The island toggle and fullscreen visibility shortcuts remain available.`),children:(0,U.jsx)(Y,{value:e.releaseHotkeysInFullscreen===true,onChange:value=>H({releaseHotkeysInFullscreen:value})})}),
                       (0, U.jsxs)(`div`, {
                         className: `flex flex-col gap-2 px-4 py-3`,
                         children: [
@@ -2525,23 +2479,13 @@ function zt() {
                             children: [
                               v === `keep`
                                 ? n(
-                                    `Пока впереди окно одной из этих программ, автоскрытие не прячет остров: он остаётся на виду, как на рабочем столе. По одной на строку, имя процесса: code.exe, pycharm64.exe.`,
-                                    `While a window of one of these apps is in front, auto-hide leaves the island in sight, as on the desktop. One process name per line: code.exe, pycharm64.exe.`,
+                                    `Остров остаётся на виду, даже над полным экраном. По одной программе на строку: code.exe, pycharm64.exe.`,
+                                    `The island stays visible, including over fullscreen apps. One process name per line: code.exe, pycharm64.exe.`,
                                   )
                                 : n(
                                     `Пока впереди окно одной из этих программ, остров уходит за край экрана, как при автоскрытии, и возвращается от верхнего края. По одной на строку, имя процесса: photoshop.exe, premiere.exe.`,
                                     `While a window of one of these apps is in front, the island leaves the screen as with auto-hide, and comes back from the top edge. One process name per line: photoshop.exe, premiere.exe.`,
                                   ),
-                              v === `keep` &&
-                                !e.autoHide &&
-                                (0, U.jsx)(`span`, {
-                                  "data-keep-note": !0,
-                                  className: `mt-1 block text-[#ffb340]/90`,
-                                  children: n(
-                                    `Работает, когда включено «Прятать остров, пока он не нужен».`,
-                                    `Works when “Hide the island when not needed” is on.`,
-                                  ),
-                                }),
                             ],
                           }),
                           (0, U.jsx)(
@@ -2558,6 +2502,7 @@ function zt() {
                             },
                             v,
                           ),
+                          (0,U.jsx)(AppListPicker,{key:v,mode:v,value:Tt(v===`keep`?_:g),onChange:names=>{(v===`keep`?te:ee)(names.join(`\n`));H(v===`keep`?{keepForApps:names}:{hideForApps:names});}}),
                         ],
                       }),
                       (0, U.jsx)(J, {
@@ -2716,6 +2661,7 @@ function zt() {
                           onChange: (e) => H({ liquidSpectrum: e }),
                         }),
                       }),
+                      (0, U.jsx)(MediaVisibilitySettings, {value:e.mediaHidden || [], save:H, Row:J, Switch:Y}),
                       (0, U.jsx)(J, {
                         since: `1.2.7`,
                         stacked: !0,
@@ -3033,6 +2979,7 @@ function zt() {
                           onChange: (e) => H({ hotkeyTheme: e }),
                         }),
                       }),
+                      (0,U.jsx)(J,{title:n(`Скрытие над полным экраном: вкл. / выкл.`,`Toggle hiding over fullscreen apps`),children:(0,U.jsx)($,{value:e.hotkeyFullscreen??``,onChange:value=>H({hotkeyFullscreen:value})})}),
                       (0, U.jsx)(It, { onProblems: f }),
                       De &&
                         he([
@@ -3084,19 +3031,19 @@ function zt() {
                         pro: !0,
                         title: n(`Веб-версии без ключа`, `The web versions, no key`),
                         hint: n(
-                          `Gemini и DeepSeek на их сайтах, прямо во вкладке «Чат» острова: нужен только вход в аккаунт. Переключаются над чатом, открываются и из Alt+Space. Кнопка «В окне» переносит сайт в отдельное окно, его размер можно менять`,
-                          `Gemini and DeepSeek on their own sites, right in the island's Chat tab: all it takes is signing in. Switched above the chat, they open from Alt+Space too. "In a window" moves the site to a window of its own that can be resized`,
+                          `ChatGPT, Gemini и DeepSeek прямо во вкладке «Чат»: вход со своим аккаунтом, без API-ключа. Открываются и из командной строки острова. Кнопка «В окне» переносит чат в отдельное окно.`,
+                          `ChatGPT, Gemini and DeepSeek in the Chat tab: sign in with your account, without an API key. Also available from the island command bar. “In a window” moves the chat to a separate window.`,
                         ),
                         children: (0, U.jsx)(`div`, {
-                          className: `flex shrink-0 gap-1.5`,
-                          children: [`gemini`, `deepseek`].map((e) =>
+                          className: `flex shrink-0 flex-wrap gap-1.5`,
+                          children: webChatProviders.map(({id:e,label}) =>
                             (0, U.jsx)(
                               `button`,
                               {
                                 "data-web-ai-open": e,
                                 onClick: () => (l.pro ? void r.webAiOpen(e) : b(`pro`)),
                                 className: `h-8 rounded-lg bg-white/10 px-3 text-[12.5px] text-white hover:bg-white/15`,
-                                children: e === `gemini` ? `Gemini` : `DeepSeek`,
+                                children: label,
                               },
                               e,
                             ),
@@ -3174,6 +3121,7 @@ function zt() {
                           }),
                         ],
                       }),
+                      y === `ai` && (0,U.jsx)(AiProxySettings,{value:e.aiProxy||``,Row:J}),
                       (0, U.jsxs)(`div`, {
                         className: `flex items-center gap-3 px-4 py-3`,
                         children: [
@@ -3364,12 +3312,13 @@ function zt() {
                           (0, U.jsx)(
                             ge,
                             {
-                              onPick: (e) => H({ weatherCity: e.name, weatherLat: e.lat, weatherLon: e.lon, weatherTimezone: `` }),
+                              onPick: (e) => H(placePatch(e)),
                             },
                             e.weatherCity,
                           ),
                         ],
                       }),
+                      y === `weather` && (0, U.jsx)(`div`, {className:`px-4 pb-3`,children:(0,U.jsx)(WeatherPlaces,{settings:e,onPick:(place)=>H(placePatch(place))})}),
                       y === `weather` && (0, U.jsx)(WeatherTimezoneSettings, { Row: J, value: e.weatherTimezone || ``, save: H }),
                       (0, U.jsx)(J, {
                         title: n(`Единицы`, `Units`),

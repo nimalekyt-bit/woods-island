@@ -39,6 +39,11 @@ let browser,server;
      if(command==='plugin:event|unlisten'){subscriptions.delete(args.eventId);return;}
      if(command==='settings_get')return window.saved;
      if(command==='settings_set'){window.saved={...window.saved,...args.settings};emit('settings:changed',window.saved);return [];}
+     if(command==='media_sources')return [{id:'fixture.music',name:'Fixture Music',title:'Fixture track',playing:true,hidden:window.saved.mediaHidden.includes('fixture.music')}];
+     if(command==='hotkeys_recording')return true;
+     if(command==='installed_browsers')return ['chrome.exe','msedge.exe'];
+     if(command==='open_programs')return [{executable:'code.exe',name:'Code',title:'Fixture project'},{executable:'chrome.exe',name:'Chrome',title:'Fixture page'}];
+     if(command==='ai_proxy_set'){window.saved={...window.saved,aiProxy:args.proxy};emit('settings:changed',window.saved);return true;}
      if(command==='plugin:app|version')return '1.2.0';
      if(command==='license_status')return {pro:true,active:true};
      if(command==='pets_catalog')return {status:'ready',pets:[]};
@@ -114,6 +119,60 @@ let browser,server;
   const zone=page.getByRole('textbox',{name:pick('Часовой пояс города','City time zone')});await zone.fill('Europe/London');
   await page.getByRole('button',{name:pick('Применить','Apply'),exact:true}).click();assert.equal(await page.evaluate(()=>window.saved.weatherTimezone),'Europe/London');
   await screenshot('weather');
+  await page.evaluate(()=>window.__TAURI_INTERNALS__.invoke('settings_set',{settings:{weatherCity:'Tokyo',weatherLat:35.68,weatherLon:139.69,weatherTimezone:'Asia/Tokyo',weatherPlaces:JSON.stringify([{name:'Tokyo',lat:35.68,lon:139.69,timezone:'Asia/Tokyo'},{name:'London',lat:51.5,lon:0,timezone:'Europe/London'},{name:'Очень длинное имя города для проверки узкого окна настроек',lat:3,lon:4}])}}));
+  const cities=page.locator('[data-weather-places]');await cities.waitFor();
+  assert.equal(await cities.getByRole('button',{name:'Tokyo',exact:true}).getAttribute('aria-pressed'),'true');
+  await cities.getByRole('button',{name:'London',exact:true}).click();
+  await page.waitForFunction(()=>window.saved.weatherCity==='London'&&window.saved.weatherTimezone==='Europe/London');
+  assert.equal(await cities.getByRole('button',{name:'London',exact:true}).getAttribute('aria-pressed'),'true');
+  const placeSave=await page.evaluate(()=>window.calls.filter(call=>call.command==='settings_set').at(-1).args.settings);
+  assert.equal(placeSave.weatherUtcOffset,null);assert(!Object.hasOwn(placeSave,'autostart'),'City selection sends only changed settings');
+  for(const width of [820,660]){
+   await page.setViewportSize({width,height:720});
+   const overflow=await cities.evaluate(group=>{const r=group.getBoundingClientRect();return group.scrollWidth>group.clientWidth+1||[...group.querySelectorAll('button')].some(button=>button.getBoundingClientRect().right>r.right+1);});
+   assert.equal(overflow,false,'City controls fit settings width');await screenshot('weather-cities-'+width);
+  }
+  await page.setViewportSize({width:820,height:720});
+  await page.locator('[data-nav=general]').click();
+  const mediaVisibility=page.locator('[data-media-visibility]');
+  const player=mediaVisibility.getByRole('switch',{name:'Fixture Music',exact:true});await player.waitFor();
+  await player.click();await page.waitForFunction(()=>window.saved.mediaHidden.includes('fixture.music'));
+  await player.click();await page.waitForFunction(()=>!window.saved.mediaHidden.includes('fixture.music'));
+  await page.evaluate(()=>window.__TAURI_INTERNALS__.invoke('settings_set',{settings:{mediaHidden:[null,17,'fixture.music']}}));
+  await page.waitForFunction(()=>document.querySelector('[data-media-visibility] [role=switch]')?.getAttribute('aria-checked')==='false');
+  await player.click();await page.waitForFunction(()=>window.saved.mediaHidden.length===0);
+  await screenshot('media-visibility');
+  await page.locator('[data-hide-browsers]').click();
+  await page.waitForFunction(()=>window.saved.hideForApps.includes('chrome.exe')&&window.saved.hideForApps.includes('msedge.exe'));
+  await page.locator('[data-hide-browsers]').click();assert.equal(await page.evaluate(()=>window.saved.hideForApps.filter(name=>name==='chrome.exe').length),1);
+  await page.locator('[data-app-list-picker]').getByRole('button',{name:pick('Выбрать из открытых','Pick from open apps'),exact:true}).click();
+  await page.locator('[data-open-apps] button').filter({hasText:'code.exe'}).click();await page.waitForFunction(()=>window.saved.hideForApps.includes('code.exe'));
+  await page.locator('[data-open-apps] button').filter({hasText:'code.exe'}).click();await page.waitForFunction(()=>!window.saved.hideForApps.includes('code.exe'));
+  await screenshot('app-visibility');
+  for(const [ru,en,key] of [['Прятать, только когда окно под островом','Hide only while a window is under the island','hideOnlyUnder'],['Выход от верхнего края над полным экраном','Reveal from the top edge over fullscreen apps','fullscreenEdge'],['Отпускать клавиши программе на весь экран','Release shortcuts to fullscreen apps','releaseHotkeysInFullscreen']]){
+   const control=page.getByRole('switch',{name:pick(ru,en),exact:true});await control.click();await page.waitForFunction(key=>window.saved[key]===true,key);
+  }
+  await page.locator('[data-nav=hotkeys]').click();
+  const recorder=page.locator('[data-hotkey-recorder]').first(),recordButton=recorder.getByRole('button');
+  await recordButton.focus();await page.keyboard.down('Control');assert.equal(await recorder.getByText('Ctrl',{exact:true}).count(),1);await page.keyboard.up('Control');
+  await page.keyboard.press('Control+Space');
+  await recorder.getByRole('status').waitFor();assert.match(await recorder.getByRole('status').innerText(),lang==='ru'?/Командная строка/:/Command bar/);
+  assert.equal(await page.evaluate(()=>window.saved.hotkeyToggle),'Alt+I');
+  await page.keyboard.press('a');assert.match(await recorder.getByRole('status').innerText(),/Ctrl, Alt, Shift/);
+  await page.keyboard.press('Control+Shift+F8');await page.waitForFunction(()=>window.saved.hotkeyToggle==='Ctrl+Shift+F8');
+  await recordButton.focus();await page.keyboard.press('Alt+Space');await page.waitForFunction(()=>window.saved.hotkeyToggle==='Alt+Space');
+  assert((await page.evaluate(()=>window.calls)).some(call=>call.command==='hotkeys_recording'&&call.args.on===true),'Recording releases native shortcuts');
+  await page.waitForFunction(()=>window.calls.some(call=>call.command==='hotkeys_recording'&&call.args.on===false));
+  await screenshot('hotkeys');
+  await page.locator('[data-nav=ai]').click();
+  await page.locator('[data-web-ai-open=chatgpt]').waitFor();
+  assert.equal(await page.locator('[data-web-ai-open=chatgpt]').innerText(),'ChatGPT');
+  const proxy=page.locator('[data-ai-proxy]');await proxy.waitFor();
+  const proxyInput=proxy.getByLabel(pick('Адрес прокси ИИ','AI proxy address'));assert.equal(await proxyInput.getAttribute('type'),'password');
+  await proxyInput.fill('socks5h://127.0.0.1:1080');await proxy.getByRole('button',{name:pick('Сохранить','Save'),exact:true}).click();
+  await page.waitForFunction(()=>window.saved.aiProxy==='socks5h://127.0.0.1:1080');await page.waitForFunction(()=>document.querySelector('[data-ai-proxy] input').value==='');
+  await screenshot('ai-proxy');
+  await proxy.getByRole('button',{name:pick('Удалить','Remove'),exact:true}).click();await page.waitForFunction(()=>window.saved.aiProxy==='');
   await page.locator('[data-nav=clipboard]').click();
   const key=page.locator('[data-upload-key]');await key.waitFor();assert.equal(await key.getAttribute('type'),'password');
   await key.fill('fixture-key');await page.locator('[data-upload]').getByRole('button',{name:pick('Сохранить','Save'),exact:true}).click();
@@ -177,7 +236,7 @@ let browser,server;
   await page.getByRole('button',{name:pick('Install update','Установить'),exact:true}).waitFor();
   assert.equal(await page.locator('[data-update-settings]').count(),1,'Changing language preserves the active section');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
-  assert.deepEqual(errors,[]);results.push({language:lang,shell:['820x720','660x600'],verified:['Existing settings flows','Peripheral switch and selector persistence','Conditional notification settings','Keyboard switch activation','Full-width layout and 44x24 accessible switches at 820/660px'],errors:0,overflow:false});
+  assert.deepEqual(errors,[]);results.push({language:lang,shell:['820x720','660x600'],verified:['Existing settings flows','Weather city switching with per-city timezone','Weather city controls at 820/660px','Visibility preference persistence','Held modifiers, conflict action names and Alt+Space recording','Peripheral switch and selector persistence','Conditional notification settings','Keyboard switch activation','Full-width layout and 44x24 accessible switches at 820/660px'],errors:0,overflow:false});
   await context.close();
  }
  await fs.writeFile(path.join(scratch,'report.json'),JSON.stringify({pass:true,results},null,2));console.log(JSON.stringify({pass:true,languages:2,peripheralWidths:[820,660],report:path.join(scratch,'report.json')}));

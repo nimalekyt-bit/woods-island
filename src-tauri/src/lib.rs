@@ -15,8 +15,10 @@ pub mod peripherals;
 pub mod steam;
 pub mod notes;
 pub mod ai;
+mod ai_http;
 pub mod capture;
 pub mod system;
+mod app_inventory;
 pub mod clipboard;
 pub mod media;
 pub mod lyrics;
@@ -24,7 +26,9 @@ pub mod music_bridge;
 pub mod obs;
 pub mod storage;
 pub mod weather;
+mod weather_places;
 pub mod win;
+mod visibility;
 pub mod pets;
 pub mod updates;
 pub mod diagnostics;
@@ -89,6 +93,10 @@ fn default_settings() -> Value {
     "collapseDelayMs": 350,
     "style": "notch",
     "hideInFullscreen": true,
+    "mediaHidden": [],
+    "hideOnlyUnder": false,
+    "fullscreenEdge": false,
+    "releaseHotkeysInFullscreen": false,
     "captureVisible": false,
     "autoHide": false,
     "showOnDesktop": false,
@@ -150,6 +158,7 @@ fn default_settings() -> Value {
     "hotkeyVpn": "",
     "hotkeyMediaPill": "",
     "hotkeyTheme": "",
+    "hotkeyFullscreen": "",
     "hotkeyWebAi": "",
     "cardTime": "normal",
     "homeHidden": [],
@@ -206,6 +215,7 @@ fn default_settings() -> Value {
     "onboardingCompleted": false,
     "reducedMotion": "auto",
     "weatherTimezone": "",
+    "weatherUtcOffset": null,
     "mascot": true,
     "character": "liquid",
     "characterMusic": "",
@@ -213,6 +223,7 @@ fn default_settings() -> Value {
     "language": "auto",
     "aiBaseUrl": "http://127.0.0.1:11434/v1",
     "aiModel": "",
+    "aiProxy": "",
     "sttBaseUrl": "https://api.groq.com/openai/v1",
     "sttModel": "whisper-large-v3-turbo",
     "sttLanguage": "",
@@ -220,6 +231,7 @@ fn default_settings() -> Value {
     "dictatePaste": false,
     "moduleWeather": true,
     "weatherCity": "",
+    "weatherPlaces": "[]",
     "weatherLat": 0,
     "weatherLon": 0,
     "weatherUnits": "metric",
@@ -260,6 +272,7 @@ fn start_cursor_loop(app: AppHandle, state: Arc<AppState>) {
         let mut last_context = Value::Null;
         let mut last_check = std::time::Instant::now() - std::time::Duration::from_secs(1);
         let mut geometry_key = String::new();
+        let mut allow_edge = false;
 
         loop {
             std::thread::sleep(std::time::Duration::from_millis(25));
@@ -288,7 +301,7 @@ fn start_cursor_loop(app: AppHandle, state: Arc<AppState>) {
 
             let pad_x = 4;
             let pad_bottom = 6;
-            let inside_pill = (rel_x >= (rect.x - pad_x) && rel_x <= (rect.x + rect.w + pad_x))
+            let inside_pill = rect.y + rect.h > 0 && (rel_x >= (rect.x - pad_x) && rel_x <= (rect.x + rect.w + pad_x))
                 && (rel_y >= 0 && rel_y <= (rect.y + rect.h + pad_bottom));
 
             // Cursor touching top 3 pixels near island activates edge unfold
@@ -307,23 +320,31 @@ fn start_cursor_loop(app: AppHandle, state: Arc<AppState>) {
                 let _ = app.emit("hover", is_hovered);
             }
 
+            let at_top_edge = at_top_edge && allow_edge;
             if at_top_edge != is_edge {
                 is_edge = at_top_edge;
                 let _ = app.emit("island:edge", is_edge);
             }
             if last_check.elapsed() >= std::time::Duration::from_millis(500) {
                 last_check = std::time::Instant::now();
-                let context = win::WindowManager::system_context(hwnd);
+                let mut context = win::WindowManager::system_context(hwnd);
                 let settings = state.settings.lock().unwrap().clone();
-                let context_key = json!([context,settings["hideInFullscreen"],settings["hideForApps"],settings["keepForApps"]]);
+                let recording_until=HOTKEY_RECORDING_UNTIL.load(Ordering::Relaxed);
+                if recording_until>0 && (media::now_ms()>=recording_until || !settings_is_foreground(&app)) {
+                    HOTKEY_RECORDING_UNTIL.store(0,Ordering::Relaxed);let errors=register_hotkeys(&app,&settings);*state.hotkey_errors.lock().unwrap()=errors;
+                }
+                let anchor=visibility::Bounds {left:win_rect.left+(rect.x as f64*scale).round() as i32,top:win_rect.top+((if settings["style"]=="capsule" {8}else{0}) as f64*scale).round() as i32,right:win_rect.left+((rect.x+rect.w) as f64*scale).round() as i32,bottom:win_rect.top+((rect.h.clamp(1,64)+if settings["style"]=="capsule" {8}else{0}) as f64*scale).round() as i32};
+                context["under"]=json!(visibility::Bounds::from_json(&context["bounds"]).is_some_and(|window|anchor.intersects(window)));
+                let policy=visibility::resolve(&settings,&context);
+                allow_edge=policy.edge;
+                let suspend=context["fullscreen"].as_bool().unwrap_or(false)&&settings["releaseHotkeysInFullscreen"].as_bool().unwrap_or(false);
+                if FULLSCREEN_SHORTCUTS.swap(suspend,Ordering::Relaxed)!=suspend {let errors=register_hotkeys(&app,&settings);*state.hotkey_errors.lock().unwrap()=errors;}
+                let context_key = json!([context,settings["hideInFullscreen"],settings["hideForApps"],settings["keepForApps"],settings["hideOnlyUnder"],settings["fullscreenEdge"]]);
                 if context_key != last_context {
-                    let executable = context["executable"].as_str().unwrap_or("");
-                    let matches = |key: &str| settings[key].as_array().map(|items| items.iter().filter_map(Value::as_str).any(|p|p.eq_ignore_ascii_case(executable))).unwrap_or(false);
-                    let full = context["fullscreen"].as_bool().unwrap_or(false) && settings["hideInFullscreen"].as_bool().unwrap_or(true);
-                    let _ = app.emit("fullscreen", full);
-                    let _ = app.emit("island:shy", full || matches("hideForApps"));
-                    let _ = app.emit("island:keep", matches("keepForApps"));
-                    let _ = app.emit("island:desktop", context["desktop"].as_bool().unwrap_or(false));
+                    let _ = app.emit("fullscreen", policy.fullscreen);
+                    let _ = app.emit("island:shy", policy.shy);
+                    let _ = app.emit("island:keep", policy.keep);
+                    let _ = app.emit("island:desktop", policy.desktop);
                     last_context = context_key;
                 }
                 let monitors = app.available_monitors().unwrap_or_default();
@@ -363,7 +384,7 @@ fn report_page_scale(width: Option<f64>, state: tauri::State<'_, Arc<AppState>>)
         if let Some(value) = *state.main_hwnd.lock().unwrap() {
             win::WindowManager::report_page_width(HWND(value as _), width.unwrap());
             let rect = *state.island_rect.lock().unwrap();
-            win::WindowManager::update_island_region(HWND(value as _),Some((rect.x-4,0,rect.x+rect.w+4,rect.y+rect.h+6)));
+            win::WindowManager::update_island_region(HWND(value as _),if rect.y+rect.h<=0{None}else{Some((rect.x-4,0,rect.x+rect.w+4,rect.y+rect.h+6))});
         }
     }
 }
@@ -407,7 +428,7 @@ fn report_island_rect(
             let y1 = 0;
             let x2 = rect.x + rect.w + pad_x;
             let y2 = rect.y + rect.h + pad_bottom;
-            win::WindowManager::update_island_region_with_insets(hwnd, if tucked && y2<=0 {None}else{Some((x1, y1, x2, y2))}, right, bottom);
+            win::WindowManager::update_island_region_with_insets(hwnd, if tucked && rect.y+rect.h<=0 {None}else{Some((x1, y1, x2, y2))}, right, bottom);
         }
     }
     canvas.map(|canvas| json!({"layoutViewportHeight":canvas.layout_height,"canvasOverscanWidth":canvas.overscan_width,"canvasOverscanBottom":canvas.overscan_bottom})).unwrap_or(Value::Null)
@@ -493,9 +514,15 @@ fn settings_set(settings:Option<Value>,app:AppHandle,state:tauri::State<'_, Arc<
  let Some(mut patch)=settings else{return Vec::new();};if !patch.is_object(){return vec!["Settings must be an object".into()];}
  if let Some(key)=patch.get("uploadKey").and_then(Value::as_str){if let Err(error)=storage::save_secret("upload",key){return vec![error];}}
  patch.as_object_mut().unwrap().remove("uploadKey");
- let mut warnings=Vec::new();let before=state.settings.lock().unwrap().clone();let updated={let mut value=before.clone();merge_settings(&mut value,&patch);value};
- if let Err(e)=storage::save_json_file("settings.json",&updated){return vec![e];}*state.settings.lock().unwrap()=updated.clone();
+ if let Some(raw)=patch["aiProxy"].as_str(){match ai_http::proxy(raw){Ok((public,secret))=>{if let Err(error)=storage::save_secret("ai-proxy",&secret){return vec![error];}patch["aiProxy"]=json!(public);},Err(error)=>return vec![error]}}
+ let mut warnings=Vec::new();let (before,updated)={
+   let mut saved=state.settings.lock().unwrap();let before=saved.clone();let mut updated=before.clone();
+   merge_settings(&mut updated,&patch);weather_places::remember(&before,&mut updated);
+   if let Err(e)=storage::save_json_file("settings.json",&updated){return vec![e];}
+   *saved=updated.clone();(before,updated)
+ };
  if patch["audioOutput"].is_string() || patch["audioInput"].is_string() {audio::configure(&updated);}
+ if patch["mediaHidden"].is_array() {media::configure(&updated);}
  if patch.as_object().unwrap().keys().any(|key|key.starts_with("vpnCustom")) {network::configure_vpn(&updated);}
  if patch["captureVisible"].is_boolean() {if let Some(window)=app.get_window("main"){if let Err(e)=window.set_content_protected(!updated["captureVisible"].as_bool().unwrap_or(false)){warnings.push(e.to_string());}}}
  if patch.as_object().unwrap().keys().any(|k|["scale","monitor","offsetX","underTaskbar"].contains(&k.as_str())) {if let Err(e)=apply_island_geometry(&app,&state){warnings.push(e);}}
@@ -673,7 +700,7 @@ async fn media_sources()->Vec<Value>{tauri::async_runtime::spawn_blocking(move||
 }).await.unwrap_or_default()}
 
 #[tauri::command]
-async fn media_pick(id:Option<String>)->Result<bool,String>{tauri::async_runtime::spawn_blocking(move||{let id=id.filter(|s|!s.is_empty());if let Some(id)=id.as_ref(){if !media::get_media_sources().iter().any(|source|source["id"].as_str()==Some(id)){return Err("Media source no longer exists".into());}}media::set_picked_source(id);Ok(true)}).await.map_err(|e|e.to_string())?}
+async fn media_pick(id:Option<String>)->Result<bool,String>{tauri::async_runtime::spawn_blocking(move||{let id=id.filter(|s|!s.is_empty());if let Some(id)=id.as_ref(){if !media::get_media_sources().iter().any(|source|source["id"].as_str()==Some(id)&&source["hidden"]!=true){return Err("Media source is hidden or no longer exists".into());}}media::set_picked_source(id);Ok(true)}).await.map_err(|e|e.to_string())?}
 
 #[tauri::command]
 fn media_rename(app_id:Option<String>,name:Option<String>)->Result<bool,String>{let id=app_id.ok_or("Media source ID is required")?;let name=name.unwrap_or_default();let mut names=storage::load_json_file("media_names.json").unwrap_or(json!({}));let map=names.as_object_mut().ok_or("Invalid media name store")?;if name.trim().is_empty(){map.remove(&id);}else{map.insert(id,json!(name.trim()));}storage::save_json_file("media_names.json",&names).map(|_|true)}
@@ -1060,6 +1087,10 @@ async fn notifications_request()->Result<String,String>{tauri::async_runtime::sp
 
 #[tauri::command]
 async fn palette_apps()->Vec<Value>{tauri::async_runtime::spawn_blocking(system::apps).await.unwrap_or_default()}
+#[tauri::command]
+async fn installed_browsers()->Vec<String>{tauri::async_runtime::spawn_blocking(app_inventory::browsers).await.unwrap_or_default()}
+#[tauri::command]
+async fn open_programs()->Vec<Value>{tauri::async_runtime::spawn_blocking(app_inventory::open_programs).await.unwrap_or_default()}
 
 #[tauri::command]
 fn palette_recent()->Vec<Value>{system::recent()}
@@ -1125,6 +1156,11 @@ fn ai_key_set(key:Option<String>)->Result<bool,String>{let key=key.unwrap_or_def
 
 #[tauri::command]
 fn ai_key_status()->bool{storage::load_secret("ai").map(|s|!s.is_empty()).unwrap_or(false)}
+#[tauri::command]
+fn ai_proxy_set(proxy:String,app:AppHandle,state:tauri::State<'_,Arc<AppState>>)->Result<bool,String>{
+ ai_http::proxy(&proxy).map_err(|_|ai_http::text(&state.settings.lock().unwrap(),"Укажи адрес HTTP или SOCKS5-прокси без пути и параметров.","Enter an HTTP or SOCKS5 proxy address without a path or query."))?;
+ let warnings=settings_set(Some(json!({"aiProxy":proxy})),app,state);if warnings.is_empty(){Ok(true)}else{Err(warnings.join("\n"))}
+}
 
 #[tauri::command]
 async fn ai_test(state:tauri::State<'_, Arc<AppState>>)->Result<String,String>{let settings=state.settings.lock().unwrap().clone();let models=ai::models(&settings).await?;Ok(format!("{} models available",models.len()))}
@@ -1156,12 +1192,48 @@ fn note(app:AppHandle){let _=app.emit("island:toggle",json!({"tab":"note"}));}
 
 static ITEM_SEQUENCE:std::sync::atomic::AtomicU64=std::sync::atomic::AtomicU64::new(0);
 fn new_item_id(prefix:&str)->String{format!("{}-{}-{}",prefix,media::now_ms(),ITEM_SEQUENCE.fetch_add(1,Ordering::Relaxed))}
-fn merge_settings(target:&mut Value,patch:&Value){if let(Some(target),Some(patch))=(target.as_object_mut(),patch.as_object()){for(key,value)in patch{if let Some(existing)=target.get(key){let valid=(existing.is_boolean()&&value.is_boolean())||(existing.is_number()&&value.is_number())||(existing.is_string()&&value.is_string())||(existing.is_array()&&value.is_array())||(existing.is_object()&&value.is_object());if valid{target.insert(key.clone(),value.clone());}}}}}
+fn merge_settings(target: &mut Value, patch: &Value) {
+    let (Some(target), Some(patch)) = (target.as_object_mut(), patch.as_object()) else { return; };
+    for (key, value) in patch {
+        let Some(existing) = target.get(key) else { continue; };
+        let valid = if key == "weatherUtcOffset" {
+            value.is_null() || value.as_i64().is_some_and(|n| (-86399..=86399).contains(&n))
+        } else {
+            (existing.is_boolean() && value.is_boolean()) || (existing.is_number() && value.is_number())
+                || (existing.is_string() && value.is_string()) || (existing.is_array() && value.is_array())
+                || (existing.is_object() && value.is_object())
+        };
+        if valid { target.insert(key.clone(), value.clone()); }
+    }
+}
+#[cfg(test)]
+#[test]
+fn optional_weather_offset_can_be_reset_without_accepting_invalid_settings() {
+    let mut settings=default_settings();
+    merge_settings(&mut settings,&json!({"weatherUtcOffset":3600,"autostart":"wrong","unknown":true}));
+    assert_eq!(settings["weatherUtcOffset"],3600);assert_eq!(settings["autostart"],true);assert!(settings["unknown"].is_null());
+    merge_settings(&mut settings,&json!({"weatherUtcOffset":999999}));assert_eq!(settings["weatherUtcOffset"],3600);
+    merge_settings(&mut settings,&json!({"weatherUtcOffset":null}));assert!(settings["weatherUtcOffset"].is_null());
+}
+static FULLSCREEN_SHORTCUTS:AtomicBool=AtomicBool::new(false);
+static HOTKEY_RECORDING_UNTIL:std::sync::atomic::AtomicU64=std::sync::atomic::AtomicU64::new(0);
+fn settings_is_foreground(app:&AppHandle)->bool{app.get_webview_window("settings").and_then(|window|window.hwnd().ok()).is_some_and(|hwnd|unsafe{windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow().0 as isize==hwnd.0 as isize})}
+#[tauri::command]
+fn hotkeys_recording(on:bool,app:AppHandle,state:tauri::State<'_,Arc<AppState>>)->bool{
+ if win::WindowManager::passive_qa(){return true;}
+ if on&&!settings_is_foreground(&app){return false;}
+ let next=if on{media::now_ms()+15000}else{0};let previous=HOTKEY_RECORDING_UNTIL.swap(next,Ordering::Relaxed);
+ if !on||previous==0||previous<=media::now_ms(){let errors=register_hotkeys(&app,&state.settings.lock().unwrap());*state.hotkey_errors.lock().unwrap()=errors;}
+ true
+}
 fn register_hotkeys(app:&AppHandle,settings:&Value)->Vec<String>{
  if win::WindowManager::passive_qa() { return Vec::new(); }
+ let filtered=visibility::shortcut_settings(settings,FULLSCREEN_SHORTCUTS.load(Ordering::Relaxed));let settings=&filtered;
  use tauri_plugin_global_shortcut::{GlobalShortcutExt,Shortcut,ShortcutState};let manager=app.global_shortcut();let _=manager.unregister_all();let mut errors=Vec::new();
+ if HOTKEY_RECORDING_UNTIL.load(Ordering::Relaxed)>media::now_ms(){return errors;}
  for(key,value)in settings.as_object().into_iter().flatten(){if !key.starts_with("hotkey"){continue;}let Some(text)=value.as_str().filter(|s|!s.is_empty())else{continue;};let shortcut=match text.parse::<Shortcut>(){Ok(s)=>s,Err(_)=>{errors.push(format!("Invalid shortcut: {text}"));continue;}};let key=key.clone();if let Err(error)=manager.on_shortcut(shortcut,move|app,_,event|{if event.state==ShortcutState::Pressed{handle_hotkey(app,&key);}}){errors.push(format!("{text}: {error}"));}}
 
+ if FULLSCREEN_SHORTCUTS.load(Ordering::Relaxed) {return errors;}
  let launcher:Value=serde_json::from_str(&storage::load_string_file("launcher_hotkeys.json","{}")).unwrap_or(json!({}));
  for (id,value) in launcher.as_object().into_iter().flatten(){
     let Some(text)=value.as_str().filter(|s|!s.is_empty())else{continue;};
@@ -1172,6 +1244,7 @@ fn register_hotkeys(app:&AppHandle,settings:&Value)->Vec<String>{
  errors
 }
 fn handle_hotkey(app:&AppHandle,key:&str){let state=app.state::<Arc<AppState>>();match key{
+ "hotkeyFullscreen"=>{let on=!state.settings.lock().unwrap()["hideInFullscreen"].as_bool().unwrap_or(true);let _=settings_set(Some(json!({"hideInFullscreen":on})),app.clone(),state);},
  "hotkeyPalette"=>{let _=app.emit("island:palette",());},"hotkeyToggle"=>{let _=app.emit("island:toggle",json!({}));},"hotkeyClipboard"=>{let _=app.emit("island:toggle",json!({"tab":"clipboard"}));},"hotkeyChat"=>{let _=app.emit("island:toggle",json!({"tab":"chat"}));},
  "hotkeyArea"|"hotkeyScreen"|"hotkeyOcr"|"hotkeyQr"|"hotkeyColor"|"hotkeyRecord"=>{let mode=match key{"hotkeyScreen"=>"screen","hotkeyOcr"=>"ocr","hotkeyQr"=>"qr","hotkeyColor"=>"color","hotkeyRecord"=>"record",_=>"area"};let _=capture_start(Some(mode.into()),app.clone(),state);},
  "hotkeyPlainPaste"=>{if let Some(text)=clip_current_text(){let _=clipboard::paste_to_focused_window(&text);}},"hotkeyMic"=>{let _=audio::toggle_mute(true);},"hotkeyThrough"=>{let _=through_toggle(app.clone(),state);},"hotkeyTheme"=>{let mut settings=state.settings.lock().unwrap();let next=if settings["theme"]==json!("dark"){"light"}else{"dark"};settings["theme"]=json!(next);let _=storage::save_json_file("settings.json",&settings);let _=app.emit("settings:changed",settings.clone());},
@@ -1280,6 +1353,7 @@ pub fn run() {
         loaded_settings.as_object_mut().unwrap().remove("uploadKey");
     }
     audio::configure(&loaded_settings);
+    media::configure(&loaded_settings);
     network::configure_vpn(&loaded_settings);
     if loaded_settings["gpuAcceleration"]==false {
         let arguments=std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").unwrap_or_default();
@@ -1491,6 +1565,7 @@ pub fn run() {
             set_island_hidden,
             fullscreen,
             hotkeys_check,
+            hotkeys_recording,
             open_settings,
             open_path,
             open_captures,
@@ -1546,6 +1621,8 @@ pub fn run() {
             notifications_access,
             notifications_request,
             palette_apps,
+            installed_browsers,
+            open_programs,
             palette_recent,
             palette_icon,
             power_action,
@@ -1558,6 +1635,7 @@ pub fn run() {
             ai_cancel,
             ai_key_set,
             ai_key_status,
+            ai_proxy_set,
             ai_test,
             stt_key_set,
             stt_key_status,

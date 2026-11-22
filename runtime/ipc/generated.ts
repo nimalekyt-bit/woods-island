@@ -7,6 +7,10 @@ export interface Settings {
   collapseDelayMs: number;
   style: string;
   hideInFullscreen: boolean;
+  mediaHidden: string[];
+  hideOnlyUnder: boolean;
+  fullscreenEdge: boolean;
+  releaseHotkeysInFullscreen: boolean;
   captureVisible: boolean;
   autoHide: boolean;
   showOnDesktop: boolean;
@@ -68,6 +72,7 @@ export interface Settings {
   hotkeyVpn: string;
   hotkeyMediaPill: string;
   hotkeyTheme: string;
+  hotkeyFullscreen: string;
   hotkeyWebAi: string;
   cardTime: string;
   homeHidden: string[];
@@ -124,6 +129,7 @@ export interface Settings {
   onboardingCompleted: boolean;
   reducedMotion: string;
   weatherTimezone: string;
+  weatherUtcOffset: number | null;
   mascot: boolean;
   character: string;
   characterMusic: string;
@@ -131,6 +137,7 @@ export interface Settings {
   language: string;
   aiBaseUrl: string;
   aiModel: string;
+  aiProxy: string;
   sttBaseUrl: string;
   sttModel: string;
   sttLanguage: string;
@@ -138,6 +145,7 @@ export interface Settings {
   dictatePaste: boolean;
   moduleWeather: boolean;
   weatherCity: string;
+  weatherPlaces: string;
   weatherLat: number;
   weatherLon: number;
   weatherUnits: string;
@@ -247,6 +255,7 @@ export interface RustCommands {
   set_island_hidden: { args: { hidden?: boolean | null }; result: boolean };
   fullscreen: { args: {  }; result: boolean };
   hotkeys_check: { args: {  }; result: Array<string> };
+  hotkeys_recording: { args: { on: boolean }; result: boolean };
   open_settings: { args: { section?: string | null }; result: boolean };
   open_path: { args: { path?: string | null; reveal?: boolean | null; elevated?: boolean | null }; result: boolean };
   open_captures: { args: { kind?: string | null }; result: boolean };
@@ -302,6 +311,8 @@ export interface RustCommands {
   notifications_access: { args: {  }; result: string };
   notifications_request: { args: {  }; result: string };
   palette_apps: { args: {  }; result: Array<JsonValue> };
+  installed_browsers: { args: {  }; result: Array<string> };
+  open_programs: { args: {  }; result: Array<JsonValue> };
   palette_recent: { args: {  }; result: Array<JsonValue> };
   palette_icon: { args: { path?: string | null }; result: string | null };
   power_action: { args: { action?: string | null }; result: boolean };
@@ -314,6 +325,7 @@ export interface RustCommands {
   ai_cancel: { args: { id?: number | null }; result: boolean };
   ai_key_set: { args: { key?: string | null }; result: boolean };
   ai_key_status: { args: {  }; result: boolean };
+  ai_proxy_set: { args: { proxy: string }; result: boolean };
   ai_test: { args: {  }; result: string };
   stt_key_set: { args: { key?: string | null }; result: boolean };
   stt_key_status: { args: {  }; result: boolean };

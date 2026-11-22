@@ -1,4 +1,6 @@
+import { webChatProviders } from '../web-ai/providers';
 import { calculateIslandGeometry, agentQuestionHeight as dj } from '../island/geometry';
+import { WeatherPlaces } from '../weather/WeatherPlaces';
 import { focusInputAfterActivation } from '../island/input-focus';
 import { useWebAiStatus } from '../web-ai/use-status';
 import { statusText } from '../web-ai/status';
@@ -2965,7 +2967,7 @@ function sc({ m: e, isLast: t, streaming: n }) {
           ],
         });
 }
-var cc = { gemini: `Gemini`, deepseek: `DeepSeek` };
+var cc = Object.fromEntries(webChatProviders.map(provider => [provider.id, provider.label]));
 function lc() {
   let openingRef = ReactRuntime.useRef(false),
     [opening, setOpening] = ReactRuntime.useState(false),
@@ -2978,8 +2980,7 @@ function lc() {
     },
     r = [
       { id: `island`, label: o(`Остров`, `Island`) },
-      { id: `gemini`, label: `Gemini` },
-      { id: `deepseek`, label: `DeepSeek` },
+      ...webChatProviders,
     ];
   ReactRuntime.useEffect(() => setOpeningError(null), [e]);
   return (0, jsxRuntime.jsxs)(`div`, {
@@ -7846,6 +7847,9 @@ function TA({ onDone: e, first: t = !1 }) {
   );
 }
 function EA() {
+  const placesSettings = useIslandStore((state) => state.settings);
+  const [placeError,setPlaceError] = ReactRuntime.useState(``);
+  const selectPlace = (place) => {setPlaceError(``);void dn.getState().setPlace(place).catch(error=>setPlaceError(String(error)));};
   let e = dn((e) => e.data),
     t = dn((e) => e.loading),
     n = dn((e) => e.error),
@@ -7864,6 +7868,8 @@ function EA() {
                 : (0, jsxRuntime.jsxs)(jsxRuntime.Fragment, {
                     children: [
                       (0, jsxRuntime.jsx)(gA, { w: e }),
+                      (0, jsxRuntime.jsx)(WeatherPlaces, {settings:placesSettings ?? {},onPick:selectPlace,busy:t}),
+                      placeError && (0,jsxRuntime.jsx)(`div`,{role:`alert`,className:`text-[12px] text-danger`,children:placeError}),
                       e.timezoneWarning && (0, jsxRuntime.jsx)(`button`, {
                         "data-weather-timezone-warning": true,
                         onClick: () => void u.openSettings(`weather`),
@@ -7912,6 +7918,8 @@ function EA() {
                   className: `press mt-1 h-7 rounded-lg bg-white px-3 text-[11.5px] font-semibold text-black disabled:opacity-50`,
                   children: o(`Попробовать ещё раз`, `Try again`),
                 }),
+              (0, jsxRuntime.jsx)(WeatherPlaces, {settings:placesSettings ?? {},onPick:selectPlace,busy:t}),
+              (0, jsxRuntime.jsx)(`button`,{className:`press mt-1 h-7 rounded-lg bg-tile px-3 text-[11.5px]`,onClick:()=>void u.openSettings(`weather`),children:o(`Выбрать другой город`,`Choose another city`)}),
             ],
           }),
         })
@@ -8869,6 +8877,12 @@ function ij({ onResize: e }) {
           k: `погода прогноз температура дождь снег weather forecast temperature rain`,
           i: (0, jsxRuntime.jsx)(nr, { size: 17 }),
           run: () => ne(`weather`),
+        },
+        {
+          t: o(`ChatGPT — веб-версия в чате острова`, `ChatGPT — web version in the island chat`),
+          k: `chatgpt чатгпт чат гпт openai опенаи ии ai веб web сайт чат chat`,
+          i: (0, jsxRuntime.jsx)(co, { size: 17 }),
+          run: () => fa(`chatgpt`),
         },
         {
           t: o(`Gemini — веб-версия в чате острова`, `Gemini — the web version in the island's chat`),
@@ -10767,7 +10781,7 @@ function useRuntimeEvents() {
           n.expanded && n.tab === `chat` ? M.getState().say(t) : n.pushPeek({ kind: `error`, message: t });
         }),
         T(`fullscreen`, (t) => {
-          (t && e.getState().close(), lr(`fullscreen`, t));
+          if(t) e.getState().close();
         }),
         T(`power:update`, (t) => e.setState({ battery: t })),
         T(`island:edge`, (t) => e.setState({ atEdge: t })),
@@ -10900,7 +10914,7 @@ function IslandApp() {
       r({
         autoHide: S({
           autoHide: e.settings?.autoHide === !0,
-          showOnDesktop: e.settings?.showOnDesktop === !0,
+          showOnDesktop: e.settings?.showOnDesktop === !0 || e.settings?.hideOnlyUnder === !0,
           desktop: e.desktop,
           shy: e.shy,
           keep: e.keep,

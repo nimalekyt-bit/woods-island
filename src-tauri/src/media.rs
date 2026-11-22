@@ -14,8 +14,27 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 
 static PICKED_APP_ID: Mutex<Option<String>> = Mutex::new(None);
+static HIDDEN_APP_IDS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 static LAST_COVER_CACHE: Mutex<Option<(String, String)>> = Mutex::new(None); // (key, cover_url)
 static PLAYBACK_TRACKER: Mutex<Option<PlaybackProgress>> = Mutex::new(None);
+
+pub fn configure(settings: &Value) {
+    let hidden: Vec<String> = settings["mediaHidden"].as_array().into_iter().flatten()
+        .filter_map(Value::as_str).filter(|id| !id.is_empty()).map(str::to_owned).collect();
+    let mut picked = PICKED_APP_ID.lock().unwrap();
+    if picked.as_ref().is_some_and(|id| hidden.iter().any(|h| h.eq_ignore_ascii_case(id))) {
+        *picked = None;
+    }
+    *HIDDEN_APP_IDS.lock().unwrap() = hidden;
+}
+
+fn is_hidden(id: &str) -> bool {
+    HIDDEN_APP_IDS.lock().unwrap().iter().any(|hidden| hidden.eq_ignore_ascii_case(id))
+}
+
+fn session_visible(session: &GlobalSystemMediaTransportControlsSession) -> bool {
+    session.SourceAppUserModelId().ok().is_some_and(|id| !is_hidden(&id.to_string()))
+}
 
 #[derive(Clone, Debug)]
 struct PlaybackProgress {
@@ -101,10 +120,11 @@ pub fn get_active_session(
 ) -> Option<GlobalSystemMediaTransportControlsSession> {
     let picked = PICKED_APP_ID.lock().ok().and_then(|p| p.clone());
     
-    if let Ok(sessions) = mgr.GetSessions() {
+    if let Ok(all) = mgr.GetSessions() {
+        let sessions: Vec<_> = all.into_iter().filter(session_visible).collect();
         // 1. Prioritize user picked session
         if let Some(target) = picked {
-            for session in &sessions {
+            for session in sessions.iter().cloned() {
                 if session.SourceAppUserModelId().unwrap_or_default().to_string() == target {
                     return Some(session);
                 }
@@ -112,7 +132,7 @@ pub fn get_active_session(
         }
 
         // 2. Default current session if Playing
-        if let Ok(current) = mgr.GetCurrentSession() {
+        if let Some(current) = mgr.GetCurrentSession().ok().filter(session_visible) {
             if let Ok(playback) = current.GetPlaybackInfo() {
                 if let Ok(status) = playback.PlaybackStatus() {
                     if status == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing {
@@ -123,7 +143,7 @@ pub fn get_active_session(
         }
 
         // 3. Find any session that is currently Playing
-        for session in &sessions {
+        for session in sessions.iter().cloned() {
             if let Ok(playback) = session.GetPlaybackInfo() {
                 if let Ok(status) = playback.PlaybackStatus() {
                     if status == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing {
@@ -134,12 +154,12 @@ pub fn get_active_session(
         }
 
         // 4. Fallback to default current session
-        if let Ok(current) = mgr.GetCurrentSession() {
+        if let Some(current) = mgr.GetCurrentSession().ok().filter(session_visible) {
             return Some(current);
         }
 
         // 5. Fallback to first session with non-empty title
-        for session in &sessions {
+        for session in sessions.iter().cloned() {
             if let Ok(prop_op) = session.TryGetMediaPropertiesAsync() {
                 if let Ok(props) = prop_op.get() {
                     if let Ok(title) = props.Title() {
@@ -216,7 +236,7 @@ async fn fetch_online_artwork(artist: &str, title: &str) -> Option<String> {
 }
 
 pub fn get_current_media() -> Option<Value> {
-    let bridge=crate::music_bridge::current();
+    let bridge=crate::music_bridge::current().filter(|_| !is_hidden(crate::music_bridge::APP_ID));
     let picked=PICKED_APP_ID.lock().unwrap().clone();
     let current=if bridge.is_some() && (picked.as_deref()==Some(crate::music_bridge::APP_ID) || (picked.is_none() && bridge.as_ref().map(|m|m["playing"]==true).unwrap_or(false))) {bridge} else {read_current_media().or(bridge)};
     if current.is_none(){
@@ -329,17 +349,14 @@ pub fn get_current_cover() -> Option<String> {
 pub fn get_media_sources() -> Vec<Value> {
     let _com = match crate::audio::ComApartment::new() { Ok(c)=>c, Err(_)=>return vec![] };
     let mut result = Vec::new();
+    let shown_id = get_current_media().and_then(|media| media["app"].as_str().map(str::to_owned));
     if let Some(media)=crate::music_bridge::current() {
-        let picked=PICKED_APP_ID.lock().unwrap().clone();
-        result.push(json!({"id":crate::music_bridge::APP_ID,"name":format_app_name(crate::music_bridge::APP_ID),"title":media["title"],"playing":media["playing"],"active":picked.as_deref()==Some(crate::music_bridge::APP_ID)||(picked.is_none()&&media["playing"]==true)}));
+        result.push(json!({"id":crate::music_bridge::APP_ID,"name":format_app_name(crate::music_bridge::APP_ID),"title":media["title"],"playing":media["playing"],"hidden":is_hidden(crate::music_bridge::APP_ID),"active":shown_id.as_deref()==Some(crate::music_bridge::APP_ID)}));
     }
     let mgr = match get_manager() {
         Some(m) => m,
         None => return result,
     };
-
-    let picked_id = PICKED_APP_ID.lock().ok().and_then(|p| p.clone());
-    let current_id = mgr.GetCurrentSession().ok().and_then(|s| s.SourceAppUserModelId().ok()).map(|h| h.to_string());
 
     if let Ok(sessions) = mgr.GetSessions() {
         for session in sessions {
@@ -358,15 +375,13 @@ pub fn get_media_sources() -> Vec<Value> {
                 }
             }
 
-            let is_picked = picked_id.as_deref() == Some(&id);
-            let is_current = current_id.as_deref() == Some(&id);
-
             result.push(json!({
                 "id": id,
                 "name": name,
                 "title": title,
                 "playing": is_playing,
-                "active": is_picked || (picked_id.is_none() && is_current)
+                "hidden": is_hidden(&id),
+                "active": shown_id.as_deref() == Some(&id)
             }));
         }
     }
