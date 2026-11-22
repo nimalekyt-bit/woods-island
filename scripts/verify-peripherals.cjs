@@ -28,7 +28,7 @@ async function requireFreePort(value) {
   await requireFreePort(port);
   await requireFreePort(port + 1);
   const directory = await fs.mkdtemp(
-    path.join(os.tmpdir(), "woods-peripherals-"),
+    path.join(hostedDebug ? process.env.RUNNER_TEMP : os.tmpdir(), "woods-peripherals-"),
   );
   console.log("QA directory " + directory);
   const exe = path.join(directory, "woods-island.exe"),
@@ -53,6 +53,8 @@ async function requireFreePort(value) {
     path.join(data, "settings.json"),
     JSON.stringify({
       firstRun: false,
+      // Text assertions below are Russian, independently of the runner OS locale.
+      language: "ru",
       offsetX: 10000,
       showPeripherals: false,
       peripheralAlerts: false,
@@ -230,6 +232,7 @@ async function requireFreePort(value) {
     await evaluate(
       'document.querySelector("[data-peripheral-device=g435]").textContent.includes("Опрос отключён, чтобы не прерывать звук")',
     ),
+    "Russian QA profile must show the G435 audio-interruption notice",
   );
   assert.equal(
     await evaluate(
@@ -392,11 +395,21 @@ async function requireFreePort(value) {
   );
   await pause(600);
   await capture("actual-devices");
+  // Hosted VMs can have an empty physical inventory. Keep its actual capture/report
+  // separate from the deterministic inventory used to verify card size at each scale.
+  const dpiUsesFixture = hardware.devices.length === 0 || process.argv.includes("--fixture-dpi");
+  const dpiSnapshot = dpiUsesFixture ? { devices, revision: hardware.revision } : hardware;
+  if (dpiUsesFixture) {
+    await invoke("settings_set", { settings: { showPeripherals: false } });
+    await evaluate(
+      '(()=>{const style=document.createElement("style");style.id="peripheral-test-label";style.textContent=".peripheral-card>header>span::after{content:\\" · ТЕСТОВЫЕ ДАННЫЕ\\";font-size:10px;color:#e8aa51}";document.head.append(style);})()',
+    );
+  }
   const dpi = [];
   for (const scale of [100, 150, 200]) {
     await invoke("settings_set", { settings: { scale, character: "liquid" } });
     await evaluate(
-      `(async()=>{const {ot}=await import('/assets/runtime-debug.js');ot.setState({peripherals:${JSON.stringify(hardware)},peripheralCardOpen:true,license:{...ot.getState().license,pro:true}});})()`,
+      `(async()=>{const {ot}=await import('/assets/runtime-debug.js');ot.setState({peripherals:${JSON.stringify(dpiSnapshot)},peripheralCardOpen:true,settings:{...ot.getState().settings,showPeripherals:true},license:{...ot.getState().license,pro:true}});})()`,
     );
     await pause(900);
     const measure = await evaluate(
@@ -410,6 +423,9 @@ async function requireFreePort(value) {
     dpi.push({ scale, ...measure });
   }
   await invoke("settings_set", { settings: { scale: 100 } });
+  await evaluate(
+    `(async()=>{const {ot}=await import('/assets/runtime-debug.js');document.querySelector('#peripheral-test-label')?.remove();ot.setState({peripherals:${JSON.stringify(hardware)},peripheralCardOpen:true,settings:{...ot.getState().settings,showPeripherals:true}});})()`,
+  );
   await pause(900);
   await capture("actual-cloud");
   await invoke("settings_set", { settings: { showPeripherals: false } });
@@ -431,6 +447,7 @@ async function requireFreePort(value) {
         frontendErrors: errors,
         size,
         dpi,
+        dpiUsesFixture,
         hardware,
         manualHistoryRestored: !!manualEvidence,
         screenshots: [
