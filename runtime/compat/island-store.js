@@ -1,4 +1,5 @@
 import { webChatService } from '../web-ai/providers';
+import { freeLicense } from '../free';
 import { creatures } from '../characters/drawings/creatures';
 import { focusInputAfterActivation } from '../island/input-focus';
 import { peripheralEventEnabled, samePeripheralNotice } from '../peripherals/model';
@@ -116,9 +117,9 @@ function m(e) {
 }
 var ReactRuntime = c(t(), 1),
   jsxRuntime = a(),
-  _ = () => n(`399 ₽`, `$4.99`),
+  _ = () => n(`Бесплатно`, `Free`),
   v = `https://github.com/nimalekyt-bit/woods-island`,
-  ee = () => `https://github.com/nimalekyt-bit/woods-island/?lang=${e() === `ru` ? `ru` : `en`}#isl-pro`;
+  ee = () => `https://github.com/nimalekyt-bit/woods-island`;
 function ne(e) {
   switch (e) {
     case `weather`:
@@ -221,6 +222,7 @@ var O = {
     qr: 6e3,
     color: 5e3,
     shelf: 2200,
+    phone: 4500,
     launcher: 2200,
     volume: 1500,
     device: 2200,
@@ -270,7 +272,7 @@ function P(e, t, n) {
 var useIslandStore = ce((e, t) => ({
     settings: null,
     version: ``,
-    license: { pro: !0, source: `trial`, trialDaysLeft: 14, serial: null },
+    license: freeLicense,
     expanded: !1,
     pinned: !1,
     holdOpen: !1,
@@ -310,8 +312,11 @@ var useIslandStore = ce((e, t) => ({
     update: null,
     updating: null,
     shelf: [],
+    phone: null,
+    phoneWaiting: false,
     launcher: [],
     palette: !1,
+    paletteSeed: null,
     recording: null,
     dictation: null,
     voice: 0,
@@ -391,7 +396,11 @@ var useIslandStore = ce((e, t) => ({
     sendToText: (t, n) =>
       e((e) => ({ textSeed: { text: t, n: (e.textSeed?.n ?? 0) + 1, then: n }, tab: `text` })),
     openPalette: () => {
-      (clearTimeout(N), e({ palette: !0, expanded: !1, peek: null, queue: [] }));
+      (clearTimeout(N), e({ palette: !0, paletteSeed: null, expanded: !1, peek: null, queue: [] }));
+    },
+    openPaletteWith: (text, autoRun = false) => {
+      clearTimeout(N);
+      e({ palette: !0, expanded: !1, peek: null, queue: [], paletteSeed: { text, autoRun } });
     },
     closePalette: () => {
       t().palette && (e({ palette: !1 }), r.releaseFocus());
@@ -1158,6 +1167,7 @@ function zn(e) {
     case `qr`:
     case `color`:
     case `dictated`:
+    case `phone`:
       return `happy`;
     case `shelf`:
       return `eat`;

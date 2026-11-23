@@ -14,7 +14,7 @@ const moods = ['idle', 'music', 'think', 'happy', 'eat', 'attn', 'sad', 'sleep']
 // separately by the Windows acceptance suite.
 function fixture() {
   const state = { now: 1000, width: 150, height: 30, left: 10, top: 8,
-    options: { mood: 'idle', accent: null, ears: false, round: false, rain: false, scaled: false },
+    options: { mood: 'idle', accent: null, ears: false, round: false, rain: false, scaled: false, smoothCorners: false },
     audio: { level: 0, bands: [], bandsAt: 1000, liquidSpectrum: false }, cursor: null };
   let allocations = 0, seed = 617;
   class Node {
@@ -124,4 +124,38 @@ test('Liquid envelope retains legacy attack, stale-audio decay and transient det
   old.dispose();
   assert.equal(smoothLiquidPath([[0, 1], [1, 3], [2, 5]]), '0.0,1.0 Q1.0,3.0 1.5,4.0 L2.0,5.0');
   assert.equal(liquidBottomAt(0, 150, 30), 30); assert.equal(liquidBottomAt(75, 150, 30), 15);
+});
+test('Current liquid outline uses true quarter-circle corners and confines the wave to their inner endpoints', () => {
+  const f=fixture();f.state.options.smoothCorners=true;f.state.options.round=true;
+  const engine=newEngine(f),body=f.svg.children[2];
+  for(const [width,height] of [[150,30],[268,32],[680,336],[420,44]]) {
+    f.state.width=width;f.state.height=height;engine.draw(f.state.now+=16);
+    const radius=Math.min(height/2,height>60?32:26),half=width/2,side=height-radius;
+    assert(body.attrs.d.includes(`A${radius.toFixed(2)},${radius.toFixed(2)} 0 0 1 ${(half-radius).toFixed(2)},${height.toFixed(2)} L${(half-radius).toFixed(1)},${height.toFixed(1)}`),'Right side joins its quarter circle before any wave point');
+    assert(body.attrs.d.includes(`A${radius.toFixed(2)},${radius.toFixed(2)} 0 0 1 ${(-half).toFixed(2)},${side.toFixed(2)}`),'Left corner ends tangent to the vertical side');
+    assert(!body.attrs.d.includes('NaN'));
+  }
+  f.state.width=680;f.state.height=336;f.state.options.mood='happy';let clipped=false;
+  for(let frame=0;frame<240;frame++) {
+    engine.draw(f.state.now+=16);
+    if(f.clip.style.clipPath) {
+      clipped=true;
+      assert.match(f.clip.style.clipPath,/ A32\.0,32\.0 /,'Clipped content keeps the same rounded corners');
+      assert(!/NaN|Infinity/.test(f.clip.style.clipPath));
+    }
+  }
+  assert(clipped,'Celebration recovery must exercise the actual content clip');
+  engine.dispose();
+});
+
+test('Rain stops creating particles during sleep and existing falling drops finish their bounded lifecycle', () => {
+  const f=fixture();f.state.options.rain=true;f.state.options.smoothCorners=true;
+  const engine=newEngine(f);
+  for(let frame=0;frame<500&&!f.svg.children[0].children.length;frame++)engine.draw(f.state.now+=16);
+  assert(f.svg.children[0].children.length>0,'Rain fixture must first create real falling drops');
+  f.state.options.mood='sleep';const allocated=f.allocations();
+  for(let frame=0;frame<500;frame++)engine.draw(f.state.now+=16);
+  assert.equal(f.allocations(),allocated,'Sleeping island must create no new rain drops');
+  assert.equal(f.svg.children[0].children.length,0,'Prior rain drops must fully disappear');
+  engine.dispose();
 });

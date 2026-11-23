@@ -57,6 +57,9 @@ pub fn resolve(settings: &Value, context: &Value) -> Policy {
 }
 pub fn shortcut_settings(settings: &Value, suspended: bool) -> Value {
     let mut result = settings.clone();
+    if settings["showVpn"] == false {
+        if let Some(values) = result.as_object_mut() { values.remove("hotkeyVpn"); }
+    }
     if suspended {
         if let Some(values) = result.as_object_mut() {
             values.retain(|key, _| {
@@ -149,5 +152,12 @@ mod tests {
         assert_eq!(filtered["hotkeyToggle"], "Alt+I");
         assert_eq!(filtered["scale"], 100);
         assert_eq!(shortcut_settings(&s, false), s);
+    }
+    #[test]
+    fn disabled_vpn_releases_its_shortcut_without_erasing_the_saved_binding() {
+        let s=json!({"showVpn":false,"hotkeyVpn":"Ctrl+Shift+V","hotkeyToggle":"Alt+I"});
+        let filtered=shortcut_settings(&s,false);
+        assert!(filtered["hotkeyVpn"].is_null());assert_eq!(filtered["hotkeyToggle"],"Alt+I");
+        assert_eq!(s["hotkeyVpn"],"Ctrl+Shift+V");
     }
 }

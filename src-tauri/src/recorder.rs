@@ -4,6 +4,7 @@ use std::{fs::File,io::{Write,Seek,SeekFrom},path::PathBuf,process::{Child,Comma
 use windows::Win32::Foundation::RECT;
 
 struct Recording {
+    _activity: crate::watchdog::ActivityGuard,
     video:Child, stop:Arc<AtomicBool>, audio:Vec<std::thread::JoinHandle<Result<PathBuf,String>>>,
     output:PathBuf, temporary:PathBuf, started_at:u64, format:String, ffmpeg:PathBuf, thumb:Option<String>, log:PathBuf,
 }
@@ -56,6 +57,7 @@ fn start_audio(input:bool,path:PathBuf,stop:Arc<AtomicBool>)->std::thread::JoinH
 }
 
 pub fn begin(rect:RECT,format:&str,settings:&Value)->Result<Value,String>{
+    let activity=crate::watchdog::protect_activity()?;
     let mut slot=CURRENT.lock().unwrap();if slot.is_some(){return Err("Запись уже идёт".into());}
     let width=rect.right-rect.left;let height=rect.bottom-rect.top;
     if width<1 || height<1{return Err("Пустая область записи".into());}
@@ -86,7 +88,7 @@ pub fn begin(rect:RECT,format:&str,settings:&Value)->Result<Value,String>{
         return Err(failure);
     }
     let thumb=crate::capture::screenshot(rect).ok().map(|i|image::imageops::thumbnail(&i,232,144)).and_then(|i|crate::capture::data_url(&i).ok());
-    *slot=Some(Recording{video,stop,audio,output,temporary,started_at:at,format:format.into(),ffmpeg,thumb,log});
+    *slot=Some(Recording{_activity:activity,video,stop,audio,output,temporary,started_at:at,format:format.into(),ffmpeg,thumb,log});
     Ok(json!({"at":at,"startedAt":at,"format":format}))
 }
 

@@ -145,20 +145,11 @@ pub async fn fetch_weather(lat: f64, lon: f64, city_name: &str) -> Result<Weathe
         lat, lon
     );
 
-    let client = reqwest::Client::builder()
-        .user_agent("WoodsIsland/1.0 (https://github.com/nimalekyt-bit/woods-island)")
-        .timeout(std::time::Duration::from_millis(3000))
-        .build()
-        .map_err(|e| e.to_string())?;
-
-    let resp = client
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?
-        .json::<serde_json::Value>()
-        .await
-        .map_err(|e| e.to_string())?;
+    let client = weather_client(false, 6)?;
+    let resp = match get_json_bytes(&client, &url, &[]).await {
+        Ok(v) => v,
+        Err(_) => get_json_bytes(&weather_client(true, 6)?, &url, &[]).await?,
+    };
 
     let current = resp["properties"]["timeseries"][0]["data"].clone();
     let instant_details = &current["instant"]["details"];
@@ -180,6 +171,193 @@ pub async fn fetch_weather(lat: f64, lon: f64, city_name: &str) -> Result<Weathe
     })
 }
 
+fn weather_client(no_proxy: bool, timeout_secs: u64) -> Result<reqwest::Client, String> {
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert(
+        reqwest::header::ACCEPT_ENCODING,
+        reqwest::header::HeaderValue::from_static("identity"),
+    );
+    headers.insert(
+        reqwest::header::ACCEPT,
+        reqwest::header::HeaderValue::from_static("application/json"),
+    );
+    let mut builder = reqwest::Client::builder()
+        .user_agent("WoodsIsland/1.0 (https://github.com/nimalekyt-bit)")
+        .default_headers(headers)
+        .connect_timeout(std::time::Duration::from_secs(6))
+        .timeout(std::time::Duration::from_secs(timeout_secs));
+    if no_proxy {
+        builder = builder.no_proxy();
+    }
+    builder.build().map_err(|e| e.to_string())
+}
+
+async fn get_json_bytes(
+    client: &reqwest::Client,
+    url: &str,
+    query: &[(&str, String)],
+) -> Result<Value, String> {
+    let response = client
+        .get(url)
+        .query(query)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .error_for_status()
+        .map_err(|e| e.to_string())?;
+    let bytes = response.bytes().await.map_err(|e| e.to_string())?;
+    if bytes.len() >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b {
+        return Err("Compressed weather response could not be decoded".into());
+    }
+    serde_json::from_slice::<Value>(&bytes).map_err(|_| "Invalid JSON from weather service".into())
+}
+
+async fn fetch_open_meteo(
+    client: &reqwest::Client,
+    city: &str,
+    lat: f64,
+    lon: f64,
+    units: &str,
+    settings: &Value,
+) -> Result<Value, String> {
+    let query = [
+        ("latitude", format!("{lat:.4}")),
+        ("longitude", format!("{lon:.4}")),
+        (
+            "hourly",
+            "temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m,is_day,uv_index".into(),
+        ),
+        (
+            "daily",
+            "weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,sunrise,sunset".into(),
+        ),
+        ("wind_speed_unit", "ms".into()),
+        ("timeformat", "unixtime".into()),
+        ("timezone", "auto".into()),
+        ("forecast_days", "7".into()),
+    ];
+    let data = get_json_bytes(client, "https://api.open-meteo.com/v1/forecast", &query).await?;
+    parse_open_meteo(&data, city, lat, lon, units, settings)
+}
+
+fn parse_open_meteo(
+    data: &Value,
+    city: &str,
+    lat: f64,
+    lon: f64,
+    units: &str,
+    settings: &Value,
+) -> Result<Value, String> {
+    let hourly = &data["hourly"];
+    let times = hourly["time"]
+        .as_array()
+        .filter(|a| !a.is_empty())
+        .ok_or("Open-Meteo returned no hourly forecast")?;
+    let temp_unit = |n: f64| if units == "imperial" { n * 1.8 + 32. } else { n };
+    let wind_unit = |n: f64| if units == "imperial" { n * 2.2369362921 } else { n };
+    let now_sec = chrono::Utc::now().timestamp();
+    let start_idx = times
+        .iter()
+        .position(|t| t.as_i64().is_some_and(|s| s + 3600 >= now_sec))
+        .unwrap_or(0);
+    let mut hours = Vec::new();
+    for idx in start_idx..times.len().min(start_idx + 24) {
+        let Some(at) = times[idx].as_i64() else { continue };
+        let Some(temp) = hourly["temperature_2m"][idx].as_f64().filter(|n| n.is_finite()) else {
+            continue;
+        };
+        let feels = hourly["apparent_temperature"][idx]
+            .as_f64()
+            .filter(|n| n.is_finite())
+            .unwrap_or(temp);
+        let humidity = hourly["relative_humidity_2m"][idx]
+            .as_f64()
+            .filter(|n| n.is_finite())
+            .unwrap_or(60.0);
+        let wind = hourly["wind_speed_10m"][idx]
+            .as_f64()
+            .filter(|n| n.is_finite())
+            .unwrap_or(0.0);
+        let precip = hourly["precipitation"][idx]
+            .as_f64()
+            .filter(|n| n.is_finite())
+            .unwrap_or(0.0)
+            .max(0.0);
+        let code = hourly["weather_code"][idx].as_i64().unwrap_or(3);
+        let is_day = hourly["is_day"][idx].as_i64().unwrap_or(1) != 0;
+        let gamma = (humidity.clamp(0.01, 100.) / 100.).ln() + 17.62 * temp / (243.12 + temp);
+        let dew = 243.12 * gamma / (17.62 - gamma);
+        hours.push(json!({
+            "time": at,
+            "temp": temp_unit(temp),
+            "feels": temp_unit(feels),
+            "code": code,
+            "isDay": is_day,
+            "precip": precip,
+            "wind": wind_unit(wind),
+            "windDir": hourly["wind_direction_10m"][idx],
+            "gust": hourly["wind_gusts_10m"][idx].as_f64().map(wind_unit),
+            "humidity": humidity,
+            "pressure": hourly["pressure_msl"][idx],
+            "dewPoint": temp_unit(dew),
+            "uv": hourly["uv_index"][idx]
+        }));
+    }
+    let now = hours.first().cloned().ok_or("Empty Open-Meteo forecast")?;
+    let daily = &data["daily"];
+    let mut days = Vec::new();
+    if let Some(d_times) = daily["time"].as_array() {
+        for idx in 0..d_times.len().min(7) {
+            let Some(at) = d_times[idx].as_i64() else { continue };
+            let min = daily["temperature_2m_min"][idx]
+                .as_f64()
+                .map(temp_unit)
+                .unwrap_or_else(|| now["temp"].as_f64().unwrap_or(0.0));
+            let max = daily["temperature_2m_max"][idx]
+                .as_f64()
+                .map(temp_unit)
+                .unwrap_or(min);
+            let code = daily["weather_code"][idx].as_i64().unwrap_or(3);
+            let precip = daily["precipitation_sum"][idx].as_f64().unwrap_or(0.0).max(0.0);
+            let sunrise = daily["sunrise"][idx].as_i64();
+            let sunset = daily["sunset"][idx].as_i64();
+            days.push(json!({
+                "time": at,
+                "min": min,
+                "max": max,
+                "code": code,
+                "precip": precip,
+                "sunrise": sunrise,
+                "sunset": sunset
+            }));
+        }
+    }
+    if days.is_empty() {
+        return Err("Open-Meteo returned no daily forecast".into());
+    }
+    let tz_name = data["timezone"].as_str().unwrap_or("UTC");
+    let offset = data["utc_offset_seconds"].as_i64().unwrap_or(0);
+    Ok(json!({
+        "schemaVersion": 2,
+        "timezoneVersion": 1,
+        "timezoneSetting": settings["weatherTimezone"].as_str().unwrap_or_default(),
+        "timezoneSource": "resolved",
+        "timezoneWarning": false,
+        "city": city,
+        "location": city,
+        "lat": lat,
+        "lon": lon,
+        "units": units,
+        "timezone": tz_name,
+        "utcOffset": offset,
+        "now": now,
+        "hours": hours,
+        "days": days,
+        "fetchedAt": crate::media::now_ms(),
+        "source": "Open-Meteo"
+    }))
+}
+
 /// Forecasts are fetched for the chosen city, never substituted with fabricated weather.
 pub async fn forecast(settings: &Value, force: bool) -> Result<Value,String> {
     let lat=settings["weatherLat"].as_f64().unwrap_or(0.0);
@@ -196,29 +374,64 @@ pub async fn forecast(settings: &Value, force: bool) -> Result<Value,String> {
                 && cache["units"]==weather_units(settings) && valid_forecast(&cache) && age<15*60*1000 {return Ok(cache);}
         }
     }
-    let client=reqwest::Client::builder().user_agent("WoodsIsland/1.0 (https://github.com/nimalekyt-bit)").timeout(std::time::Duration::from_secs(10)).build().map_err(|e|e.to_string())?;
-    let endpoint=std::env::var("WOODS_ISLAND_WEATHER_URL").ok().filter(|_|crate::win::WindowManager::passive_qa()).unwrap_or_else(||"https://api.met.no/weatherapi/locationforecast/2.0/compact".into());
+    let passive = crate::win::WindowManager::passive_qa();
+    let endpoint=std::env::var("WOODS_ISLAND_WEATHER_URL").ok().filter(|_|passive).unwrap_or_else(||"https://api.met.no/weatherapi/locationforecast/2.0/compact".into());
     let url=reqwest::Url::parse(&endpoint).map_err(|e|e.to_string())?;
     if url.scheme()!="https" && !matches!(url.host_str(),Some("127.0.0.1"|"localhost")){return Err("Weather endpoint must use HTTPS or loopback".into());}
-    let data:Value=client.get(url.clone()).query(&[("lat",format!("{lat:.4}")),("lon",format!("{lon:.4}"))]).send().await.map_err(|e|e.to_string())?.error_for_status().map_err(|e|e.to_string())?.json().await.map_err(|e|e.to_string())?;
-    let zone=resolve_timezone(settings,lat,lon,&client).await?;
-    let mut result=match zone.zone {
-        WeatherZone::Named(tz)=>parse_forecast(&data,city,lat,lon,weather_units(settings),tz)?,
-        WeatherZone::Fixed(tz)=>parse_forecast(&data,city,lat,lon,weather_units(settings),tz)?,
+    let query = [("lat", format!("{lat:.4}")), ("lon", format!("{lon:.4}"))];
+    let default_client = weather_client(false, 12)?;
+    let direct_client = weather_client(true, 12)?;
+    let (active_client, met_result) = match get_json_bytes(&default_client, url.as_str(), &query).await {
+        Ok(data) => (&default_client, Ok(data)),
+        Err(first_err) if !passive => match get_json_bytes(&direct_client, url.as_str(), &query).await {
+            Ok(data) => (&direct_client, Ok(data)),
+            Err(_) => (&direct_client, Err(first_err)),
+        },
+        Err(first_err) => (&default_client, Err(first_err)),
     };
-    result["timezoneVersion"]=json!(1);
-    result["timezoneSetting"]=json!(settings["weatherTimezone"].as_str().unwrap_or_default());
-    result["timezoneSource"]=json!(zone.source);
-    result["timezoneWarning"]=json!(zone.source=="utcFallback");
-    // Sunrise is independent: a unavailable optional endpoint must not discard
-    // a usable forecast. The UI shows missing observations explicitly.
-    let sun_url=if url.host_str()==Some("api.met.no"){"https://api.met.no/weatherapi/sunrise/3.0/sun".to_owned()}else{url.join("/sun").map_err(|e|e.to_string())?.to_string()};
-    let offset=result["utcOffset"].as_i64().unwrap_or(0);
-    let date=chrono::Utc::now()+chrono::Duration::seconds(offset);
-    let offset_text=format!("{}{:02}:{:02}",if offset<0{"-"}else{"+"},offset.abs()/3600,offset.abs()%3600/60);
-    if let Ok(response)=client.get(sun_url).timeout(std::time::Duration::from_secs(3)).query(&[("lat",format!("{lat:.4}")),("lon",format!("{lon:.4}")),("date",date.format("%Y-%m-%d").to_string()),("offset",offset_text)]).send().await {
-        if response.status().is_success(){if let Ok(sun)=response.json::<Value>().await{attach_sun(&mut result,&sun);}}
-    }
+    let result = match met_result {
+        Ok(data) => {
+            let zone=resolve_timezone(settings,lat,lon,active_client).await?;
+            let mut parsed=match zone.zone {
+                WeatherZone::Named(tz)=>parse_forecast(&data,city,lat,lon,weather_units(settings),tz)?,
+                WeatherZone::Fixed(tz)=>parse_forecast(&data,city,lat,lon,weather_units(settings),tz)?,
+            };
+            parsed["timezoneVersion"]=json!(1);
+            parsed["timezoneSetting"]=json!(settings["weatherTimezone"].as_str().unwrap_or_default());
+            parsed["timezoneSource"]=json!(zone.source);
+            parsed["timezoneWarning"]=json!(zone.source=="utcFallback");
+            // Sunrise is independent: an unavailable optional endpoint must not discard
+            // a usable forecast. The UI shows missing observations explicitly.
+            let sun_url=if url.host_str()==Some("api.met.no"){"https://api.met.no/weatherapi/sunrise/3.0/sun".to_owned()}else{url.join("/sun").map_err(|e|e.to_string())?.to_string()};
+            let offset=parsed["utcOffset"].as_i64().unwrap_or(0);
+            let date=chrono::Utc::now()+chrono::Duration::seconds(offset);
+            let offset_text=format!("{}{:02}:{:02}",if offset<0{"-"}else{"+"},offset.abs()/3600,offset.abs()%3600/60);
+            if let Ok(sun) = get_json_bytes(
+                active_client,
+                &sun_url,
+                &[
+                    ("lat", format!("{lat:.4}")),
+                    ("lon", format!("{lon:.4}")),
+                    ("date", date.format("%Y-%m-%d").to_string()),
+                    ("offset", offset_text),
+                ],
+            )
+            .await
+            {
+                attach_sun(&mut parsed, &sun);
+            }
+            parsed
+        }
+        Err(met_err) if !passive => {
+            match fetch_open_meteo(&direct_client, city, lat, lon, weather_units(settings), settings).await {
+                Ok(fallback) => fallback,
+                Err(_) => fetch_open_meteo(&default_client, city, lat, lon, weather_units(settings), settings)
+                    .await
+                    .map_err(|_| format!("Погодный сервис временно недоступен ({met_err})"))?,
+            }
+        }
+        Err(met_err) => return Err(met_err),
+    };
     let _=crate::storage::save_json_file("weather.json",&result);
     Ok(result)
 }
@@ -389,4 +602,39 @@ mod tests{
     fn fixture()->Value{json!({"properties":{"timeseries":[{"time":"2026-11-11T21:00:00Z","data":{"instant":{"details":{"air_temperature":2.,"wind_speed":3.,"relative_humidity":80.,"air_pressure_at_sea_level":1012.,"wind_from_direction":180.}},"next_1_hours":{"summary":{"symbol_code":"lightrain_night"},"details":{"precipitation_amount":0.4}}}}]}})}
     #[test] fn forecast_matches_days_seconds_units_and_numeric_codes(){let value=parse_forecast(&fixture(),"Брянск",53.2424,34.3668,"metric",chrono::FixedOffset::east_opt(10800).unwrap()).unwrap();assert!(valid_forecast(&value));assert_eq!(value["utcOffset"],10800);assert_eq!(value["now"]["code"],61);assert_eq!(value["now"]["isDay"],false);assert_eq!(value["days"][0]["time"],1794430800i64);assert_eq!(value["days"][0]["precip"],0.4);let imperial=parse_forecast(&fixture(),"Брянск",53.2424,34.3668,"imperial",chrono::FixedOffset::east_opt(10800).unwrap()).unwrap();assert_eq!(imperial["now"]["temp"],35.6);assert!((imperial["now"]["wind"].as_f64().unwrap()-6.7108).abs()<0.01);assert_eq!(imperial["now"]["pressure"],1012.);assert_eq!(imperial["now"]["precip"],0.4);}
     #[test] fn old_cache_and_incomplete_forecasts_are_rejected(){assert!(!valid_forecast(&json!({"now":{"code":"cloudy"},"hours":[{"time":1794427200000i64}]})));let mut broken=fixture();broken["properties"]["timeseries"][0]["data"]["instant"]["details"]["wind_speed"]=Value::Null;assert!(parse_forecast(&broken,"Брянск",53.2424,34.3668,"metric",chrono::FixedOffset::east_opt(10800).unwrap()).is_err());}
+    #[test] fn open_meteo_fallback_produces_valid_v2_forecast(){
+        let now = chrono::Utc::now().timestamp();
+        let sample = json!({
+            "timezone": "Europe/Moscow",
+            "utc_offset_seconds": 10800,
+            "hourly": {
+                "time": [now, now + 3600],
+                "temperature_2m": [-2.5, -3.0],
+                "apparent_temperature": [-6.0, -6.5],
+                "relative_humidity_2m": [82.0, 84.0],
+                "precipitation": [0.2, 0.0],
+                "weather_code": [71, 3],
+                "pressure_msl": [1014.0, 1015.0],
+                "wind_speed_10m": [4.1, 3.8],
+                "wind_direction_10m": [210.0, 220.0],
+                "wind_gusts_10m": [7.5, 6.2],
+                "is_day": [0, 0],
+                "uv_index": [0.0, 0.0]
+            },
+            "daily": {
+                "time": [now],
+                "temperature_2m_min": [-5.0],
+                "temperature_2m_max": [-1.0],
+                "weather_code": [71],
+                "precipitation_sum": [1.4],
+                "sunrise": [now - 10000],
+                "sunset": [now + 10000]
+            }
+        });
+        let value = parse_open_meteo(&sample, "Брянск", 53.2424, 34.3668, "metric", &json!({})).unwrap();
+        assert!(valid_forecast(&value));
+        assert_eq!(value["source"], "Open-Meteo");
+        assert_eq!(value["now"]["code"], 71);
+        assert_eq!(value["utcOffset"], 10800);
+    }
 }

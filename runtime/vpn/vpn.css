@@ -1,0 +1,161 @@
+.wi-vpn-picker {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+  padding: 12px;
+  border-radius: 16px;
+  background: var(--color-sheet, #1c1c20);
+  box-shadow: 0 0 0 1px var(--color-line, #ffffff12);
+  color: var(--color-ink, #eee);
+  outline: none;
+}
+.wi-vpn-picker > header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.wi-vpn-picker h3 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 600;
+  color: var(--color-ink-2, #c3c3ca);
+}
+.wi-vpn-close {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--color-ink-3, #93939c);
+}
+.wi-vpn-close:hover {
+  background: var(--color-tile-hover, #ffffff10);
+  color: var(--color-ink, #fff);
+}
+.wi-vpn-items {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 6px;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-ink-3, #ffffff29) transparent;
+}
+.wi-vpn-pick {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 6px 12px;
+  border-radius: 16px;
+  background: var(--color-tile, #ffffff12);
+  color: var(--color-ink, #eee);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.wi-vpn-pick > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wi-vpn-pick > svg {
+  flex-shrink: 0;
+}
+.wi-vpn-pick small {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 400;
+  opacity: 0.65;
+}
+.wi-vpn-pick:hover:not(:disabled) {
+  background: var(--color-tile-hover, #ffffff20);
+}
+.wi-vpn-pick[data-on="true"] {
+  background: color-mix(
+    in srgb,
+    var(--color-accent-ink, #a8b7ec) 20%,
+    transparent
+  );
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--color-accent-ink, #a8b7ec) 55%, transparent);
+}
+.wi-vpn-picker button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.wi-vpn-picker button:focus-visible {
+  outline: 2px solid var(--color-accent-ink, #a8b7ec);
+  outline-offset: -2px;
+}
+.wi-vpn-unknown {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--color-tile, #ffffff08);
+}
+.wi-vpn-unknown > div:first-child {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.wi-vpn-unknown strong {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.wi-vpn-unknown small {
+  font-size: 10px;
+  color: var(--color-ink-3, #93939c);
+  flex-shrink: 0;
+}
+.wi-vpn-unknown p,
+.wi-vpn-empty {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--color-ink-3, #93939c);
+}
+.wi-vpn-command-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.wi-vpn-command-actions button {
+  min-height: 30px;
+  padding: 4px 12px;
+  border-radius: 15px;
+  background: var(--color-tile, #ffffff12);
+  font-size: 12px;
+  cursor: pointer;
+}
+.wi-vpn-command-actions button:hover:not(:disabled) {
+  background: var(--color-tile-hover, #ffffff20);
+}
+@media (max-width: 360px) {
+  .wi-vpn-unknown > div:first-child {
+    flex-wrap: wrap;
+  }
+}

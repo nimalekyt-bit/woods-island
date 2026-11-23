@@ -8,6 +8,8 @@ const { createHash } = require('node:crypto');
 const assert = require('node:assert/strict');
 const { inflateSync } = require('node:zlib');
 const { assertWebAiPaint, readWebAiPaintRects } = require('./web-ai-paint.cjs');
+const { verifyPhoneTransport } = require('./phone-native-acceptance.cjs');
+const { verifyAgentHooks } = require('./agent-tauri-acceptance.cjs');
 
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 function zipFixture(files) {
@@ -225,8 +227,12 @@ async function attach(page) {
   });
   let id = 0;
   const pending = new Map();
+  const executionContexts=new Map();
   ws.addEventListener('message', event => {
     const message = JSON.parse(event.data);
+    if(message.method==='Runtime.executionContextCreated')executionContexts.set(message.params.context.id,message.params.context);
+    if(message.method==='Runtime.executionContextDestroyed')executionContexts.delete(message.params.executionContextId);
+    if(message.method==='Runtime.executionContextsCleared')executionContexts.clear();
     if (message.method === 'Runtime.exceptionThrown') errors.push(message.params.exceptionDetails);
     const item = pending.get(message.id);
     if (!item) return;
@@ -245,7 +251,7 @@ async function attach(page) {
   const invoke = (name, args = {}) => evaluate(`window.__TAURI_INTERNALS__.invoke(${JSON.stringify(name)},${JSON.stringify(args)})`);
   await evaluate('performance.setResourceTimingBufferSize(10000)');
   connections.push(ws);
-  return { ws, evaluate, invoke, command };
+  return { ws, evaluate, invoke, command, executionContexts };
 }
 
 async function check(name, task) {
@@ -286,7 +292,16 @@ async function waitForWindowClosed(suffix) {
   throw new Error(`Closing ${suffix} did not release its WebView`);
 }
 async function listen(client, name) {
-  return client.evaluate(`(() => { window.__woodsEvents ??= {}; window.__woodsEvents[${JSON.stringify(name)}] = []; const handler = window.__TAURI_INTERNALS__.transformCallback(e => window.__woodsEvents[${JSON.stringify(name)}].push(e.payload)); return window.__TAURI_INTERNALS__.invoke('plugin:event|listen', {event:${JSON.stringify(name)},target:{kind:'Any'},handler}); })()`);
+  return client.evaluate(`(async() => {
+    const name=${JSON.stringify(name)};
+    window.__woodsEvents ??= {};window.__woodsEventSubscriptions ??= {};
+    const prior=window.__woodsEventSubscriptions[name];
+    if(prior){await window.__TAURI_INTERNALS__.invoke('plugin:event|unlisten',{event:name,eventId:prior.eventId});window.__TAURI_INTERNALS__.unregisterCallback(prior.handler);}
+    window.__woodsEvents[name]=[];
+    const handler=window.__TAURI_INTERNALS__.transformCallback(e=>window.__woodsEvents[name].push(e.payload));
+    const eventId=await window.__TAURI_INTERNALS__.invoke('plugin:event|listen',{event:name,target:{kind:'Any'},handler});
+    window.__woodsEventSubscriptions[name]={eventId,handler};return eventId;
+  })()`);
 }
 async function quit(client) {
   await client.evaluate('void window.__TAURI_INTERNALS__.invoke("quit"); true').catch(()=>{});
@@ -338,7 +353,7 @@ async function quit(client) {
   const agentConfigs=[['.claude/settings.json',JSON.stringify({permissions:{allow:['Read']},hooks:{Stop:[{hooks:[{type:'command',command:'fixture-notify.exe'}]}]}})],['.codex/config.toml','# untouched fixture\nnotify = ["fixture-notify.exe"]\nmodel = "fixture"\n'],['.config/opencode/opencode.json','{}']];
   for(const [name,content]of agentConfigs){const file=path.join(agentHome,name);await fs.mkdir(path.dirname(file),{recursive:true});await fs.writeFile(file,content);}
   async function launch(){
-    proc = spawn(exe, [], { cwd: directory, windowsHide: true, stdio: ['ignore','pipe','pipe'], env: { ...process.env, TEMP:scratchDir, TMP:scratchDir, APPDATA: path.join(directory, 'appdata'), WOODS_ISLAND_DATA_DIR: dataDir, WOODS_ISLAND_AGENT_HOME:agentHome, WOODS_ISLAND_STEAM_PATH:path.join(directory,'steam'), WOODS_ISLAND_MUSIC_PORT:String(musicPort), WOODS_ISLAND_WEATHER_URL:weatherUrl, WOODS_ISLAND_LYRICS_URL:weatherUrl.replace('/forecast','/lyrics'), WOODS_ISLAND_WEBAI_TEST_URL:webAiUrl, WOODS_ISLAND_PASSIVE_QA:'1', WEBVIEW2_USER_DATA_FOLDER:path.join(directory,'webview'), WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}` } });
+    proc = spawn(exe, [], { cwd: directory, windowsHide: true, stdio: ['ignore','pipe','pipe'], env: { ...process.env, TEMP:scratchDir, TMP:scratchDir, APPDATA: path.join(directory, 'appdata'), WOODS_ISLAND_DATA_DIR: dataDir, WOODS_ISLAND_AGENT_HOME:agentHome, WOODS_ISLAND_NODE:process.execPath, WOODS_ISLAND_STEAM_PATH:path.join(directory,'steam'), WOODS_ISLAND_MUSIC_PORT:String(musicPort), WOODS_ISLAND_WEATHER_URL:weatherUrl, WOODS_ISLAND_LYRICS_URL:weatherUrl.replace('/forecast','/lyrics'), WOODS_ISLAND_WEBAI_TEST_URL:webAiUrl, WOODS_ISLAND_PASSIVE_QA:'1', WOODS_PHONE_QA_LOOPBACK:'1', WEBVIEW2_USER_DATA_FOLDER:path.join(directory,'webview'), WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}` } });
     proc.stdout.on('data', data => process.stdout.write(data));
     proc.stderr.on('data', data => process.stderr.write(data));
     proc.on('exit', (code, signal) => console.log(`Native process exited: code=${code}, signal=${signal}`));
@@ -348,7 +363,14 @@ async function quit(client) {
   await launch();
   const pages = await pagesReady();
   let main = await attach(pages.find(p => p.url === 'http://tauri.localhost/'));
-  await waitFor(main,'!!document.querySelector("[data-island]")','Main UI');
+  try{await waitFor(main,'!!document.querySelector("[data-island]")','Main UI');}
+  catch(error){
+    const diagnostic=await main.evaluate("({ready:document.readyState,url:location.href,html:document.documentElement.outerHTML.slice(0,9000),tauri:!!window.__TAURI_INTERNALS__,resources:performance.getEntriesByType('resource').map(x=>({name:x.name,duration:x.duration,size:x.transferSize}))})");
+    const frames=await main.command('Page.getFrameTree').catch(error=>({error:String(error)}));
+    const bootFailure={diagnostic,frames,contexts:[...main.executionContexts.values()],errors};await fs.writeFile(path.join(directory,'startup-failure.json'),JSON.stringify(bootFailure,null,2));
+    console.error('STARTUP DIAGNOSTIC '+JSON.stringify({directory,ready:diagnostic.ready,tauri:diagnostic.tauri,resources:diagnostic.resources,errors}).slice(0,4000));
+    throw error;
+  }
   for(let i=0;i<100;i++){if(await main.invoke('window_diagnostics'))break;await pause(100);}
   await pause(400);
   const persisted = new Map();
@@ -906,7 +928,24 @@ async function quit(client) {
       return {measurements,insideCover:true,insidePill:true,twoBarsVisible:true,highContrast:true,scales:[80,100,150,200],modes:['title','normal','lyrics']};
     }finally{clearInterval(timer);await main.invoke('media_pick',{id:null});await main.invoke('settings_set',{settings:prior});await pause(3400);}
   });
-  await check('Typed character engine renders 36 builtin and 9 optional characters, pause, sleep and cursor at every scale',async()=>{
+  await check('Timer and reminder cards render the selected attention character in both native themes',async()=>{
+    const before=await main.invoke('settings_get');const samples=[];
+    try{
+      for(const theme of ['dark','light'])for(const character of ['pixel','coffee','ginger','liquid'])for(const kind of ['timer','reminder']){
+        await main.invoke('settings_set',{settings:{theme,character,characterMusic:'',snow:'off'}});
+        await main.evaluate(`import('/assets/runtime-debug.js').then(({ot})=>ot.setState({expanded:false,holdOpen:false,mediaLive:false,peek:{id:'attention-fixture',kind:${JSON.stringify(kind)},at:Date.now(),length:60000,reminder:'attention-fixture',text:'Attention fixture'},queue:[]}))`);
+        const selected=character!=='liquid';
+        await waitFor(main,`(()=>{const card=document.querySelector('[data-${kind}-peek]');return !!card&&(!!card.querySelector('[data-character=${character}][data-character-mood=attn]')===${selected});})()`,'Attention card selection');
+        const bounds=await main.evaluate(`(()=>{const card=document.querySelector('[data-${kind}-peek]'),p=card.getBoundingClientRect(),art=card.querySelector('[data-character]')?.getBoundingClientRect();return {hasCharacter:!!art,contained:!art||art.left>=p.left-1&&art.right<=p.right+1&&art.top>=p.top-1&&art.bottom<=p.bottom+1};})()`);
+        assert(bounds.contained);samples.push({theme,character,kind,...bounds});
+      }
+      return {samples,syntheticPeeks:true,alarmNotTriggered:true};
+    }finally{
+      await main.invoke('settings_set',{settings:{theme:before.theme,character:before.character,characterMusic:before.characterMusic,snow:before.snow}});
+      await main.evaluate(`import('/assets/runtime-debug.js').then(({ot})=>ot.setState({expanded:false,holdOpen:false,peek:null,queue:[]}))`);
+    }
+  });
+  await check('Typed character engine renders 41 builtin and 9 optional characters, pause, sleep and cursor at every scale',async()=>{
     const prior=await main.invoke('settings_get');
     const measured=[];let playing=false,timer;
     const send=()=>fetch(`http://127.0.0.1:${musicPort}/track`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({trackId:'character-engine-fixture',title:'Character fixture',artist:'Fixture',duration:20000,progress:1000,isPlaying:playing})});
@@ -915,7 +954,8 @@ async function quit(client) {
       await send();await main.invoke('media_pick',{id:'ru.yandex.desktop.music.mod.connector'});
       timer=setInterval(()=>void send().catch(()=>{}),80);
       const catalog=await main.evaluate('(async()=>{const {characterCatalog}=await import("/assets/runtime-debug.js");return characterCatalog.map(({id,kind,bitmap})=>({id,kind,source:bitmap?.source}));})()');
-      assert.equal(catalog.length,46);assert.equal(catalog.filter(c=>c.source==='codex').length,9);
+      assert.equal(catalog.length,51);assert.equal(catalog.filter(c=>c.source==='codex').length,9);
+      for(const id of ['snowman','frost','bullfinch','ginger','deer'])assert(catalog.some(c=>c.id===id),'Missing seasonal character '+id);
       assert.deepEqual(catalog.filter(c=>c.source==='woods').map(c=>c.id).sort(),approvedBitmapIds.slice().sort(),'The approved eleven bitmap pets are the production authored catalog');
       assert(!catalog.some(c=>c.id==='stardust-beetle'),'Rejected beetle draft must not remain in the production catalog');
       const library=await main.invoke('pets_catalog');
@@ -976,7 +1016,7 @@ async function quit(client) {
       const focusCheck=await assertPassiveForeground(main);
       const screenshot=await main.command('Page.captureScreenshot',{format:'png'});
       await fs.writeFile(path.join(directory,'typed-character-engine.png'),Buffer.from(screenshot.data,'base64'));
-      return {builtinCharacters:36,optionalCodex:9,optionalStatus:library.status,plainOption:true,scales:[80,100,150,200],states:['idle','music','pause','sleep'],
+      return {builtinCharacters:41,optionalCodex:9,optionalStatus:library.status,plainOption:true,scales:[80,100,150,200],states:['idle','music','pause','sleep'],
         cursor:'Synthetic native coordinates; physical pointer untouched',measured,noFocus:true,...focusCheck};
     }finally{
       clearInterval(timer);await main.invoke('media_pick',{id:null});
@@ -1066,7 +1106,7 @@ async function quit(client) {
     assert.equal(importButton.disabled,false,'Import button must become available after completion');
     if(priorIndex){const nextIndex=await fs.stat(indexPath);assert(nextIndex.mtimeMs>priorIndex.mtimeMs,'Import button must rewrite the native profile index');importButton.indexRewritten=true;}
     const options=await settings.evaluate(`Array.from(document.querySelectorAll('[data-character-music] option')).filter(e=>e.value).map(e=>({id:e.value,disabled:e.disabled}))`);
-    assert.equal(options.length,45);assert.equal(options.filter(p=>!p.id.startsWith('codex-pet-')).length,36);
+    assert.equal(options.length,50);assert.equal(options.filter(p=>!p.id.startsWith('codex-pet-')).length,41);
     for(const id of approvedBitmapIds)assert(options.some(option=>option.id===id&&!option.disabled),'Approved bitmap is selectable in music settings: '+id);
     assert(!options.some(option=>option.id==='stardust-beetle'),'Rejected beetle draft must not remain selectable');
     for(const option of options.filter(p=>p.id.startsWith('codex-pet-'))){const pet=imported.pets.find(p=>'codex-pet-'+p.id===option.id);assert.equal(option.disabled,!pet.available,option.id);}
@@ -1433,11 +1473,14 @@ async function quit(client) {
     assert(await fs.stat(path.join(dataDir,'shelf.json')));
   });
   await check('Agents state and config ownership are read without changing fixtures',async()=>{
-    assert.deepEqual(await main.invoke('agents_connections'),{claude:'off',codex:'taken',opencode:'off'});
+    assert.deepEqual(await main.invoke('agents_connections'),{claude:'off',codex:'off',opencode:'off'});
     assert(Array.isArray(await main.invoke('agents_now')));
     for(const [name,content]of agentConfigs)assert.equal(await fs.readFile(path.join(agentHome,name),'utf8'),content);
     const denied=await main.evaluate('window.__TAURI_INTERNALS__.invoke("agents_answer",{id:"../outside",verdict:"allow"}).then(()=>({ok:true}),error=>({ok:false,error:String(error)}))');
     assert.equal(denied.ok,false);assert.match(denied.error,/Invalid request ID/);
+  });
+  await check('Saved Codex hooks deliver permissions through real Tauri and production UI answers',async()=>{
+    return verifyAgentHooks({directory,home:agentHome,profile:dataDir,client:main,waitFor,listen});
   });
   await check('Web AI first loading paint keeps provider text and view buttons visible',async()=>{
     const before=await main.invoke('settings_get'), samples=[];
@@ -1923,7 +1966,7 @@ async function quit(client) {
     }
     await settings.evaluate('document.querySelector("[data-nav=character]").click()');await pause(100);
     const characters=await settings.evaluate('Array.from(document.querySelectorAll("[data-character-music] option")).map(e=>e.value).filter(Boolean)');
-    assert.equal(characters.length,45);
+    assert.equal(characters.length,50);
     const previousCharacter=(await main.invoke('settings_get')).character;
     for(const character of characters){await main.invoke('settings_set',{settings:{character}});await pause(70);assert(await main.evaluate('!!document.querySelector("[data-island]")'));}
     await main.invoke('settings_set',{settings:{character:previousCharacter}});
@@ -1935,7 +1978,7 @@ async function quit(client) {
     const contact=await settings.evaluate('document.querySelector("[data-woods-contact]").textContent');assert(contact.includes('@woodskilla'));
     const aboutShot=await settings.command('Page.captureScreenshot',{format:'png'});await fs.writeFile(path.join(directory,'about-woods.png'),Buffer.from(aboutShot.data,'base64'));
     await settings.invoke('settings_set',{settings:{language:'en'}});await pause(250);
-    assert((await settings.evaluate('document.querySelector("[data-woods-about]").textContent')).includes('All features available'));
+    assert((await settings.evaluate('document.querySelector("[data-woods-about]").textContent')).includes('All features free'));
     await settings.invoke('settings_set',{settings:{language:'ru'}});
     for(let i=0;i<6;i++) await settings.invoke('settings_set',{settings:{clockSeconds:i%2===0}});
     await pause(300);
@@ -1977,6 +2020,271 @@ async function quit(client) {
     assert.equal((await fs.readdir(folder)).filter(name=>name.endsWith('.md')).length,2);
     assert.equal(await fs.readFile(path.join(folder,first),'utf8'),markdown);
     return {folder};
+  });
+  await check('Reminder named dates, time shifts and weekly choices save through the real native UI',async()=>{
+    const prior=await main.invoke('settings_get');const before=await main.invoke('reminders_get');
+    const fill=async text=>{await main.evaluate(`(()=>{const input=document.querySelector('[data-reminder-input]');input.focus();input.select();})()`);await main.command('Input.insertText',{text});};
+    const data=async()=>JSON.parse(await main.invoke('reminders_get'));
+    try{
+      assert.deepEqual(JSON.parse(before),[],'Reminder acceptance uses an empty isolated profile');
+      await main.invoke('note');await waitFor(main,'!!document.querySelector("[data-reminder-input]")','Native reminders UI');
+      for(const language of ['ru','en']){
+        await main.invoke('settings_set',{settings:{language}});
+        await pause(200); // The language provider remounts its translated children.
+        await main.evaluate("(async()=>{const {ot}=await import('/assets/runtime-debug.js');ot.getState().open('hotkey','note');ot.setState({holdOpen:true});})()");
+        await waitFor(main,'!!document.querySelector("[data-reminder-input]")','Translated reminders UI');
+        const title=language==='ru'?'Проверка даты':'Calendar check';
+        await fill(language==='ru'?`${title} 19 ноября 2027 в 16`:`${title} November 19th 2027 at 4 pm`);
+        await waitFor(main,'document.querySelectorAll("[data-reminder-shift]").length===4','Read time adjustment controls');
+        await main.evaluate(`document.querySelector('[data-reminder-shift="15"]').click()`);
+        await main.evaluate(`document.querySelector('[data-reminder-shift="1440"]').click()`);
+        await main.evaluate('document.querySelector("[data-reminder-read]").click()');
+        await waitFor(main,`window.__TAURI_INTERNALS__.invoke('reminders_get').then(json=>JSON.parse(json).some(item=>item.text===${JSON.stringify(title)}))`,'Named date persisted');
+        const reminder=(await data()).find(item=>item.text===title),date=new Date(reminder.at);
+        assert.deepEqual([date.getFullYear(),date.getMonth(),date.getDate(),date.getHours(),date.getMinutes()],[2027,10,20,16,15]);
+        const weeklyTitle=language==='ru'?'Недельная проверка':'Weekly check';await fill(language==='ru'?`${weeklyTitle} в пятницу в 16`:`${weeklyTitle} on Friday at 16`);
+        await waitFor(main,'document.querySelectorAll("[data-reminder-week]").length===2&&!!document.querySelector("[data-reminder-weekly]")','Weekday alternatives');
+        const shot=await main.command('Page.captureScreenshot',{format:'png'});await fs.writeFile(path.join(directory,`reminders-${language}.png`),Buffer.from(shot.data,'base64'));
+        await main.evaluate('document.querySelector("[data-reminder-weekly]").click()');
+        await waitFor(main,`window.__TAURI_INTERNALS__.invoke('reminders_get').then(json=>JSON.parse(json).some(item=>item.text===${JSON.stringify(weeklyTitle)}))`,'Weekly reminder persisted');
+        const weekly=(await data()).find(item=>item.text===weeklyTitle);assert.deepEqual(weekly.repeat,{days:[5],h:16,m:0});
+        await main.evaluate(`Array.from(document.querySelectorAll('[data-reminder-row]')).find(row=>row.title===${JSON.stringify(weeklyTitle)}).querySelector('[data-reminder-edit]').click()`);
+        await waitFor(main,'!!document.querySelector("[data-reminder-read]")&&!document.querySelector("[data-reminder-nudge]")','Edit retains weekly schedule');
+        await main.evaluate('document.querySelector("[data-reminder-read]").click()');
+        assert.deepEqual((await data()).find(item=>item.text===weeklyTitle).repeat,{days:[5],h:16,m:0});
+        const overflow=await main.evaluate("(()=>{const el=document.querySelector('[data-time-side]');return el.scrollHeight>el.clientHeight+1||el.scrollWidth>el.clientWidth+1;})()");assert.equal(overflow,false,'Reminder controls fit the real note sidebar');
+      }
+      return {languages:['ru','en'],namedDates:true,dayAndMinuteShift:true,weekdayAlternatives:true,weeklyPersisted:true,editingPreservesRepeat:true,sidebarFits:true};
+    }finally{
+      await main.evaluate("document.querySelectorAll('[data-reminder-row]').forEach(row=>row.querySelector('button:last-child').click())").catch(()=>{});
+      await main.invoke('reminders_set',{json:before});await main.invoke('settings_set',{settings:prior});
+      await main.evaluate("(async()=>{const {ot}=await import('/assets/runtime-debug.js');ot.setState({expanded:false,holdOpen:false,peek:null,queue:[]});})()");
+    }
+  });
+  await check('Woods About and release history use current metadata in the native settings window',async()=>{
+    const prior=await main.invoke('settings_get'),version=await main.invoke('plugin:app|version');let settings;
+    try{
+      await main.invoke('open_settings',{section:'pro'});
+      settings=await attach((await pagesReady(page=>page.url.endsWith('/settings.html'))).find(page=>page.url.endsWith('/settings.html')));
+      for(const language of ['ru','en']){
+        await settings.invoke('settings_set',{settings:{language}});
+        await waitFor(settings,`document.querySelector('[data-nav=pro]')?.dataset.now==='true'&&document.querySelector('[data-about-version]')?.textContent.includes(${JSON.stringify(version)})`,'About shows installed native version');
+        const about=await settings.evaluate("document.querySelector('[data-woods-about]').textContent");
+        assert(about.includes(language==='ru'?'Никита Кузнецов':'Nikita Kuznetsov'));
+        assert(about.includes(language==='ru'?'Все функции бесплатно':'All features free'));
+        assert(!/exuupery|exupery|399\s*₽|\$4\.99|\{\{/.test(about));
+        assert(await settings.evaluate("(()=>{const img=document.querySelector('[data-woods-logo]');return img.complete&&img.naturalWidth>0;})()"),'Woods mascot loads from the bundled asset');
+        assert.equal(await settings.evaluate("(()=>{const el=document.querySelector('[data-woods-about]');return el.scrollWidth>el.clientWidth+1;})()"),false);
+        const shot=await settings.command('Page.captureScreenshot',{format:'png'});await fs.writeFile(path.join(directory,`about-canonical-${language}.png`),Buffer.from(shot.data,'base64'));
+        await settings.evaluate("document.querySelector('[data-about-version]').click()");
+        await waitFor(settings,`document.querySelector('[data-nav=updates]')?.dataset.now==='true'&&document.querySelector('[data-release]')?.dataset.release===${JSON.stringify(version)}`,'Version button opens the matching release history');
+        const history=await settings.evaluate("document.querySelector('[data-whats-new]').textContent");
+        assert(!history.includes('{{'));assert(history.includes(language==='ru'?'обычный опрос':'normal scans'));
+        assert.equal(await settings.evaluate("(()=>{const el=document.querySelector('[data-whats-new]');return el.scrollWidth>el.clientWidth+1;})()"),false);
+        const releaseShot=await settings.command('Page.captureScreenshot',{format:'png'});await fs.writeFile(path.join(directory,`releases-canonical-${language}.png`),Buffer.from(releaseShot.data,'base64'));
+        await settings.evaluate("document.querySelector('[data-nav=pro]').click()");
+      }
+      return {languages:['ru','en'],version,ownAuthor:true,ownMascot:true,canonicalHistory:true,proseFixesVisible:true,placeholdersResolved:true,versionNavigation:true};
+    }finally{
+      await main.invoke('settings_set',{settings:prior});
+      if(settings){await main.invoke('plugin:window|close',{label:'settings'});await waitForWindowClosed('/settings.html');}
+    }
+  });
+  await check('Screen snow follows settings and motion in one hidden native surface without repeated visibility transitions',async()=>{
+    const before=await main.invoke('settings_get');let snow;
+    const keys=['snow','snowScreen','snowFall','snowAmount','reducedMotion'];
+    try{
+      await main.invoke('settings_set',{settings:{snow:'on',snowScreen:true,snowFall:false,snowAmount:200,reducedMotion:'full'}});
+      await waitFor(main,`window.__TAURI_INTERNALS__.invoke('snow_state').then(state=>state.reason==='qa'||state.reason==='fullscreen')`,'Native snow policy');
+      const state=await main.invoke('snow_state');
+      if(state.reason==='fullscreen')return {skipped:true,reason:'A real fullscreen program suppresses decorative snow'};
+      assert(state.enabled&&!state.visible);assert.equal(state.amount,200);assert.equal(state.motion,'full');
+      snow=await attach((await pagesReady(page=>page.url.endsWith('/snow.html'))).find(page=>page.url.endsWith('/snow.html')));
+      const size=await main.invoke('plugin:window|outer_size',{label:'snow-screen'}),position=await main.invoke('plugin:window|outer_position',{label:'snow-screen'});
+      assert.deepEqual([size.width,size.height],[state.width,state.height]);assert.deepEqual([position.x,position.y],[state.left,state.top]);
+      assert.equal(await main.invoke('plugin:window|is_visible',{label:'snow-screen'}),false);
+      await waitFor(snow,`window.__woodsSnow?.status().revision>=${state.revision}`,'Snow renderer received the native state');
+      const renderer=await snow.evaluate('window.__woodsSnow.status()');assert(renderer.enabled&&renderer.density===2);
+      await pause(1600);const unchanged=await main.invoke('snow_state');assert.equal(unchanged.revision,state.revision,'Idle polling must not repeat native changes');
+      await main.invoke('settings_set',{settings:{reducedMotion:'reduce'}});
+      await waitFor(main,`window.__TAURI_INTERNALS__.invoke('snow_state').then(state=>!state.enabled&&state.reason==='motion')`,'Reduced motion stops screen snow');
+      await waitFor(snow,`!window.__woodsSnow.status().enabled&&!window.__woodsSnow.status().running`,'Renderer stops after motion preference');
+      await main.invoke('settings_set',{settings:{reducedMotion:'full',snowScreen:false}});
+      await waitFor(main,`window.__TAURI_INTERNALS__.invoke('snow_state').then(state=>!state.enabled&&state.reason==='setting')`,'Screen setting disables snow');
+      return {realNativeSurface:true,geometry:[state.left,state.top,state.width,state.height],screenIndependentOfLocalFall:true,stableRevision:true,motionStops:true,passiveHidden:true,realDesktopSnowNotShown:true};
+    }finally{
+      await main.invoke('settings_set',{settings:Object.fromEntries(keys.map(key=>[key,before[key]]))});
+    }
+  });
+  await check('Notch AppBar mode and fullscreen toggle follow native settings without altering desktop work area',async()=>{
+    const before=await main.invoke('settings_get');
+    const keys=['notchBar','notchLook','hideInFullscreen'];
+    try{
+      await main.invoke('settings_set',{settings:{notchBar:true,notchLook:'glass'}});
+      await main.invoke('notch_pill',{height:44});
+      await waitFor(main,`window.__TAURI_INTERNALS__.invoke('notch_state').then(s=>s.reason==='qa'&&s.look==='glass'&&typeof s.height==='number'&&s.height>=44)`,'Native notch AppBar passive QA state');
+      const state=await main.invoke('notch_state');
+      assert.equal(state.active,false);assert.equal(state.visible,false);assert.equal(state.look,'glass');
+      await main.invoke('settings_set',{settings:{notchLook:'wallpaper'}});
+      await waitFor(main,`window.__TAURI_INTERNALS__.invoke('notch_state').then(s=>s.reason==='qa'&&s.look==='wallpaper')`,'Notch strip switches to wallpaper look');
+      await main.invoke('settings_set',{settings:{notchBar:false}});
+      await waitFor(main,`window.__TAURI_INTERNALS__.invoke('notch_state').then(s=>s.reason==='setting'&&!s.active)`,'Notch mode disables cleanly');
+      const toggled=await main.invoke('fullscreen_hide_toggle');
+      assert.equal(toggled,!(before.hideInFullscreen!==false));
+      const toggledBack=await main.invoke('fullscreen_hide_toggle');
+      assert.equal(toggledBack,!toggled);
+      return {notchHeight:state.height,passiveSafe:true,fullscreenToggleRoundtrip:true};
+    }finally{
+      await main.invoke('settings_set',{settings:Object.fromEntries(keys.map(key=>[key,before[key]]))});
+    }
+  });
+  await check('Notification artwork comes from installed Windows apps and renders in the folded native pill',async()=>{
+    const prior=await main.invoke('settings_get');
+    try{
+      assert.equal(await main.invoke('notifications_icon',{aumid:'bad\u0000id'}),null);
+      const apps=(await main.invoke('palette_apps')).filter(app=>app.path.startsWith('shell:AppsFolder\\'));
+      let icon,checked=0;
+      for(const app of apps.slice(0,12)){
+        checked++;const value=await main.invoke('notifications_icon',{aumid:app.path.slice('shell:AppsFolder\\'.length)});
+        if(value){icon=value;break;}
+      }
+      assert(icon,'An installed registered Windows app should expose local artwork');
+      assert(icon.startsWith('data:image/png;base64,'));
+      const png=Buffer.from(icon.slice('data:image/png;base64,'.length),'base64');
+      assert.equal(png.subarray(0,8).toString('hex'),'89504e470d0a1a0a');
+      assert(png.readUInt32BE(16)<=96&&png.readUInt32BE(20)<=96);
+      await main.invoke('settings_set',{settings:{showNotifications:true}});
+      await main.evaluate(`(async()=>{const {ot}=await import('/assets/runtime-debug.js');ot.setState({expanded:false,peek:null,queue:[]});})()`);
+      await main.invoke('plugin:event|emit',{event:'notify:new',payload:{id:7771,app:'Woods fixture',aumid:'',title:'Artwork check',body:'Сайт и приложение',icon}});
+      await waitFor(main,'!!document.querySelector("[data-notification] img")','Local notification icon in the folded pill');
+      assert.equal(await main.evaluate('document.querySelector("[data-notification] img").getAttribute("src")'),icon);
+      return {installedAppArtwork:true,checked,smallPng:true,syntheticNativeToast:true,windowsNotificationAccess:'not requested',liveSiteToast:'pending'};
+    }finally{
+      await main.invoke('settings_set',{settings:prior});
+      await main.evaluate(`(async()=>{const {ot}=await import('/assets/runtime-debug.js');ot.setState({peek:null,queue:[]});})()`);
+    }
+  });
+  await check('Phone transfer uses desktop approval and the real isolated local HTTP server',async()=>{
+    await main.evaluate(`(async()=>{const {ot}=await import('/assets/runtime-debug.js');ot.getState().open('click','shelf');})()`);
+    await waitFor(main,'!!document.querySelector("[data-phone-panel]")','Phone panel on the shelf');
+    assert.equal(await main.evaluate('!!document.querySelector("[data-phone-open]")'),true);
+    let states=0;
+    const evidence=await verifyPhoneTransport({directory,profile:dataDir,invoke:async(command,args)=>{
+      const result=await main.invoke(command,args);
+      if(command==='phone_state' || command==='phone_start' || command==='phone_stop' || command==='phone_allow') {
+        await waitFor(main,`(async()=>{const {ot}=await import('/assets/runtime-debug.js');const s=ot.getState().phone;return !!s&&s.running===${result.running}&&s.connected===${result.connected}&&s.pending?.id===${JSON.stringify(result.pending?.id)};})()`,'Phone state delivered to real UI');
+        states++;
+      }
+      if(command==='phone_start')await waitFor(main,'!!document.querySelector("[data-phone-qr] img")','Phone QR code generated');
+      if(command==='phone_state'&&result.pending)await waitFor(main,'!!document.querySelector("[data-phone-allow]")','Desktop approval controls');
+      return result;
+    }});
+    await main.evaluate(`(async()=>{const {ot}=await import('/assets/runtime-debug.js');ot.getState().close();})()`);
+    return {...evidence,sharedPanel:true,nativeStatesObserved:states};
+  });
+  await check('Free Woods features stay unlocked after legacy license events',async()=>{
+    for(const command of ['license_status','license_activate','license_remove']){
+      const status=await main.invoke(command,command==='license_activate'?{key:'ignored-qa-value'}:{});
+      assert.equal(status.pro,true);assert.equal(status.source,'free');assert.equal(status.trialDaysLeft,null);
+    }
+    await main.invoke('plugin:event|emit',{event:'license:changed',payload:{pro:false,source:'expired',trialDaysLeft:0}});
+    await waitFor(main,"(async()=>{const {ot}=await import('/assets/runtime-debug.js');return ot.getState().license.pro&&ot.getState().license.source==='free'&&ot.getState().license.trialDaysLeft===null;})()",'Legacy license cannot restrict Woods');
+    return {backendFree:true,activationNeverRequired:true,legacyEventIgnored:true};
+  });
+  await check('Voice command results reach the real palette and execute recognized actions once',async()=>{
+    const prior=await main.invoke('settings_get');
+    const say=text=>main.invoke('plugin:event|emit',{event:'dictation:done',payload:{target:'command',text,pasted:false}});
+    await main.evaluate("(async()=>{const {ot}=await import('/assets/runtime-debug.js');window.__qaVoiceOriginalOpen=ot.getState().open;window.__qaVoiceOpens=0;ot.setState({open:(...args)=>{if(args[1]==='weather')window.__qaVoiceOpens++;return window.__qaVoiceOriginalOpen(...args);}});})()");
+    let expectedOpens=0;
+    const opened=async()=>{
+      expectedOpens++;
+      await waitFor(main,`(async()=>{const {ot}=await import('/assets/runtime-debug.js');const s=ot.getState();return window.__qaVoiceOpens===${expectedOpens}&&s.expanded&&s.tab==='weather'&&!s.palette;})()`,'Spoken weather action executed once');
+      await pause(500);assert.equal(await main.evaluate('window.__qaVoiceOpens'),expectedOpens);
+    };
+    try{
+      assert.equal(prior.hotkeyVoiceCommand,'','Voice shortcut starts unassigned');
+      for(const language of ['ru','en']){
+        await main.invoke('settings_set',{settings:{language}});await pause(250);
+        await say(language==='ru'?'Пожалуйста, открой Погода!':'Please, open Weather!');
+        await opened();
+        await say('Please open Definitely MissingWoodsQaApp!');
+        await waitFor(main,"document.querySelector('[data-palette-input]')?.value==='Definitely MissingWoodsQaApp'",'Unmatched voice command remains in palette');
+        await pause(300);
+        const pending=await main.evaluate("(async()=>{const {ot}=await import('/assets/runtime-debug.js');return {palette:ot.getState().palette,seed:ot.getState().paletteSeed,query:document.querySelector('[data-palette-input]')?.value};})()");
+        assert.deepEqual(pending,{palette:true,seed:null,query:'Definitely MissingWoodsQaApp'});
+        // A second recognition updates the already mounted palette.
+        await say(language==='ru'?'Открой Погода.':'Open Weather.');
+        await opened();
+        await say(language==='ru'?'Открой Погода.':'Open Weather.');
+        await waitFor(main,"!!document.querySelector('[data-palette-input]')",'Voice preview can be cancelled');
+        await main.command('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+        await pause(600);assert.equal(await main.evaluate('window.__qaVoiceOpens'),expectedOpens,'Closing the preview cancels automatic execution');
+      }
+      return {languages:['ru','en'],recognition:'synthetic native event',realCommandResolver:true,openAndMountedPalette:true,executedOnce:true,closingCancels:true,unmatchedCommandsRemainReviewable:true};
+    }finally{
+      await main.invoke('settings_set',{settings:prior});
+      await main.evaluate("(async()=>{const {ot}=await import('/assets/runtime-debug.js');ot.setState({open:window.__qaVoiceOriginalOpen,expanded:false,palette:false,paletteSeed:null,holdOpen:false,peek:null,queue:[]});delete window.__qaVoiceOriginalOpen;delete window.__qaVoiceOpens;})()");
+    }
+  });
+  await check('Torrent download setting and file owners reach the native pill without hiding browser downloads',async()=>{
+    const prior=await main.invoke('settings_get');const folder=path.join(directory,'torrent-owner');
+    const downloads=path.join(folder,'downloads');await fs.mkdir(downloads,{recursive:true});
+    const writerExe=path.join(folder,'qbittorrent.exe');let writer,settings;
+    const writerPath=path.join(downloads,'Архив.zip.part'),finalPath=path.join(downloads,'Архив.zip');
+    const latest=()=>main.evaluate("window.__woodsEvents['downloads:update'].at(-1)??[]");
+    try{
+      assert.equal(prior.downloadsTorrents,false,'Torrent files are hidden by default');
+      const compiled=spawnSync('rustc',['+1.98.1',path.join(root,'scripts/fixtures/download-writer.rs'),'-o',writerExe],{encoding:'utf8',windowsHide:true});
+      assert.equal(compiled.status,0,compiled.stderr);
+      await main.invoke('settings_set',{settings:{downloadsDir:downloads,downloadsTorrents:false,showDownloads:true,downloadsInPill:'badge'}});
+      await listen(main,'downloads:done');await listen(main,'downloads:update');await pause(1300);
+      writer=spawn(writerExe,[folder],{windowsHide:true,stdio:'ignore'});
+      for(let i=0;i<100;i++){if(await fs.stat(path.join(folder,'ready')).catch(()=>false))break;await pause(50);}
+      assert(await fs.stat(path.join(folder,'ready')).catch(()=>false),'Fixture writer did not start');
+      await pause(1200);await fs.writeFile(path.join(folder,'grow'),'incoming fixture bytes');await pause(3000);
+      assert(!(await latest()).some(file=>file.path===writerPath),'A confirmed torrent writer must be hidden');
+      await main.invoke('open_settings',{section:'events'});
+      settings=await attach((await pagesReady(page=>page.url.endsWith('/settings.html'))).find(page=>page.url.endsWith('/settings.html')));
+      await waitFor(settings,'document.querySelector("[data-nav=events]")?.dataset.now==="true"','Downloads settings section');
+      await settings.evaluate(`(()=>{const button=Array.from(document.querySelectorAll('[role=switch]')).find(el=>['Торрент-загрузки','Torrent downloads'].includes(el.getAttribute('aria-label')));if(!button)throw new Error('Torrent setting missing');button.click();})()`);
+      await waitFor(main,"window.__TAURI_INTERNALS__.invoke('settings_get').then(settings=>settings.downloadsTorrents===true)",'Torrent setting enabled from UI');
+      await waitFor(main,`window.__woodsEvents['downloads:update'].at(-1)?.some(file=>file.path===${JSON.stringify(writerPath)})`,'Opted in torrent appears');
+      await waitFor(main,`(async()=>{const {ot}=await import('/assets/runtime-debug.js');return !ot.getState().expanded&&ot.getState().downloads.some(file=>file.path===${JSON.stringify(writerPath)})&&!!document.querySelector('[data-download-badge]');})()`,'Download badge in the folded pill');
+      const browserFile=path.join(downloads,'browser.txt');await fs.writeFile(browserFile,'ordinary completed download');
+      await waitFor(main,`window.__woodsEvents['downloads:done'].some(file=>file.path===${JSON.stringify(browserFile)})`,'Browser file completes with torrent client running');
+      await main.invoke('settings_set',{settings:{downloadsTorrents:false}});await pause(1200);
+      assert(!(await latest()).some(file=>file.path===writerPath));
+      await fs.writeFile(path.join(folder,'close'),'');await new Promise((resolve,reject)=>{if(writer.exitCode!==null)return resolve();writer.once('exit',code=>code===0?resolve():reject(new Error('Writer exit '+code)));});
+      await fs.rename(writerPath,finalPath);await pause(4500);
+      const done=await main.evaluate("window.__woodsEvents['downloads:done']");assert(!done.some(file=>file.path===finalPath),'Hidden ownership survives temporary-name removal');
+      await main.invoke('settings_set',{settings:{downloadsTorrents:true}});await pause(1300);
+      assert(!(await main.evaluate("window.__woodsEvents['downloads:done']")).some(file=>file.path===finalPath),'Re-enabling must not notify for old files');
+      assert.equal(JSON.parse(await fs.readFile(path.join(dataDir,'settings.json'),'utf8')).downloadsTorrents,true);
+      return {nativeFileOwners:true,writer:'isolated fixture',hiddenByDefault:true,settingsUi:true,settingPersisted:true,ordinaryCompletion:true,renameRetained:true,noOldNotification:true};
+    }finally{
+      writer?.kill();if(settings){await settings.invoke('plugin:window|close',{label:'settings'}).catch(()=>{});await waitForWindowClosed('/settings.html');}
+      await main.invoke('settings_set',{settings:prior});
+    }
+  });
+  await check('Browser final-name download waits for its writer to close before completion',async()=>{
+    const prior=await main.invoke('settings_get'),folder=path.join(directory,'browser-save-as'),downloads=path.join(folder,'downloads');let writer;
+    await fs.mkdir(downloads,{recursive:true});const file=path.join(downloads,'Сохранить как.zip'),writerExe=path.join(folder,'chrome.exe');
+    try{
+      const compiled=spawnSync('rustc',['+1.98.1',path.join(root,'scripts/fixtures/download-writer.rs'),'-o',writerExe],{encoding:'utf8',windowsHide:true});assert.equal(compiled.status,0,compiled.stderr);
+      await main.invoke('settings_set',{settings:{downloadsDir:downloads,showDownloads:true,downloadsTorrents:false}});
+      await listen(main,'downloads:done');await listen(main,'downloads:update');await pause(1300);
+      writer=spawn(writerExe,[folder,'Сохранить как.zip'],{windowsHide:true,stdio:'ignore'});
+      for(let i=0;i<100;i++){if(await fs.stat(path.join(folder,'ready')).catch(()=>false))break;await pause(50);}
+      assert(await fs.stat(path.join(folder,'ready')).catch(()=>false),'Browser fixture did not open final-name file');
+      await pause(4500);
+      assert(!(await main.evaluate("window.__woodsEvents['downloads:done']")).some(item=>item.path===file),'Open browser file was announced ready while Save As is still pending');
+      await fs.writeFile(path.join(folder,'grow'),'new browser bytes');
+      await waitFor(main,`window.__woodsEvents['downloads:update'].some(files=>files.some(item=>item.path===${JSON.stringify(file)}&&item.size>17))`,'Ordinary final-name writer appears as an active download');
+      await fs.writeFile(path.join(folder,'close'),'');await new Promise((resolve,reject)=>{if(writer.exitCode!==null)return resolve();writer.once('exit',code=>code===0?resolve():reject(new Error('Browser writer exit '+code)));});
+      await waitFor(main,`window.__woodsEvents['downloads:done'].some(item=>item.path===${JSON.stringify(file)})`,'Browser completion follows actual close');
+      await pause(1500);assert.equal((await main.evaluate("window.__woodsEvents['downloads:done']")).filter(item=>item.path===file).length,1);
+      return {writer:'isolated browser fixture',finalFilename:true,openFileNeverCompletes:true,activeProgress:true,completionAfterClose:true,notifiesOnce:true,realYandexBrowser:false};
+    }finally{writer?.kill();await main.invoke('settings_set',{settings:prior});}
   });
   await check('Steam progress and completion use actual manifest changes',async()=>{
     const apps=path.join(directory,'steam','steamapps');await fs.mkdir(apps,{recursive:true});

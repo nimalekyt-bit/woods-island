@@ -4,6 +4,7 @@ import { r as c, t as l } from "./window.js";
 import { i as u, n as d, r as f, t as p } from "./undo.js";
 import { n as m, t as h } from "./check.js";
 import { a as g, i as _, n as v, o as y, r as b, t as x } from "./markup.js";
+import { screenshotAnnotations, screenshotExport } from '../capture/annotation-state';
 var S = a(e(), 1),
   C = r(),
   w = i();
@@ -73,13 +74,11 @@ function D() {
       (k((t) => [...t, e]), A([]));
     },
     K = (0, S.useCallback)(() => {
-      P(
-        (e) => (
-          e && e.text.trim() && G({ t: `text`, at: e.at, text: e.text, color: o, size: 14 + C * 3 }),
-          null
-        ),
-      );
-    }, [o, C]),
+      if (!N) return;
+      const annotations = screenshotAnnotations(O, N, o, 14 + C * 3);
+      if (annotations !== O) { k(annotations); A([]); }
+      P(null);
+    }, [N, O, o, C]),
     q = (t) => {
       if (!e || t.button !== 0) return;
       let n = W(t);
@@ -116,20 +115,22 @@ function D() {
     Z = () => {
       A((e) => (e.length ? (k((t) => [...t, e[e.length - 1]]), e.slice(0, -1)) : e));
     },
-    Q = () => {
+    Q = (annotations = O) => {
       let t = document.createElement(`canvas`);
       return (
         (t.width = e.naturalWidth),
         (t.height = e.naturalHeight),
-        T(t.getContext(`2d`), e, O, 1),
+        T(t.getContext(`2d`), e, annotations, 1),
         t.toDataURL(`image/png`)
       );
     },
     $ = async (t) => {
       if (e && !F) {
-        (N && K(), I(!0));
+        const snapshot = screenshotExport(O, N, o, 14 + C * 3, t);
+        if (snapshot.annotations !== O) { k(snapshot.annotations); A([]); }
+        (P(null), I(!0));
         try {
-          (await n.editorSave(Q(), !0), t && (await c().close()));
+          (await n.editorSave(Q(snapshot.annotations), snapshot.copy), snapshot.close && (await c().close()));
         } catch (e) {
           R(String(e));
         } finally {
@@ -243,12 +244,14 @@ function D() {
                 children: L,
               }),
             (0, w.jsxs)(`button`, {
+              "data-editor-copy": !0,
               onClick: () => void $(!1),
               disabled: !e || F,
               className: `press flex h-9 items-center gap-1.5 rounded-lg bg-white/[0.08] px-3 text-[13px] hover:bg-white/[0.12] disabled:opacity-40`,
               children: [(0, w.jsx)(l, { size: 14 }), ` `, t(`Копировать`, `Copy`)],
             }),
             (0, w.jsxs)(`button`, {
+              "data-editor-save": !0,
               onClick: () => void $(!0),
               disabled: !e || F,
               className: `press ml-1.5 flex h-9 items-center gap-1.5 rounded-lg bg-white px-3.5 text-[13px] font-semibold text-black disabled:opacity-40`,

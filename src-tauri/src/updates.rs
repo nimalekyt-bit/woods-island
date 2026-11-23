@@ -204,6 +204,7 @@ pub fn cancel() -> bool {
 }
 pub async fn install(app: AppHandle) -> Result<bool, String> {
     let _operation = OPERATION.try_lock().map_err(|_| "busy".to_owned())?;
+    let _activity=crate::watchdog::protect_activity().map_err(|_|"busy".to_owned())?;
     if installed_directory().is_none() { return Err(fail(&app, "notInstalled")); }
     let update = {
         let current = CURRENT.lock().unwrap();

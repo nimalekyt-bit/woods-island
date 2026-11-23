@@ -37,7 +37,7 @@ for (const name of commands) {
   const params = split(signature[1]).flatMap(param => {
     const colon = param.indexOf(':');
     const key = param.slice(0, colon).trim(), value = param.slice(colon + 1).trim();
-    if (value.includes('tauri::State') || value === 'AppHandle') return [];
+    if (value.includes('tauri::State') || value === 'AppHandle' || value === 'tauri::Webview') return [];
     return [{ name: key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase()), optional: value.startsWith('Option<'), type: type(value) }];
   });
   signatures[name] = { params, result: type(signature[2] || '()') };

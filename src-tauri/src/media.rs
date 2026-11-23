@@ -1,4 +1,8 @@
-use std::sync::Mutex;
+pub mod legacy;
+pub mod names;
+
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Emitter;
 use serde_json::{json, Value};
@@ -17,6 +21,25 @@ static PICKED_APP_ID: Mutex<Option<String>> = Mutex::new(None);
 static HIDDEN_APP_IDS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 static LAST_COVER_CACHE: Mutex<Option<(String, String)>> = Mutex::new(None); // (key, cover_url)
 static PLAYBACK_TRACKER: Mutex<Option<PlaybackProgress>> = Mutex::new(None);
+static APP_NAME_CACHE: OnceLock<Mutex<HashMap<String, Option<String>>>> = OnceLock::new();
+
+fn cached_registered_app_name(app_id: &str) -> Option<String> {
+    if app_id.is_empty() || app_id.starts_with("woods.") {
+        return None;
+    }
+    let cache = APP_NAME_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(found) = cache.lock().unwrap().get(app_id).cloned() {
+        return found;
+    }
+    let _com = crate::audio::ComApartment::new().ok();
+    let resolved = names::registered_app_name(app_id);
+    let mut guard = cache.lock().unwrap();
+    if guard.len() >= 128 {
+        guard.clear();
+    }
+    guard.insert(app_id.to_owned(), resolved.clone());
+    resolved
+}
 
 pub fn configure(settings: &Value) {
     let hidden: Vec<String> = settings["mediaHidden"].as_array().into_iter().flatten()
@@ -75,11 +98,21 @@ pub fn now_ms() -> u64 {
 
 pub fn format_app_name(app_id: &str) -> String {
     if let Some(name)=crate::storage::load_json_file("media_names.json").and_then(|v|v[app_id].as_str().map(str::to_owned)) {return name;}
+    if let Some(kind) = legacy::LegacyKind::from_id(app_id) {
+        return kind.name().to_string();
+    }
+    if names::firefox_app_id(app_id) {
+        return "Firefox".to_string();
+    }
     let lower = app_id.to_lowercase();
     if lower.contains("yandex") {
         "Яндекс Музыка".to_string()
     } else if lower.contains("ayugram") {
         "Telegram (AyuGram)".to_string()
+    } else if lower.contains("vk") {
+        "VK Музыка".to_string()
+    } else if let Some(registered) = cached_registered_app_name(app_id) {
+        registered
     } else if lower.contains("telegram") {
         "Telegram".to_string()
     } else if lower.contains("operagx") || lower.contains("opera gx") || lower.contains("operasoftware") {
@@ -90,10 +123,10 @@ pub fn format_app_name(app_id: &str) -> String {
         "Microsoft Edge".to_string()
     } else if lower.contains("spotify") {
         "Spotify".to_string()
-    } else if lower.contains("vk") {
-        "VK Музыка".to_string()
     } else if lower.contains("aimp") {
         "AIMP".to_string()
+    } else if lower.contains("winamp") {
+        "Winamp".to_string()
     } else if lower.contains("foobar") {
         "Foobar2000".to_string()
     } else {
@@ -236,12 +269,52 @@ async fn fetch_online_artwork(artist: &str, title: &str) -> Option<String> {
 }
 
 pub fn get_current_media() -> Option<Value> {
-    let bridge=crate::music_bridge::current().filter(|_| !is_hidden(crate::music_bridge::APP_ID));
-    let picked=PICKED_APP_ID.lock().unwrap().clone();
-    let current=if bridge.is_some() && (picked.as_deref()==Some(crate::music_bridge::APP_ID) || (picked.is_none() && bridge.as_ref().map(|m|m["playing"]==true).unwrap_or(false))) {bridge} else {read_current_media().or(bridge)};
-    if current.is_none(){
-        *PLAYBACK_TRACKER.lock().unwrap()=None;
-        *LAST_COVER_CACHE.lock().unwrap()=None;
+    let bridge = crate::music_bridge::current().filter(|_| !is_hidden(crate::music_bridge::APP_ID));
+    let legacy_visible: Vec<Value> = legacy::snapshots()
+        .into_iter()
+        .filter(|m| m["app"].as_str().is_some_and(|id| !is_hidden(id)))
+        .map(|mut m| {
+            if let Some(id) = m["app"].as_str().map(str::to_owned) {
+                m["appName"] = json!(format_app_name(&id));
+            }
+            m
+        })
+        .collect();
+    let picked = PICKED_APP_ID.lock().unwrap().clone();
+    let mut current = if let Some(ref picked_id) = picked {
+        if picked_id == crate::music_bridge::APP_ID {
+            bridge.clone()
+        } else if let Some(found) = legacy_visible.iter().find(|m| m["app"].as_str() == Some(picked_id.as_str())) {
+            Some(found.clone())
+        } else {
+            read_current_media()
+        }
+    } else {
+        None
+    };
+    if current.is_none() {
+        let gsmtc = read_current_media();
+        let legacy_playing = legacy_visible.iter().find(|m| m["playing"] == true).cloned();
+        let legacy_any = legacy_visible.first().cloned();
+        current = if bridge.as_ref().is_some_and(|m| m["playing"] == true) {
+            bridge
+        } else if gsmtc.as_ref().is_some_and(|m| m["playing"] == true) {
+            gsmtc
+        } else if legacy_playing.is_some() {
+            legacy_playing
+        } else {
+            gsmtc.or(bridge).or(legacy_any)
+        };
+    }
+    if let Some(ref mut media) = current {
+        let extra = usize::from(crate::music_bridge::current().is_some()) + legacy_visible.len();
+        let existing = media["sources"].as_u64().unwrap_or(1) as usize;
+        if existing < extra.max(1) {
+            media["sources"] = json!(extra.max(1));
+        }
+    } else {
+        *PLAYBACK_TRACKER.lock().unwrap() = None;
+        *LAST_COVER_CACHE.lock().unwrap() = None;
     }
     current
 }
@@ -353,6 +426,18 @@ pub fn get_media_sources() -> Vec<Value> {
     if let Some(media)=crate::music_bridge::current() {
         result.push(json!({"id":crate::music_bridge::APP_ID,"name":format_app_name(crate::music_bridge::APP_ID),"title":media["title"],"playing":media["playing"],"hidden":is_hidden(crate::music_bridge::APP_ID),"active":shown_id.as_deref()==Some(crate::music_bridge::APP_ID)}));
     }
+    for media in legacy::snapshots() {
+        if let Some(id) = media["app"].as_str() {
+            result.push(json!({
+                "id": id,
+                "name": format_app_name(id),
+                "title": media["title"],
+                "playing": media["playing"],
+                "hidden": is_hidden(id),
+                "active": shown_id.as_deref() == Some(id)
+            }));
+        }
+    }
     let mgr = match get_manager() {
         Some(m) => m,
         None => return result,
@@ -404,7 +489,16 @@ pub fn media_seek(ms: u64) -> bool {
 }
 
 pub fn media_control(action: &str) -> bool {
-    if get_current_media().as_ref().map(|m|m["app"]==crate::music_bridge::APP_ID).unwrap_or(false) { return crate::music_bridge::control(action); }
+    if let Some(current) = get_current_media() {
+        if let Some(app_id) = current["app"].as_str() {
+            if app_id == crate::music_bridge::APP_ID {
+                return crate::music_bridge::control(action);
+            }
+            if legacy::LegacyKind::from_id(app_id).is_some() {
+                return legacy::control(app_id, action).is_ok();
+            }
+        }
+    }
     let _com = crate::audio::ComApartment::new().ok();
     if let Some(mgr) = get_manager() {
         if let Some(session) = get_active_session(&mgr) {
@@ -479,7 +573,16 @@ pub fn media_prev() {
 }
 
 pub fn media_seek_ms(ms: u64) -> bool {
-    if get_current_media().as_ref().map(|m|m["app"]==crate::music_bridge::APP_ID).unwrap_or(false) {return false;}
+    if let Some(current) = get_current_media() {
+        if let Some(app_id) = current["app"].as_str() {
+            if app_id == crate::music_bridge::APP_ID {
+                return false;
+            }
+            if legacy::LegacyKind::from_id(app_id).is_some() {
+                return legacy::seek(app_id, ms).is_ok();
+            }
+        }
+    }
     let _com = crate::audio::ComApartment::new().ok();
     let mut changed = false;
     if let Some(mgr) = get_manager() {

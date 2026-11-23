@@ -1,4 +1,5 @@
 //! Windows Core Audio controls and a measured WASAPI loopback spectrum.
+pub mod process_loopback;
 use rustfft::{num_complex::Complex, Fft, FftPlanner};
 use serde_json::{json, Value};
 use std::{collections::VecDeque, sync::{Arc,atomic::{AtomicBool,Ordering}}, time::{Duration, Instant}};
@@ -329,16 +330,102 @@ fn decode_sample(data:&[u8],float:bool)->f32 {
         _=>0.
     }
 }
-unsafe fn capture_session(app:&tauri::AppHandle)->Result<(),String> {
-    let device=loopback_device().map_err(|e|e.to_string())?;
-    let initial_id=device_id(&device).map_err(|e|e.to_string())?;
-    let client:IAudioClient=device.Activate(CLSCTX_ALL,None).map_err(|e|e.to_string())?;
-    let format=client.GetMixFormat().map_err(|e|e.to_string())?;
-    let parsed=read_format(format);
-    let initialized=client.Initialize(AUDCLNT_SHAREMODE_SHARED,AUDCLNT_STREAMFLAGS_LOOPBACK,1_000_000,0,format,None);
-    CoTaskMemFree(Some(format.cast()));
-    let parsed=parsed?;
-    initialized.map_err(|e|e.to_string())?;
+unsafe fn active_player_pid() -> Option<u32> {
+    if let Some(pid) = crate::media::get_current_media()
+        .and_then(|m| m["pid"].as_u64())
+        .and_then(|p| u32::try_from(p).ok())
+        .filter(|p| *p != 0)
+    {
+        return Some(pid);
+    }
+    if let Ok((_, control)) = player_audio_session(true) {
+        if let Ok(extended) = control.cast::<IAudioSessionControl2>() {
+            if let Ok(pid) = extended.GetProcessId() {
+                if pid != 0 {
+                    return Some(pid);
+                }
+            }
+        }
+    }
+    None
+}
+
+struct HandleGuard(windows::Win32::Foundation::HANDLE);
+impl Drop for HandleGuard {
+    fn drop(&mut self) {
+        if !self.0.is_invalid() {
+            unsafe { let _ = windows::Win32::Foundation::CloseHandle(self.0); }
+        }
+    }
+}
+
+unsafe fn open_process_loopback(pid: u32) -> Result<(IAudioClient, SampleFormat, HandleGuard), String> {
+    let client = process_loopback::activate(pid)?;
+    let fmt = WAVEFORMATEX {
+        wFormatTag: 3,
+        nChannels: 2,
+        nSamplesPerSec: 48_000,
+        nAvgBytesPerSec: 384_000,
+        nBlockAlign: 8,
+        wBitsPerSample: 32,
+        cbSize: 0,
+    };
+    client
+        .Initialize(
+            AUDCLNT_SHAREMODE_SHARED,
+            AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
+            0,
+            0,
+            &fmt,
+            None,
+        )
+        .map_err(|e| e.to_string())?;
+    let event = windows::Win32::System::Threading::CreateEventW(None, false, false, None)
+        .map_err(|e| e.to_string())?;
+    let guard = HandleGuard(event);
+    client.SetEventHandle(event).map_err(|e| e.to_string())?;
+    Ok((
+        client,
+        SampleFormat { channels: 2, bytes: 4, float: true, block: 8, rate: 48_000 },
+        guard,
+    ))
+}
+
+unsafe fn capture_session(app:&tauri::AppHandle, failed_pid: &mut Option<u32>)->Result<(),String> {
+    let explicit_output = SELECTED_OUTPUT.lock().unwrap().is_some();
+    let target_pid = if explicit_output { None } else { active_player_pid().filter(|pid| Some(*pid) != *failed_pid) };
+    let (client, parsed, initial_id, active_pid, _event_guard) = if let Some(pid) = target_pid {
+        match open_process_loopback(pid) {
+            Ok((client, parsed, guard)) => {
+                *failed_pid = None;
+                (client, parsed, None, Some(pid), Some(guard))
+            }
+            Err(_) => {
+                *failed_pid = Some(pid);
+                let device = loopback_device().map_err(|e| e.to_string())?;
+                let id = device_id(&device).map_err(|e| e.to_string())?;
+                let client: IAudioClient = device.Activate(CLSCTX_ALL, None).map_err(|e| e.to_string())?;
+                let format = client.GetMixFormat().map_err(|e| e.to_string())?;
+                let parsed = read_format(format);
+                let initialized = client.Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK, 1_000_000, 0, format, None);
+                CoTaskMemFree(Some(format.cast()));
+                let parsed = parsed?;
+                initialized.map_err(|e| e.to_string())?;
+                (client, parsed, Some(id), None, None)
+            }
+        }
+    } else {
+        let device = loopback_device().map_err(|e| e.to_string())?;
+        let id = device_id(&device).map_err(|e| e.to_string())?;
+        let client: IAudioClient = device.Activate(CLSCTX_ALL, None).map_err(|e| e.to_string())?;
+        let format = client.GetMixFormat().map_err(|e| e.to_string())?;
+        let parsed = read_format(format);
+        let initialized = client.Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK, 1_000_000, 0, format, None);
+        CoTaskMemFree(Some(format.cast()));
+        let parsed = parsed?;
+        initialized.map_err(|e| e.to_string())?;
+        (client, parsed, Some(id), None, None)
+    };
     let capture:IAudioCaptureClient=client.GetService().map_err(|e|e.to_string())?;
     client.Start().map_err(|e|e.to_string())?;
     let mut spectrum=Spectrum::new();
@@ -383,8 +470,14 @@ unsafe fn capture_session(app:&tauri::AppHandle)->Result<(),String> {
                 emitted=Instant::now();
             }
             if checked.elapsed()>=Duration::from_secs(1) {
-                let current=loopback_device().map_err(|e|e.to_string())?;
-                if device_id(&current).map_err(|e|e.to_string())?!=initial_id {break;}
+                let explicit = SELECTED_OUTPUT.lock().unwrap().is_some();
+                if let Some(pid) = active_pid {
+                    if explicit || active_player_pid() != Some(pid) { break; }
+                } else if let Some(ref id) = initial_id {
+                    if !explicit && active_player_pid().is_some_and(|pid| Some(pid) != *failed_pid) { break; }
+                    let current=loopback_device().map_err(|e|e.to_string())?;
+                    if device_id(&current).map_err(|e|e.to_string())?!=*id {break;}
+                }
                 checked=Instant::now();
             }
         }
@@ -408,9 +501,10 @@ pub fn start_loopback(app:tauri::AppHandle) {
     });
     std::thread::spawn(move||{
         let _com=match ComApartment::new(){Ok(c)=>c,Err(e)=>{let _=app.emit("audio:error",e);return;}};
+        let mut failed_pid: Option<u32> = None;
         loop {
             if !spectrum_active() { std::thread::sleep(Duration::from_millis(100)); continue; }
-            let outcome=unsafe{capture_session(&app)};
+            let outcome=unsafe{capture_session(&app, &mut failed_pid)};
             let failed=outcome.is_err();
             if let Err(error)=outcome {let _=app.emit("audio:error",error);}
             let _=app.emit("media:bands",[0.;8]);let _=app.emit("media:level",0.);

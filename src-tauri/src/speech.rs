@@ -3,7 +3,7 @@ use serde_json::{json,Value};
 use std::sync::{Arc,LazyLock,Mutex,atomic::{AtomicBool,Ordering}};
 use tauri::Emitter;
 
-struct Session { stop:AtomicBool, cancelled:AtomicBool, transcribing:AtomicBool, wake:tokio::sync::Notify }
+struct Session { _activity:crate::watchdog::ActivityGuard, stop:AtomicBool, cancelled:AtomicBool, transcribing:AtomicBool, wake:tokio::sync::Notify }
 static CURRENT:LazyLock<Mutex<Option<Arc<Session>>>>=LazyLock::new(||Mutex::new(None));
 const MAX_SECONDS:u64=180;
 
@@ -71,7 +71,8 @@ pub fn toggle(app:tauri::AppHandle,settings:Value,target:Option<String>)->Result
             if session.transcribing.load(Ordering::SeqCst){return Err("Дождись распознавания или отмени диктовку".into());}
             session.stop.store(true,Ordering::SeqCst);return Ok(true);
         }
-        let token=Arc::new(Session{stop:AtomicBool::new(false),cancelled:AtomicBool::new(false),transcribing:AtomicBool::new(false),wake:tokio::sync::Notify::new()});
+        let activity=crate::watchdog::protect_activity()?;
+        let token=Arc::new(Session{_activity:activity,stop:AtomicBool::new(false),cancelled:AtomicBool::new(false),transcribing:AtomicBool::new(false),wake:tokio::sync::Notify::new()});
         *current=Some(token.clone());token
     };
     let target=target.unwrap_or_else(||"external".into());
@@ -89,9 +90,10 @@ pub fn toggle(app:tauri::AppHandle,settings:Value,target:Option<String>)->Result
                 token.transcribing.store(true,Ordering::SeqCst);let _=app.emit("dictation:state",json!({"state":"transcribing","target":target}));
                 let text=transcribe(&settings,wave,&token).await?;
                 if token.cancelled.load(Ordering::SeqCst){return Ok(());}
-                let pasted=target!="chat"&&settings["dictatePaste"].as_bool().unwrap_or(false);
+                let delivery=clipboard_delivery(&target,settings["dictatePaste"].as_bool().unwrap_or(false));
+                let pasted=delivery==Some(true);
                 if pasted {crate::clipboard::paste_to_focused_window(&text)?;}
-                else if target!="chat" {crate::clipboard::set_text(&text)?;}
+                else if delivery==Some(false) {crate::clipboard::set_text(&text)?;}
                 let _=app.emit("dictation:done",json!({"target":target,"text":text,"pasted":pasted}));Ok::<(),String>(())
             }.await;
             if !token.cancelled.load(Ordering::SeqCst){if let Err(error)=outcome {let _=app.emit("dictation:error",error);}}
@@ -101,12 +103,16 @@ pub fn toggle(app:tauri::AppHandle,settings:Value,target:Option<String>)->Result
     });
     Ok(true)
 }
+fn clipboard_delivery(target:&str,paste:bool)->Option<bool>{
+    if matches!(target,"chat"|"command"){None}else{Some(paste)}
+}
 pub fn cancel(app:&tauri::AppHandle)->bool{
     if let Some(session)=CURRENT.lock().unwrap().take(){session.cancelled.store(true,Ordering::SeqCst);session.stop.store(true,Ordering::SeqCst);session.wake.notify_one();let _=app.emit("dictation:state",json!({"state":"idle"}));true}else{false}
 }
 
 #[cfg(test)]mod tests{
     use super::*;
+    #[test]fn internal_voice_targets_never_replace_or_paste_the_clipboard(){for paste in [false,true]{assert_eq!(clipboard_delivery("command",paste),None);assert_eq!(clipboard_delivery("chat",paste),None);assert_eq!(clipboard_delivery("external",paste),Some(paste));assert_eq!(clipboard_delivery("clipboard",paste),Some(paste));}}
     #[test]fn wav_is_valid_mono_16khz_pcm(){let bytes=wav(&vec![0.5;48000],48000).unwrap();assert_eq!(&bytes[..4],b"RIFF");assert_eq!(u32::from_le_bytes(bytes[24..28].try_into().unwrap()),16000);assert_eq!(bytes.len(),32044);assert_eq!(i16::from_le_bytes(bytes[44..46].try_into().unwrap()),16384);}
     #[test]fn endpoint_only_sends_keys_to_https_or_loopback(){assert!(endpoint(&json!({"sttBaseUrl":"http://remote.example/v1"}),"models").is_err());assert_eq!(endpoint(&json!({"sttBaseUrl":"http://127.0.0.1:8000/v1/"}),"audio/transcriptions").unwrap(),"http://127.0.0.1:8000/v1/audio/transcriptions");}
 }

@@ -16,7 +16,7 @@ export default defineConfig({
     modulePreload: { polyfill: false },
     rollupOptions: {
       preserveEntrySignatures: 'strict',
-      input: { ...Object.fromEntries(['index', 'settings', 'overlay', 'editor', 'web-ai'].map(name => [name, resolve('runtime', `${name}.html`)])), 'runtime-debug': resolve('runtime/diagnostics.ts') },
+      input: { ...Object.fromEntries(['index', 'settings', 'overlay', 'editor', 'web-ai', 'snow'].map(name => [name, resolve('runtime', `${name}.html`)])), 'runtime-debug': resolve('runtime/diagnostics.ts') },
       output: {
         entryFileNames: chunk => chunk.name === 'runtime-debug' ? 'assets/runtime-debug.js' : 'assets/[name]-[hash].js',
         manualChunks(id) {

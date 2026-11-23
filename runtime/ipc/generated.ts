@@ -6,6 +6,14 @@ export interface Settings {
   openOnHover: boolean;
   collapseDelayMs: number;
   style: string;
+  snow: string;
+  snowFrom: string;
+  snowTo: string;
+  snowAmount: number;
+  snowFall: boolean;
+  snowCap: boolean;
+  snowScreen: boolean;
+  garland: string;
   hideInFullscreen: boolean;
   mediaHidden: string[];
   hideOnlyUnder: boolean;
@@ -18,6 +26,8 @@ export interface Settings {
   opacityThrough: number;
   offsetX: number;
   underTaskbar: boolean;
+  notchBar: boolean;
+  notchLook: string;
   monitor: string;
   liquidSpectrum: boolean;
   opacityRest: number;
@@ -68,6 +78,7 @@ export interface Settings {
   hotkeyRecord: string;
   hotkeyChat: string;
   hotkeyDictate: string;
+  hotkeyVoiceCommand: string;
   hotkeyThrough: string;
   hotkeyVpn: string;
   hotkeyMediaPill: string;
@@ -124,6 +135,7 @@ export interface Settings {
   vpnLookupIp: boolean;
   downloadsDir: string;
   downloadsIgnore: string[];
+  downloadsTorrents: boolean;
   checkUpdates: boolean;
   autoDownloadUpdates: boolean;
   onboardingCompleted: boolean;
@@ -154,6 +166,11 @@ export interface Settings {
 }
 export interface RustCommands {
   window_diagnostics: { args: { snapshot?: boolean | null }; result: JsonValue };
+  page_pong: { args: { sequence: number; ready: boolean }; result: boolean };
+  watchdog_status: { args: {  }; result: JsonValue };
+  snow_state: { args: {  }; result: JsonValue };
+  notch_pill: { args: { height: number }; result: void };
+  notch_state: { args: {  }; result: JsonValue };
   bootstrap: { args: {  }; result: JsonValue };
   pets_catalog: { args: {  }; result: JsonValue };
   pets_import_codex: { args: {  }; result: JsonValue };
@@ -180,6 +197,7 @@ export interface RustCommands {
   runs_as_admin: { args: {  }; result: boolean };
   news_told: { args: {  }; result: boolean };
   news_get: { args: {  }; result: JsonValue };
+  whatsnew_clip: { args: { version: string; name: string; lang: string }; result: Array<number> };
   license_status: { args: {  }; result: JsonValue };
   license_activate: { args: { key?: string | null }; result: JsonValue };
   license_remove: { args: {  }; result: JsonValue };
@@ -191,6 +209,15 @@ export interface RustCommands {
   shelf_add: { args: { paths?: Array<string> | null }; result: Array<JsonValue> };
   shelf_remove: { args: { id?: string | null }; result: Array<JsonValue> };
   shelf_clear: { args: {  }; result: Array<JsonValue> };
+  phone_start: { args: {  }; result: JsonValue };
+  phone_state: { args: {  }; result: JsonValue };
+  phone_stop: { args: {  }; result: JsonValue };
+  phone_renew: { args: {  }; result: JsonValue };
+  phone_allow: { args: { id?: string | null }; result: JsonValue };
+  phone_deny: { args: { id: string }; result: JsonValue };
+  phone_send: { args: { paths?: Array<string> | null }; result: JsonValue };
+  phone_unsend: { args: { id: string }; result: JsonValue };
+  phone_firewall: { args: {  }; result: JsonValue };
   launcher_list: { args: {  }; result: Array<JsonValue> };
   launcher_add: { args: { paths?: Array<string> | null }; result: Array<JsonValue> };
   launcher_add_link: { args: { link?: string | null; name?: string | null; icon?: JsonValue | null }; result: Array<JsonValue> };
@@ -254,6 +281,7 @@ export interface RustCommands {
   island_tall: { args: { on?: boolean | null }; result: boolean };
   set_island_hidden: { args: { hidden?: boolean | null }; result: boolean };
   fullscreen: { args: {  }; result: boolean };
+  fullscreen_hide_toggle: { args: {  }; result: boolean };
   hotkeys_check: { args: {  }; result: Array<string> };
   hotkeys_recording: { args: { on: boolean }; result: boolean };
   open_settings: { args: { section?: string | null }; result: boolean };
@@ -290,6 +318,7 @@ export interface RustCommands {
   chime_try: { args: { sound?: string | null }; result: boolean };
   capture_start: { args: { mode?: string | null }; result: boolean };
   capture_cancel: { args: {  }; result: boolean };
+  overlay_left: { args: { token: number }; result: boolean };
   capture_region: { args: { x?: number | null; y?: number | null; w?: number | null; h?: number | null; mode?: string | null }; result: boolean };
   capture_region_drawn: { args: { x?: number | null; y?: number | null; w?: number | null; h?: number | null; drawing?: string | null }; result: boolean };
   prtsc_taken: { args: {  }; result: boolean };
@@ -310,6 +339,7 @@ export interface RustCommands {
   attachments_prune: { args: { keep?: Array<string> | null }; result: boolean };
   notifications_access: { args: {  }; result: string };
   notifications_request: { args: {  }; result: string };
+  notifications_icon: { args: { aumid: string }; result: string | null };
   palette_apps: { args: {  }; result: Array<JsonValue> };
   installed_browsers: { args: {  }; result: Array<string> };
   open_programs: { args: {  }; result: Array<JsonValue> };

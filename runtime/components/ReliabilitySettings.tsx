@@ -6,9 +6,9 @@ import { H as t } from '../compat/shared.js';
 import { INITIAL_UPDATE, updateState, updateProgress, updateActions, updateErrors, diagnosticSummary, supportReport, type DiagnosticSummary } from './reliability-state';
 import { Music2, Monitor, Video, Sparkles, Bell, Keyboard, Terminal, Clipboard, PawPrint, RefreshCw, ExternalLink, ChevronRight, CircleHelp, Download, Check, ShieldCheck } from './settings-icons';
 import './reliability.css';
+import { releaseUrl } from '../releases/history';
 
 const call = <T,>(command: string, args?: object) => window.__TAURI_INTERNALS__.invoke<T>(command, args);
-const releaseUrl = 'https://github.com/nimalekyt-bit/woods-island/releases/latest';
 const issueUrl = 'https://github.com/nimalekyt-bit/woods-island/issues/new/choose';
 type Save = (settings: Record<string, unknown>) => void;
 export type SettingRow = ComponentType<{title: string; hint?: string; stacked?: boolean; children?: ReactNode}>;
@@ -51,7 +51,7 @@ export function UpdateSettings({ version, autoDownload, checkUpdates, save, Row,
     upToDate: t('Установлена последняя версия', 'You have the latest version'),
     error: t('Не удалось обновить приложение', 'The app could not be updated'),
   };
-  const openRelease = () => void invoke('open_path', {path:releaseUrl});
+  const openRelease = () => void invoke('open_path', {path:releaseUrl(state.version || version)});
   let primary = {label:t('Проверить', 'Check now'), action:()=>void act('update_check'), disabled:operation || !actions.check};
   if (actions.manual) primary = {label:t('Открыть выпуск', 'Open release'),action:openRelease,disabled:false};
   if (actions.download) primary = {label:t('Скачать обновление', 'Download update'),action:()=>void act('update_download'),disabled:operation};
@@ -62,7 +62,7 @@ export function UpdateSettings({ version, autoDownload, checkUpdates, save, Row,
     <div className="wi-update-summary">
       <span className="wi-update-icon"><StatusIcon size={20}/></span>
       <div className="min-w-0 flex-1">
-        <div className="text-[13.5px] text-white">Woods Island {version}</div>
+        <div className="text-[13.5px] text-white" data-update-installed>Woods Island {version || t('Версия недоступна','Version unavailable')}</div>
         <div className="mt-0.5 text-[12px] leading-snug text-white/45" role="status">{labels[state.status]}{state.status === 'downloading' && percent !== null ? ` · ${percent}%` : ''}</div>
       </div>
       <button data-update-primary className={button} disabled={primary.disabled} onClick={primary.action}>{primary.label}</button>

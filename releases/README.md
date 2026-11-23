@@ -2,6 +2,15 @@
 
 Each version has one editorial `release.json`. It contains the factual GitHub release notes, updater summary and structured RU/EN website copy. Version-specific screenshots and application binaries are not recreated by this mechanism.
 
+The same command generates `runtime/releases/catalog.ts` for the in-app history.
+It registers all canonical releases through the current application version;
+build checks fail if the catalog is stale. The app retains prose and bullet
+changes in both languages, resolves version placeholders, and incorporates
+reviewed older history from these records. Its installed version comes from
+Tauri, while the available update version comes from the updater.
+`archive.json` preserves the early Woods 1.0.0–1.1.1 notes that predate the
+editorial release records. They are no longer embedded in the settings source.
+
 For a new version, create its editorial record, move relevant previous facts into its history, update the application version and run `pnpm release:notes`. `pnpm build` checks the generated release notes against this source. `package-updater.mjs` takes its notes from the same record while preserving signing and signature verification.
 
 The editorial record intentionally does not contain its own Git commit hash or a future CI run ID. Such a self-reference cannot be prepared before the build. `finalize-release.mjs` resolves the actual tag revision and full successful installer workflow after publication, and includes those facts in `website-release.json` together with the actual asset hashes and editorial revision.

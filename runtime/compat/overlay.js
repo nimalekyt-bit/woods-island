@@ -378,10 +378,27 @@ function L() {
     [_, v] = (0, C.useState)(null),
     [y, b] = (0, C.useState)(!1),
     [x, S] = (0, C.useState)(null),
+    [leaving, setLeaving] = (0, C.useState)(!1),
+    leavingRef = (0, C.useRef)(!1),
+    startSeqRef = (0, C.useRef)(0),
     T = (0, C.useRef)(!1);
   if (
     ((0, C.useEffect)(() => {
-      let e = a(`overlay:start`, (e) => {
+      let leaveUnlisten = a(`overlay:leave`, (token) => {
+          leavingRef.current = !0;
+          setLeaving(!0);
+          requestAnimationFrame(() => requestAnimationFrame(() => void n.overlayLeft(token)));
+        }),
+        e = a(`overlay:start`, async (e) => {
+          let seq = ++startSeqRef.current;
+          if (leavingRef.current && e.frame) {
+            let img = new Image();
+            img.src = e.frame;
+            await img.decode().catch(() => void 0);
+            if (seq !== startSeqRef.current) return;
+          }
+          leavingRef.current = !1;
+          setLeaving(!1);
           let t = e.mode;
           (n.pickerSize().then((e) => v(e ? e[0] : null)),
             r(t),
@@ -402,12 +419,14 @@ function L() {
       return (
         window.addEventListener(`keydown`, t),
         () => {
-          (e.then((e) => e()), window.removeEventListener(`keydown`, t));
+          (leaveUnlisten.then((fn) => fn()), e.then((e) => e()), window.removeEventListener(`keydown`, t));
         }
       );
     }, []),
-    e === `color`)
+    leaving)
   )
+    return null;
+  if (e === `color`)
     return (0, w.jsx)(I, { frame: i, below: s }, h);
   let E = (t) => {
       if (T.current) return;

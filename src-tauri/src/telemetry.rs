@@ -122,40 +122,67 @@ fn ignored(name:&str,settings:&Value)->bool{
     name.to_lowercase().ends_with(".tmp")||settings["downloadsIgnore"].as_array().map(|rules|rules.iter().filter_map(Value::as_str).any(|rule|glob(rule,name))).unwrap_or(false)
 }
 fn partial_name(name:&str)->Option<String>{
-    let lower=name.to_lowercase();for suffix in [".crdownload",".part",".partial",".download"]{if lower.ends_with(suffix){return Some(name[..name.len()-suffix.len()].to_owned());}}None
+    let lower=name.to_lowercase();for suffix in PARTIAL_SUFFIXES{if lower.ends_with(suffix){return Some(name[..name.len()-suffix.len()].to_owned());}}None
 }
-#[derive(Clone)]
-struct FileState{size:u64,modified:Option<SystemTime>,stable:u8,done:bool,moved_at:Option<Instant>}
-struct Downloads{folder:Option<PathBuf>,rules:Value,files:HashMap<PathBuf,FileState>,last:Instant}
+const PARTIAL_SUFFIXES: [&str;7] = [".crdownload",".part",".partial",".download",".!qb",".!ut",".!bt"];
+#[derive(Clone,Debug)]
+struct FileState{size:u64,modified:Option<SystemTime>,created:Option<SystemTime>,stable:u8,done:bool,moved_at:Option<Instant>,owner:crate::file_owners::FileOwner}
+struct Downloads{folder:Option<PathBuf>,rules:Value,files:HashMap<PathBuf,FileState>,last:Instant,owners:crate::file_owners::Queue}
 impl Downloads{
-    fn new()->Self{Self{folder:None,rules:Value::Null,files:HashMap::new(),last:Instant::now()}}
+    fn new()->Self{Self{folder:None,rules:Value::Null,files:HashMap::new(),last:Instant::now(),owners:crate::file_owners::Queue::new()}}
     fn poll(&mut self,settings:&Value)->(Vec<Value>,Vec<Value>){
         self.poll_at(settings,Instant::now())
     }
     fn poll_at(&mut self,settings:&Value,now:Instant)->(Vec<Value>,Vec<Value>){
+        self.poll_at_with_clients(settings,now,running_processes().iter().any(|name|crate::file_owners::torrent_client(name)))
+    }
+    fn poll_at_with_clients(&mut self,settings:&Value,now:Instant,clients_running:bool)->(Vec<Value>,Vec<Value>){
         let folder=downloads_folder(settings);let first=folder!=self.folder||self.rules!=settings["downloadsIgnore"];
         if first{self.files.clear();self.folder=folder.clone();self.rules=settings["downloadsIgnore"].clone();}
+        for reply in self.owners.drain(){if let Some(file)=self.files.get_mut(&reply.path){crate::file_owners::Queue::apply(reply,&mut file.owner,now);}}
         let elapsed=now.saturating_duration_since(self.last).as_secs_f64().max(0.001);self.last=now;
         let Some(folder)=folder else{return(vec![],vec![]);};let Ok(entries)=std::fs::read_dir(&folder)else{return(vec![],vec![]);};
-        let mut observed=HashMap::new();let mut active=Vec::new();let mut completed=Vec::new();
+        let mut observed=HashMap::new();let mut active=Vec::new();let mut completed=Vec::new();let mut candidates=Vec::new();
         for entry in entries.flatten().take(20000){
             let path=entry.path();let Ok(kind)=entry.file_type()else{continue;};if !kind.is_file()||kind.is_symlink(){continue;}
             let name=entry.file_name().to_string_lossy().into_owned();if ignored(&name,settings){continue;}
-            let Ok(metadata)=entry.metadata()else{continue;};let size=metadata.len();let modified=metadata.modified().ok();let partial=partial_name(&name);
-            let previous=self.files.get(&path);
+            let partial=partial_name(&name);
+            // Windows directory entries can retain size zero until a writer closes its handle.
+            // Query live files directly; keep the cheap directory metadata for the old baseline.
+            let live=partial.is_some()||self.files.get(&path).is_some_and(|file|!file.done||file.owner.torrent)||(!first&&!self.files.contains_key(&path));
+            let Ok(metadata)=(if live{std::fs::metadata(&path)}else{entry.metadata()})else{continue;};
+            let size=metadata.len();let modified=metadata.modified().ok();let created=metadata.created().ok();
+            let direct=self.files.get(&path).filter(|p|p.created==created&&size>=p.size);
+            // Preserve ownership when a client removes its temporary extension after finishing.
+            let renamed=if direct.is_none()&&partial.is_none(){PARTIAL_SUFFIXES.iter().find_map(|suffix|{
+                let old=folder.join(format!("{name}{suffix}"));self.files.get(&old).filter(|p|p.created==created&&size>=p.size&&!old.exists())
+            })}else{None};
+            let previous=direct.or(renamed);
             let changed=previous.map(|p|p.size!=size||p.modified!=modified).unwrap_or(true);
             let stable=if changed{0}else{previous.map(|p|p.stable.saturating_add(1)).unwrap_or(0)};
-            let mut done=previous.map(|p|p.done).unwrap_or(first&&partial.is_none());
+            let done=previous.map(|p|p.done&&!changed).unwrap_or(first&&partial.is_none());
             let moved_at=if previous.is_some_and(|p|size>p.size){Some(now)}else{previous.filter(|p|size>=p.size).and_then(|p|p.moved_at)};
-            if let Some(real_name)=partial {
-                let speed=previous.map(|p|size.saturating_sub(p.size) as f64/elapsed).unwrap_or(0.);
-                if moved_at.is_some_and(|at|now.saturating_duration_since(at)<Duration::from_secs(15)){
-                    active.push(json!({"id":path.to_string_lossy(),"path":path.to_string_lossy(),"name":real_name,"size":size,"total":null,"speed":speed,"icon":null}));
-                }
-            }else if !done&&stable>=2 {
-                done=true;completed.push(json!({"id":path.to_string_lossy(),"path":path.to_string_lossy(),"name":name,"size":size,"title":null,"icon":null}));
+            let mut owner=previous.map(|p|p.owner.clone()).unwrap_or_else(||crate::file_owners::FileOwner::new(now));
+            if renamed.is_some(){owner.renamed(now);}
+            let moving=moved_at.is_some_and(|at|now.saturating_duration_since(at)<Duration::from_secs(15));
+            if (!done&&partial.is_none())||(partial.is_some()&&moving){candidates.push((path.clone(),name,partial,moving,previous.map(|p|size.saturating_sub(p.size) as f64/elapsed).unwrap_or(0.)));}
+            observed.insert(path,FileState{size,modified,created,stable,done,moved_at,owner});
+        }
+        // First inspect new lifecycles, then refresh old ones; a large torrent cannot starve new downloads.
+        candidates.sort_by_key(|(path,..)|!observed[path].owner.priority());
+        for (path,..) in &candidates{let file=observed.get_mut(path).unwrap();self.owners.inspect(path,file.created,&mut file.owner,now,clients_running);}
+        let show_torrents=settings["downloadsTorrents"].as_bool().unwrap_or(false);
+        for (path,name,partial,moving,speed) in candidates{
+            let file=observed.get_mut(&path).unwrap();let hidden=file.owner.torrent&&!show_torrents;let waiting=file.owner.waiting(now);
+            if moving&&(partial.is_some()||file.owner.writing())&&!hidden&&!waiting{
+                active.push(json!({"id":path.to_string_lossy(),"path":path.to_string_lossy(),"name":partial.as_ref().unwrap_or(&name),"size":file.size,"total":null,"speed":speed,"icon":null}));
             }
-            observed.insert(path,FileState{size,modified,stable,done,moved_at});
+            if partial.is_none()&&!file.done&&file.stable>=2&&!waiting{
+                // A delayed/failed check or a non-torrent writer cannot confirm
+                // completion. Require recent evidence that the file is closed.
+                let closed=file.owner.current==crate::file_owners::Ownership::Closed&&file.owner.fresh(now);
+                if closed{file.done=true;if !hidden{completed.push(json!({"id":path.to_string_lossy(),"path":path.to_string_lossy(),"name":name,"size":file.size,"title":null,"icon":null}));}}
+            }
         }
         self.files=observed;active.sort_by(|a,b|a["name"].as_str().cmp(&b["name"].as_str()));(active,completed)
     }
@@ -194,8 +221,83 @@ pub fn start(app:tauri::AppHandle,state:Arc<crate::AppState>){
 
 #[cfg(test)]mod tests{
     use super::*;
-    #[test]fn old_partial_files_are_not_active_and_stalled_transfers_expire(){let folder=std::env::temp_dir().join("woodscorp_obs/fixtures").join(format!("partial-{}-{}",std::process::id(),crate::media::now_ms()));std::fs::create_dir_all(&folder).unwrap();let file=folder.join("archive.zip.crdownload");std::fs::write(&file,b"old").unwrap();let settings=json!({"downloadsDir":folder.to_string_lossy()});let mut d=Downloads::new();let now=Instant::now();assert!(d.poll_at(&settings,now).0.is_empty());assert!(d.poll_at(&settings,now+Duration::from_secs(1)).0.is_empty());std::fs::write(&file,b"old plus incoming bytes").unwrap();let active=d.poll_at(&settings,now+Duration::from_secs(2)).0;assert_eq!(active.len(),1);assert!(active[0]["speed"].as_f64().unwrap()>0.);assert!(d.poll_at(&settings,now+Duration::from_secs(18)).0.is_empty());std::fs::remove_file(file).unwrap();std::fs::remove_dir(folder).unwrap();}
+    fn until(d:&mut Downloads,settings:&Value,mut predicate:impl FnMut(&(Vec<Value>,Vec<Value>))->bool)->(Vec<Value>,Vec<Value>){
+        let start=Instant::now();loop{let result=d.poll(settings);if predicate(&result){return result;}assert!(start.elapsed()<Duration::from_secs(12),"Download observation timed out: {:?}",d.files);std::thread::sleep(Duration::from_millis(100));}
+    }
+    #[test]fn torrent_owner_filter_survives_setting_changes_rename_and_completion(){
+        let mut writer=crate::file_owners::tests::Writer::new("qbittorrent.exe");let folder=writer.folder.join("downloads");
+        let mut settings=json!({"downloadsDir":folder.to_string_lossy(),"downloadsTorrents":false});let mut d=Downloads::new();
+        assert!(d.poll(&settings).0.is_empty());std::fs::write(writer.folder.join("grow"),b"more bytes").unwrap();
+        let start=Instant::now();while !d.files.get(&writer.path()).is_some_and(|f|f.owner.torrent){
+            let result=d.poll(&settings);assert!(result.0.is_empty());assert!(result.1.is_empty());assert!(start.elapsed()<Duration::from_secs(10),"Missing torrent owner: {:?}, processes: {:?}",d.files,running_processes());std::thread::sleep(Duration::from_millis(100));
+        }
+        settings["downloadsTorrents"]=json!(true);assert_eq!(d.poll(&settings).0.len(),1);
+        settings["downloadsTorrents"]=json!(false);assert!(d.poll(&settings).0.is_empty());
+        let ordinary=folder.join("browser.txt");std::fs::write(&ordinary,b"browser download").unwrap();
+        let result=until(&mut d,&settings,|(_,done)|done.iter().any(|f|f["name"]=="browser.txt"));assert_eq!(result.1.len(),1);
+        writer.close();let final_path=folder.join("Архив.zip");std::fs::rename(writer.path(),&final_path).unwrap();
+        let start=Instant::now();while !d.files.get(&final_path).is_some_and(|f|f.done){
+            let result=d.poll(&settings);assert!(result.1.is_empty(),"Hidden torrent must not notify on rename");assert!(start.elapsed()<Duration::from_secs(10));std::thread::sleep(Duration::from_millis(100));
+        }
+        assert!(d.files[&final_path].owner.torrent);settings["downloadsTorrents"]=json!(true);assert!(d.poll(&settings).1.is_empty());
+    }
+    #[test]fn opted_in_torrent_does_not_finish_while_writer_is_open(){
+        let mut writer=crate::file_owners::tests::Writer::new("qbittorrent.exe");let folder=writer.folder.join("downloads");
+        let settings=json!({"downloadsDir":folder.to_string_lossy(),"downloadsTorrents":true});let mut d=Downloads::new();d.poll(&settings);
+        std::fs::write(writer.folder.join("grow"),b"incoming").unwrap();until(&mut d,&settings,|(active,_)|!active.is_empty());
+        // A client may write its final filename directly, with no partial-file suffix.
+        let final_path=folder.join("Архив.zip");std::fs::rename(writer.path(),&final_path).unwrap();
+        let start=Instant::now();while start.elapsed()<Duration::from_secs(3){assert!(d.poll(&settings).1.is_empty());std::thread::sleep(Duration::from_millis(100));}
+        assert!(d.files[&final_path].owner.torrent);writer.close();
+        let result=until(&mut d,&settings,|(_,done)|done.iter().any(|f|f["name"]=="Архив.zip"));assert_eq!(result.1.len(),1);assert!(d.poll(&settings).1.is_empty());
+    }
+    #[test]fn browser_final_name_waits_for_close_without_any_torrent_process(){
+        let mut writer=crate::file_owners::tests::Writer::new("chrome.exe");let folder=writer.folder.join("downloads");
+        let settings=json!({"downloadsDir":folder.to_string_lossy(),"downloadsTorrents":false});let mut d=Downloads::new();
+        d.poll_at_with_clients(&settings,Instant::now(),false);
+        let final_path=folder.join("Архив.zip");std::fs::rename(writer.path(),&final_path).unwrap();
+        let start=Instant::now();while start.elapsed()<Duration::from_secs(3){
+            assert!(d.poll_at_with_clients(&settings,Instant::now(),false).1.is_empty(),"An open browser file cannot be ready");
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        assert_eq!(d.files[&final_path].owner.current,crate::file_owners::Ownership::Other);
+        std::fs::write(writer.folder.join("grow"),b"incoming browser bytes").unwrap();
+        let start=Instant::now();loop{
+            let (active,done)=d.poll_at_with_clients(&settings,Instant::now(),false);assert!(done.is_empty());
+            if active.iter().any(|file|file["name"]=="Архив.zip"){break;}
+            assert!(start.elapsed()<Duration::from_secs(10),"Final-name browser progress is missing");std::thread::sleep(Duration::from_millis(100));
+        }
+        writer.close();let start=Instant::now();loop{
+            let (_,done)=d.poll_at_with_clients(&settings,Instant::now(),false);
+            if done.iter().any(|file|file["name"]=="Архив.zip"){assert_eq!(done.len(),1);break;}
+            assert!(start.elapsed()<Duration::from_secs(10),"Closed browser file never completed");std::thread::sleep(Duration::from_millis(100));
+        }
+        assert!(d.poll_at_with_clients(&settings,Instant::now(),false).1.is_empty());
+    }
+    #[test]fn replacements_do_not_inherit_torrent_ownership(){
+        let folder=std::env::temp_dir().join("woodscorp_obs/fixtures").join(format!("replacement-{}",crate::media::now_ms()));std::fs::create_dir_all(&folder).unwrap();
+        let settings=json!({"downloadsDir":folder.to_string_lossy()});let path=folder.join("report.txt");std::fs::write(&path,b"long old payload").unwrap();let mut d=Downloads::new();d.poll_at_with_clients(&settings,Instant::now(),false);
+        d.files.get_mut(&path).unwrap().owner.torrent=true;std::fs::write(&path,b"new").unwrap();
+        d.poll_at_with_clients(&settings,Instant::now(),false);assert!(!d.files[&path].owner.torrent);
+        assert_eq!(until(&mut d,&settings,|(_,done)|done.iter().any(|file|file["name"]=="report.txt")).1.len(),1);
+        std::fs::remove_file(path).unwrap();std::fs::remove_dir(folder).unwrap();
+    }
+    #[test]fn old_partial_files_are_not_active_and_stalled_transfers_expire(){
+        let folder=std::env::temp_dir().join("woodscorp_obs/fixtures").join(format!("partial-{}-{}",std::process::id(),crate::media::now_ms()));std::fs::create_dir_all(&folder).unwrap();
+        let file=folder.join("archive.zip.crdownload");std::fs::write(&file,b"old").unwrap();let settings=json!({"downloadsDir":folder.to_string_lossy()});let mut d=Downloads::new();let now=Instant::now();
+        assert!(d.poll_at_with_clients(&settings,now,false).0.is_empty());assert!(d.poll_at_with_clients(&settings,now+Duration::from_secs(1),false).0.is_empty());
+        std::fs::write(&file,b"old plus incoming bytes").unwrap();d.poll_at_with_clients(&settings,now+Duration::from_secs(2),false);
+        let active=until(&mut d,&settings,|(active,_)|!active.is_empty()).0;
+        assert_eq!(active.len(),1);assert_eq!(active[0]["size"],json!(23));assert!(d.poll_at_with_clients(&settings,now+Duration::from_secs(18),false).0.is_empty());
+        std::fs::remove_file(file).unwrap();std::fs::remove_dir(folder).unwrap();
+    }
     #[test]fn unknown_or_absent_battery_is_not_fabricated(){assert!(power_payload(SYSTEM_POWER_STATUS{BatteryFlag:128,BatteryLifePercent:255,..Default::default()}).is_none());let status=power_payload(SYSTEM_POWER_STATUS{BatteryFlag:8,BatteryLifePercent:68,ACLineStatus:1,SystemStatusFlag:0,..Default::default()}).unwrap();assert_eq!(status["percent"],68);assert_eq!(status["plugged"],true);}
     #[test]fn download_name_masks_are_case_insensitive_and_unicode_safe(){assert!(glob("setup-*.exe","SETUP-1.EXE"));assert!(glob("*.txt","заметка.txt"));assert!(!glob("a?c","ac"));assert_eq!(partial_name("Архив.zip.crdownload"),Some("Архив.zip".into()));}
-    #[test]fn existing_downloads_do_not_generate_old_notifications(){let folder=std::env::temp_dir().join("woodscorp_obs/fixtures").join(format!("woods-download-test-{}",crate::media::now_ms()));std::fs::create_dir_all(&folder).unwrap();std::fs::write(folder.join("old.txt"),b"old").unwrap();let settings=json!({"downloadsDir":folder.to_string_lossy()});let mut d=Downloads::new();assert!(d.poll(&settings).1.is_empty());std::fs::write(folder.join("new.txt"),b"new").unwrap();assert!(d.poll(&settings).1.is_empty());assert!(d.poll(&settings).1.is_empty());assert_eq!(d.poll(&settings).1.len(),1);assert!(d.poll(&settings).1.is_empty());for name in ["old.txt","new.txt"]{let _=std::fs::remove_file(folder.join(name));}let _=std::fs::remove_dir(folder);}
+    #[test]fn existing_downloads_do_not_generate_old_notifications(){
+        let folder=std::env::temp_dir().join("woodscorp_obs/fixtures").join(format!("woods-download-test-{}",crate::media::now_ms()));std::fs::create_dir_all(&folder).unwrap();std::fs::write(folder.join("old.txt"),b"old").unwrap();
+        let settings=json!({"downloadsDir":folder.to_string_lossy()});let mut d=Downloads::new();assert!(d.poll_at_with_clients(&settings,Instant::now(),false).1.is_empty());
+        std::fs::write(folder.join("new.txt"),b"new").unwrap();assert!(d.poll_at_with_clients(&settings,Instant::now(),false).1.is_empty());assert!(d.poll_at_with_clients(&settings,Instant::now(),false).1.is_empty());
+        assert_eq!(until(&mut d,&settings,|(_,done)|done.iter().any(|file|file["name"]=="new.txt")).1.len(),1);assert!(d.poll_at_with_clients(&settings,Instant::now(),false).1.is_empty());
+        for name in ["old.txt","new.txt"]{let _=std::fs::remove_file(folder.join(name));}let _=std::fs::remove_dir(folder);
+    }
 }

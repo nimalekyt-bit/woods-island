@@ -74,7 +74,7 @@ export interface PeekSizing {
   label?: string;
 }
 const FIXED_PEEK_SIZES: Readonly<Record<string, Size>> = {
-  screenshot: [430, 100], recorded: [430, 100], copied: [360, 60], ocr: [400, 60], qr: [400, 60],
+  screenshot: [430, 100], recorded: [430, 100], copied: [360, 60], ocr: [400, 60], qr: [400, 60], phone: [420, 64],
   color: [380, 88], volume: [340, 46], device: [330, 56], layout: [110, 34], caps: [230, 40],
   mic: [420, 60], micMuted: [270, 52], cam: [330, 56], vpn: [380, 60], download: [420, 72],
   update: [400, 64], news: [410, 64], chat: [420, 60], reminder: [460, 68], timer: [400, 64],

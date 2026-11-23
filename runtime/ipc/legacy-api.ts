@@ -16,8 +16,11 @@ export const api: {
     attachmentBottom?: number,
   ) => Promise<Commands["report_island_rect"]["result"]>;
   uploadImage: (e: string | null) => Promise<Commands["upload_image"]["result"]>;
+  notchPill: (e: number) => Promise<Commands["notch_pill"]["result"]>;
+  notchState: () => Promise<Commands["notch_state"]["result"]>;
   throughToggle: () => Promise<Commands["through_toggle"]["result"]>;
   themeFlip: () => Promise<Commands["theme_flip"]["result"]>;
+  fullscreenHideToggle: () => Promise<Commands["fullscreen_hide_toggle"]["result"]>;
   ocrFile: (e: string | null) => Promise<Commands["ocr_file"]["result"]>;
   webAiOpen: (e: string | null) => Promise<Commands["web_ai_open"]["result"]>;
   webAiEmbed: (
@@ -79,6 +82,7 @@ export const api: {
   ) => Promise<Commands["capture_region_drawn"]["result"]>;
   pickerSize: () => Promise<Commands["picker_size"]["result"]>;
   captureCancel: () => Promise<Commands["capture_cancel"]["result"]>;
+  overlayLeft: (e: number) => Promise<Commands["overlay_left"]["result"]>;
   shelfList: () => Promise<Commands["shelf_list"]["result"]>;
   shelfAdd: (e: Array<string> | null) => Promise<Commands["shelf_add"]["result"]>;
   shelfRemove: (e: string | null) => Promise<Commands["shelf_remove"]["result"]>;
@@ -137,6 +141,7 @@ export const api: {
   openSettings: (e: string | null) => Promise<Commands["open_settings"]["result"]>;
   settingsTarget: () => Promise<Commands["settings_target"]["result"]>;
   newsGet: () => Promise<Commands["news_get"]["result"]>;
+  whatsnewClip: (e: string, t: string, n: string) => Promise<Commands["whatsnew_clip"]["result"]>;
   notificationsAccess: () => Promise<Commands["notifications_access"]["result"]>;
   notificationsRequest: () => Promise<Commands["notifications_request"]["result"]>;
   filesSearch: (e: string | null) => Promise<Commands["files_search"]["result"]>;
@@ -222,8 +227,11 @@ export const api: {
   reportRect: (e, t, n, r, i, a = !1, o = !1, attachmentRight = 0, attachmentBottom = 0) =>
     T(`report_island_rect`, { x: e, y: t, w: n, h: r, expanded: i, tucked: a, through: o, attachmentRight, attachmentBottom }),
   uploadImage: (e) => T(`upload_image`, { path: e }),
+  notchPill: (e) => T(`notch_pill`, { height: e }),
+  notchState: () => T(`notch_state`),
   throughToggle: () => T(`through_toggle`),
   themeFlip: () => T(`theme_flip`),
+  fullscreenHideToggle: () => T(`fullscreen_hide_toggle`),
   ocrFile: (e) => T(`ocr_file`, { path: e }),
   webAiOpen: (e) => T(`web_ai_open`, { service: e ?? null }),
   webAiEmbed: (e, t, n = !1) => T(`web_ai_embed`, { service: e, ...t, focus: n, word: ++Se }),
@@ -264,6 +272,7 @@ export const api: {
   captureRegionDrawn: (e, t, n, r, i) => T(`capture_region_drawn`, { x: e, y: t, w: n, h: r, drawing: i }),
   pickerSize: () => T(`picker_size`),
   captureCancel: () => T(`capture_cancel`),
+  overlayLeft: (e) => T(`overlay_left`, { token: e }),
   shelfList: () => T(`shelf_list`),
   shelfAdd: (e) => T(`shelf_add`, { paths: e }),
   shelfRemove: (e) => T(`shelf_remove`, { id: e }),
@@ -301,6 +310,7 @@ export const api: {
   openSettings: (e) => T(`open_settings`, { section: e ?? null }),
   settingsTarget: () => T(`settings_target`),
   newsGet: () => T(`news_get`),
+  whatsnewClip: (e, t, n) => T(`whatsnew_clip`, { version: e, name: t, lang: n }),
   notificationsAccess: () => T(`notifications_access`),
   notificationsRequest: () => T(`notifications_request`),
   filesSearch: (e) => T(`files_search`, { query: e }),

@@ -42,7 +42,7 @@ export function CharacterSprite({ definition, mood = 'idle', width, height, look
         const y = Math.max(-GENERIC_BOUNCE_LIMIT, motion.y - pose.poke * 5);
         motionGroup.setAttribute('transform', `translate(0,${(y + 22 * (1 - motion.sy)).toFixed(2)}) rotate(${motion.rot.toFixed(2)}) scale(${motion.sx.toFixed(3)},${motion.sy.toFixed(3)})`);
         drawThinkingDots(decoration.dots, pose.s === 'think', -7, top + 6, time);
-        drawSleepSymbol(decoration.sleep, pose.s === 'sleep', right - 15, top + 25, time);
+        drawSleepSymbol(decoration.sleep, pose.s === 'sleep', right - 18, top + 31, time);
         drawAttentionBadge(decoration.attention, pose.s === 'attn', right - 8, top + 9);
       }
       try { frame.draw(pose, time, elapsed, dt); } catch { /* Preserve isolated drawing failures. */ }
@@ -65,7 +65,7 @@ export function CharacterSprite({ definition, mood = 'idle', width, height, look
   const scale = Math.min(height / box[3], width / box[2]) * 0.94;
   const cx = box[0] + box[2] / 2, cy = box[1] + box[3] / 2;
   const viewBox = [cx - width / 2 / scale, cy - height / 2 / scale, width / scale, height / scale];
-  return <svg ref={svg} data-ink-art data-character={definition.id} data-character-mood={mood} width={width} height={height}
+  return <svg ref={svg} data-ink-art={definition.colorArt ? undefined : true} data-color-art={definition.colorArt || undefined} data-character={definition.id} data-character-mood={mood} width={width} height={height}
     viewBox={viewBox.map(value => value.toFixed(2)).join(' ')} className={`shrink-0 ${className}`} aria-hidden/>;
 }
 let instanceSeed = 0;

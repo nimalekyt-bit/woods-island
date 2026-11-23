@@ -1,0 +1,416 @@
+.wi-phone-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  height: 100%;
+  width: 196px;
+  flex-shrink: 0;
+  padding: 12px;
+  border: 1px solid var(--color-line, #ffffff12);
+  border-radius: 18px;
+  background: var(--color-tile, #ffffff08);
+  color: var(--color-ink, #ffffffd9);
+}
+.wi-phone-panel > header {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.wi-phone-panel > header > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.wi-phone-panel > header strong {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wi-phone-panel [data-phone-status] {
+  font-size: 10px;
+  line-height: 1.3;
+  color: var(--color-ink-3, #ffffff66);
+}
+.wi-phone-panel [data-phone-status][data-connected="true"] {
+  color: var(--color-ok, #7ee2a8);
+}
+.wi-phone-badge {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  background: var(--color-tile, #ffffff0d);
+  border: 1px solid var(--color-line, #ffffff14);
+  color: var(--color-ink-2, #ffffffb3);
+  flex-shrink: 0;
+}
+.wi-phone-badge[data-tone="connected"] {
+  background: rgba(110, 231, 168, 0.14);
+  border-color: rgba(110, 231, 168, 0.3);
+  color: #7ee2a8;
+}
+.wi-phone-badge[data-tone="pending"],
+.wi-phone-badge[data-tone="waiting"] {
+  background: rgba(142, 166, 255, 0.14);
+  border-color: rgba(142, 166, 255, 0.28);
+  color: #9bb2ff;
+}
+.wi-phone-dot {
+  position: absolute;
+  right: -2px;
+  top: -2px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-ink-3, #ffffff55);
+  border: 1.5px solid #121318;
+}
+.wi-phone-badge[data-tone="connected"] .wi-phone-dot {
+  background: #6ee7a8;
+}
+.wi-phone-badge[data-tone="pending"] .wi-phone-dot,
+.wi-phone-badge[data-tone="waiting"] .wi-phone-dot {
+  background: #f6c46b;
+}
+.wi-phone-content {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.wi-phone-empty,
+.wi-phone-pair {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  flex: 1;
+  text-align: center;
+}
+.wi-phone-empty {
+  border: 1px dashed var(--color-line, #ffffff1c);
+  border-radius: 13px;
+  padding: 12px 10px;
+}
+.wi-phone-empty-icon,
+.wi-phone-approval-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: rgba(142, 166, 255, 0.12);
+  color: var(--color-accent-ink, #9bb2ff);
+}
+.wi-phone-panel p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--color-ink-2, #ffffff85);
+}
+.wi-phone-pair [data-phone-qr] {
+  display: grid;
+  place-items: center;
+  width: 106px;
+  height: 106px;
+  padding: 5px;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #70757e;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.28);
+  flex-shrink: 0;
+}
+.wi-phone-pair [data-phone-qr] > img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.wi-phone-url-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 3px 7px;
+  border-radius: 6px;
+  border: 1px solid var(--color-line, #ffffff12);
+  background: var(--color-tile, #ffffff0a);
+  color: var(--color-ink-2, #ffffff99);
+  cursor: pointer;
+}
+.wi-phone-pair [data-phone-url] {
+  display: block;
+  min-width: 0;
+  font: 9.5px/1.35 ui-monospace, Consolas, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wi-phone-pair p.wi-phone-network {
+  font-size: 9.5px;
+  color: var(--color-ink-3, #ffffff66);
+}
+.wi-phone-actions {
+  display: flex;
+  gap: 6px;
+}
+.wi-phone-actions button,
+.wi-phone-connect {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 5px 9px;
+  border-radius: 9px;
+  border: 1px solid var(--color-line, #ffffff12);
+  background: var(--color-tile, #ffffff0c);
+  color: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.wi-phone-actions button:first-child {
+  flex: 1;
+}
+.wi-phone-actions button:last-child {
+  width: 30px;
+  font-size: 16px;
+  padding: 0;
+}
+.wi-phone-connect {
+  min-height: 33px;
+  border-color: transparent;
+  background: linear-gradient(155deg, #9eb4ff, #839bf7);
+  color: #101524;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.wi-phone-panel button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.wi-phone-panel button:hover:enabled {
+  filter: brightness(1.12);
+}
+.wi-phone-panel button:focus-visible {
+  outline: 2px solid #9aacf3;
+  outline-offset: 2px;
+}
+.wi-phone-help {
+  align-self: center;
+  cursor: pointer;
+  color: var(--color-ink-3, #ffffff66);
+  font-size: 10px;
+  background: transparent;
+  border: 0;
+}
+.wi-phone-help-card {
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid var(--color-line, #ffffff12);
+  background: var(--color-tile, #ffffff08);
+  font-size: 10px;
+  line-height: 1.45;
+}
+.wi-phone-help-card p {
+  font-size: 10px;
+}
+.wi-phone-help-card button {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  margin-top: 6px;
+  color: var(--color-accent-ink, #9bb2ff);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+.wi-phone-approval {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  flex: 1;
+}
+.wi-phone-approval strong {
+  font-size: 12px;
+  line-height: 1.35;
+}
+.wi-phone-approval > div {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+  margin-top: 2px;
+}
+.wi-phone-approval button {
+  flex: 1;
+  padding: 7px 6px;
+  border-radius: 8px;
+  border: 1px solid var(--color-line, #ffffff12);
+  background: var(--color-tile, #ffffff0c);
+  color: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.wi-phone-approval button:first-child {
+  border-color: transparent;
+  background: linear-gradient(155deg, #9eb4ff, #839bf7);
+  color: #101524;
+}
+.wi-phone-offers {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-height: 0;
+  flex: 1;
+}
+.wi-phone-offers > span {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-ink-3, #ffffff66);
+}
+.wi-phone-receiving {
+  padding: 8px 9px;
+  border-radius: 10px;
+  border: 1px solid rgba(142, 166, 255, 0.25);
+  background: rgba(142, 166, 255, 0.1);
+}
+.wi-phone-receiving-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 10.5px;
+  margin-bottom: 5px;
+}
+.wi-phone-receiving-top span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wi-phone-receiving-top em {
+  font-style: normal;
+  font-weight: 600;
+  color: #9bb2ff;
+  flex-shrink: 0;
+}
+.wi-phone-receiving-bar {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.wi-phone-receiving-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #839bf7, #7ee2a8);
+  transition: width 0.14s ease;
+}
+.wi-phone-offer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  overflow: auto;
+}
+.wi-phone-offer-list > div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 7px;
+  border-radius: 9px;
+  border: 1px solid var(--color-line, #ffffff0e);
+  background: var(--color-tile, #ffffff07);
+  font-size: 11px;
+}
+.wi-phone-offer-list > div.is-taken svg {
+  color: #6ee7a8;
+}
+.wi-phone-offer-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.wi-phone-offers span[title] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.25;
+}
+.wi-phone-offer-meta em {
+  font-style: normal;
+  font-size: 9.5px;
+  color: var(--color-ink-3, #ffffff66);
+}
+.wi-phone-offers svg {
+  flex-shrink: 0;
+  color: var(--color-ink-3, #ffffff66);
+}
+.wi-phone-offers button {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 0;
+  cursor: pointer;
+  background: var(--color-tile, #ffffff0c);
+  color: inherit;
+  font-size: 14px;
+}
+.wi-phone-drop-hint {
+  padding: 10px 9px;
+  border-radius: 11px;
+  border: 1px dashed var(--color-line, #ffffff18);
+  font-size: 10.5px !important;
+  line-height: 1.45 !important;
+}
+.wi-phone-panel .wi-phone-error {
+  color: var(--color-danger, #efa8a8);
+  overflow-wrap: anywhere;
+  font-size: 10.5px;
+}
+.wi-phone-panel .wi-phone-public {
+  color: var(--color-timer, #d6bf8a);
+  text-align: center;
+  font-size: 9.5px;
+}
+.wi-shelf-origin {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-ink-3, #ffffff66);
+  font-size: 10px;
+  line-height: 1.4;
+}
+.wi-shelf-origin[data-from-phone="true"] {
+  color: var(--color-accent-ink, #a7b5f2);
+}
+@media (prefers-reduced-motion: reduce) {
+  .wi-phone-panel button,
+  .wi-phone-receiving-bar i {
+    transition: none;
+  }
+}

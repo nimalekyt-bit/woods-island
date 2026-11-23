@@ -282,7 +282,8 @@ impl WindowManager {
             let monitor = MonitorFromRect(&target, MONITOR_DEFAULTTONEAREST);
             let mut info = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
             if GetMonitorInfoW(monitor, &mut info).as_bool() && info.rcMonitor.left == left && info.rcMonitor.top == top {
-                if below_taskbar { y = info.rcWork.top; }
+                if let Some(dock_top) = crate::appbar::dock_top(left, top) { y = dock_top; }
+                else if below_taskbar { y = info.rcWork.top; }
                 if tall { canvas_h = (info.rcMonitor.bottom - y).max(1); }
             }
             let x = left + (width - canvas_w) / 2 + (offset_x as f64 * scale).round() as i32;

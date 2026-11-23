@@ -63,7 +63,8 @@ fn archive_damaged(path: &Path, bytes: &[u8]) -> Result<(), String> {
 fn valid_json(path: &Path, bytes: &[u8]) -> bool {
     let Ok(value) = serde_json::from_slice::<Value>(bytes) else { return false; };
     match path.file_name().and_then(|n| n.to_str()).unwrap_or_default() {
-        "settings.json" | "launcher_groups.json" | "launcher_hotkeys.json" | "note_folders.json" | "media_names.json" | "news.json" => value.is_object(),
+        "settings.json" | "launcher_hotkeys.json" | "note_folders.json" | "media_names.json" | "news.json" => value.is_object(),
+        "launcher_groups.json" => value.is_array() || value.is_object(),
         "shelf.json" | "launcher.json" | "colors.json" | "reminders.json" | "chat.json" => value.is_array(),
         _ => true,
     }
@@ -303,6 +304,18 @@ mod tests {
         for file in [&path,&sibling(&path,".bak")] {
             assert!(serde_json::from_slice::<Value>(&fs::read(file).unwrap()).unwrap().get("uploadKey").is_none());
         }
+        fs::remove_dir_all(dir).unwrap();
+    }
+    #[test]
+    fn launcher_groups_accepts_array_and_legacy_object() {
+        let dir = directory();
+        let path = dir.join("launcher_groups.json");
+        fs::write(&path, b"[]").unwrap();
+        assert_eq!(read_recoverable(&path, true).unwrap().unwrap(), b"[]");
+        save_recoverable(&path, br#"[{"id":"g1","name":"Work","items":[1,2]}]"#, true).unwrap();
+        assert!(read_recoverable(&path, true).unwrap().is_some());
+        fs::write(&path, b"{}").unwrap();
+        assert_eq!(read_recoverable(&path, true).unwrap().unwrap(), b"{}");
         fs::remove_dir_all(dir).unwrap();
     }
 }

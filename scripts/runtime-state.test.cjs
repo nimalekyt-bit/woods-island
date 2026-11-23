@@ -1,23 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
-const Module = require('node:module');
-const ts = require('typescript');
-
-// Pure production policies run directly, without a browser or a second implementation.
-function loadTypeScript(relative) {
-  const file = path.resolve(__dirname, '..', relative);
-  const compiled = ts.transpileModule(fs.readFileSync(file, 'utf8'), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-    fileName: file,
-  }).outputText;
-  const compiledModule = new Module(file);
-  compiledModule.filename = file;
-  compiledModule.paths = Module._nodeModulePaths(path.dirname(file));
-  compiledModule._compile(compiled, file);
-  return compiledModule.exports;
-}
+const {loadTypeScript}=require('./load-runtime-typescript.cjs');
 const { createMediaActivityTracker, PAUSED_MEDIA_GRACE_MS } = loadTypeScript('runtime/media/activity.ts');
 const { hasLiquidIsland, selectCharacter, resolveCharacter } = loadTypeScript('runtime/characters/selection.ts');
 const { createCharacterCatalog } = loadTypeScript('runtime/characters/catalog.ts');

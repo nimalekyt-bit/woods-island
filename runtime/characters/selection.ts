@@ -1,4 +1,4 @@
-const freeCharacters = new Set(['liquid', 'none', 'pixel', 'spark', 'eyes']);
+const freeCharacters = new Set(['liquid', 'none', 'pixel', 'spark', 'eyes', 'snowman', 'frost', 'bullfinch', 'ginger', 'deer']);
 export const isFreeCharacter = (id: string) => freeCharacters.has(id);
 
 export function resolveCharacter(id: string | null | undefined, allCharacters: boolean): string {

@@ -13,6 +13,7 @@ export interface InteractionState {
   draggingOut: boolean;
   webAiActive: boolean;
   asking: boolean;
+  phoneWaiting?: boolean;
   openedBy: string | null;
   enteredSinceOpen: boolean;
   tab: string;
@@ -57,7 +58,7 @@ export function createIslandInteractions(ports: InteractionPorts) {
   const canOpen = (s: InteractionState) => s.hovered && !s.palette && !s.expanded &&
     !s.peek && !s.dragOver && !hasPersistentActivity(s) && s.settings?.openOnHover === true;
   const canClose = (s: InteractionState) => s.expanded && !s.palette && !s.hovered &&
-    !s.pinned && !s.holdOpen && !s.draggingOut && !s.webAiActive &&
+    !s.pinned && !s.holdOpen && !s.draggingOut && !s.webAiActive && !s.phoneWaiting &&
     (s.openedBy !== 'hotkey' || s.enteredSinceOpen);
   const closeLater = () => {
     stopClose();
@@ -91,7 +92,7 @@ export function createIslandInteractions(ports: InteractionPorts) {
       const s = ports.getState();
       stopOpen(); stopClose();
       if (s.palette) ports.closePalette();
-      else if (s.expanded && !s.pinned && !s.draggingOut && !s.asking) ports.close();
+      else if (s.expanded && !s.pinned && !s.draggingOut && !s.asking && !s.phoneWaiting) ports.close();
     },
     togglePalette() {
       if (disposed) return;

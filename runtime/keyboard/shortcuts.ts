@@ -15,6 +15,7 @@ const labels: Record<string, [string, string]> = {
   hotkeyPalette: ["Командная строка", "Command bar"],
   hotkeyChat: ["Открыть чат", "Open chat"],
   hotkeyDictate: ["Голос в текст", "Voice to text"],
+  hotkeyVoiceCommand: ["Голосовая команда", "Voice command"],
   hotkeyRecord: ["Запись экрана", "Screen recording"],
   hotkeyArea: ["Скриншот области", "Area screenshot"],
   hotkeyScreen: ["Скриншот экрана", "Screen screenshot"],

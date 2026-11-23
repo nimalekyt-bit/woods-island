@@ -1,21 +1,27 @@
+pub mod qr;
+
 use base64::Engine;
 use serde_json::{json, Value};
-use std::{path::{Path, PathBuf}, sync::Mutex, };
+use std::{path::{Path, PathBuf}, sync::{atomic::{AtomicBool, Ordering}, Mutex}};
 use windows::Win32::{Foundation::{HWND, RECT}, Graphics::Gdi::*};
 
 static EDITOR_PATH: Mutex<Option<PathBuf>> = Mutex::new(None);
 static FRAME: Mutex<Option<image::RgbaImage>> = Mutex::new(None);
+static CAPTURING: AtomicBool = AtomicBool::new(false);
+
+pub fn is_capturing() -> bool { CAPTURING.load(Ordering::Relaxed) }
 
 pub struct MainHidden { window:Option<tauri::Window>, restore:bool }
 impl MainHidden { pub fn keep_hidden(&mut self){self.restore=false;} }
-impl Drop for MainHidden {fn drop(&mut self){if self.restore{if let Some(window)=&self.window{let _=window.show();}}}}
+impl Drop for MainHidden {fn drop(&mut self){if self.restore{CAPTURING.store(false, Ordering::Relaxed);if let Some(window)=&self.window{let _=window.show();}}}}
 pub fn hide_main(app:&tauri::AppHandle)->MainHidden{
     use tauri::Manager;
+    CAPTURING.store(true, Ordering::Relaxed);
     let window=app.get_window("main");if let Some(window)=&window{let _=window.hide();}
     MainHidden{window,restore:true}
 }
 pub fn set_frame(image:&image::RgbaImage){*FRAME.lock().unwrap()=Some(image.clone());}
-pub fn clear_frame(){*FRAME.lock().unwrap()=None;}
+pub fn clear_frame(){*FRAME.lock().unwrap()=None;CAPTURING.store(false, Ordering::Relaxed);}
 pub fn selected_image(rect:RECT)->Result<image::RgbaImage,String>{
     if let Some(frame)=FRAME.lock().unwrap().as_ref(){
         let screen=screen_rect();let x=(rect.left-screen.left).max(0) as u32;let y=(rect.top-screen.top).max(0) as u32;
@@ -99,10 +105,7 @@ pub fn ocr(path: &Path) -> Result<String,String> {
 }
 
 pub fn qr(image: &image::RgbaImage) -> Result<String,String> {
-    let gray=image::DynamicImage::ImageRgba8(image.clone()).into_luma8();
-    let mut prepared=rqrr::PreparedImage::prepare(gray);
-    for grid in prepared.detect_grids(){if let Ok((_,text))=grid.decode(){return Ok(text);}}
-    Err("No QR code found in the selected region".into())
+    qr::decode(image)
 }
 
 pub fn editor_open(path: &Path) -> Result<(),String>{

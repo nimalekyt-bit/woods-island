@@ -1,8 +1,9 @@
 // Metadata is maintained here; the recovered drawing implementations are injected.
 import type { Drawing, DrawnCharacter } from './types';
 import type { BitmapDefinition } from './bitmap';
+import { seasonalDefinitions } from './seasonal';
 export type CharacterKind = "liquid" | "none" | "attach" | "slot";
-export type CharacterGroup = "island" | "characters" | "creatures" | "things" | "codex";
+export type CharacterGroup = "island" | "characters" | "creatures" | "things" | "codex" | "holiday";
 export type CharacterBox = [number, number, number, number];
 export interface CharacterDefinition {
   id: string;
@@ -15,6 +16,7 @@ export interface CharacterDefinition {
   box?: CharacterBox;
   face?: boolean;
   bitmap?: BitmapDefinition;
+  colorArt?: boolean;
   translations?: Record<string, { name: string; desc: string }>;
 }
 export function createCharacterCatalog({
@@ -35,10 +37,11 @@ export function createCharacterCatalog({
     stick: [-31, -41, 62, 78],
     koi: [-80, -25, 160, 48],
     snail: [-62, -25, 124, 56],
-    fire: [-27, -43, 54, 82],
+    // Include the highest sparks and steam during mood-change spring motion.
+    fire: [-27, -90, 54, 129],
     lava: [-26, -41, 52, 82],
     iris: [-39, -34, 78, 64],
-    coffee: [-21, -50, 58, 80],
+    coffee: [-21, -70, 58, 100],
     cradle: [-68, -37, 136, 71],
     pulse: [-96, -42, 196, 58],
   };
@@ -155,7 +158,7 @@ export function createCharacterCatalog({
       group: `characters`,
       kind: `slot`,
       puppet: renderers.astro,
-      box: [-47, -48, 94, 82],
+      box: [-47, -55, 94, 89],
       desc: `Парит в невесомости, цвет стекла шлема по настроению.`,
     },
     {
@@ -173,7 +176,7 @@ export function createCharacterCatalog({
       group: `characters`,
       kind: `slot`,
       puppet: renderers.swarm,
-      box: [-52, -38, 104, 62],
+      box: [-52, -46, 104, 70],
       desc: `Стая частиц: волна, кольцо, галочка, «!».`,
     },
     {
@@ -182,9 +185,10 @@ export function createCharacterCatalog({
       group: `characters`,
       kind: `slot`,
       puppet: renderers.kao,
-      box: [-43, -34, 86, 50],
+      box: [-50, -49, 100, 71],
       desc: `Живая текстовая рожица (・ω・).`,
     },
+    ...seasonalDefinitions,
     ...creatures.filter((e) => !e.outside).map(describeCharacter(`creatures`)),
     ...things.map(describeCharacter(`things`)),
     ...additions,

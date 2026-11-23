@@ -4294,7 +4294,7 @@ function Home() {
               }),
               s &&
                 (0, jsxRuntime.jsx)(`div`, {
-                  className: `min-h-0 shrink-0`,
+                  className: `min-h-0 shrink-0 transition-[width,opacity] duration-200 ease-out motion-reduce:transition-none`,
                   style: { width: n.cols === 2 ? ve.aside2 : ve.aside1 },
                   children: s,
                 }),

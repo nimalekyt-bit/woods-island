@@ -62,10 +62,10 @@ test('All 23 SVG drawings preserve legacy attributes, paths and node reuse in si
   }
 });
 
-test('Catalog preserves all 25 selections, translation, geometry and safe fallback', () => {
+test('Catalog preserves original selections, five seasonal additions, translation, geometry and safe fallback', () => {
   let language = 'ru';
   const catalog = createCharacterCatalog({ creatures, things, renderers: genericDrawings, language: () => language });
-  assert.equal(catalog.catalog.length, 26);
+  assert.equal(catalog.catalog.length, 31);
   assert.equal(catalog.find('missing').id, 'none');
   for (const definition of catalog.catalog) {
     assert(definition.name && definition.desc);

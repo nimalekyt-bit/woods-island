@@ -1,6 +1,10 @@
 #![windows_subsystem = "windows"]
 
 fn main() {
+    if let Err(error) = woods_island_lib::watchdog::wait_for_predecessor() {
+        woods_island_lib::app_log(&format!("Recovery handoff refused: {error}"));
+        return;
+    }
     let args: Vec<String> = std::env::args().collect();
     if let Some(index) = args.iter().position(|arg| arg == "--g435-measure" || arg == "--g435-exit") {
         let result = if args.iter().any(|arg|arg=="--allow-audio-pause") {

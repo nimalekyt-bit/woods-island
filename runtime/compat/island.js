@@ -1,4 +1,16 @@
+import { AnimatedWeatherValue, useWeatherTween } from '../weather/AnimatedWeatherValue';
+import { WEATHER_GAUGE_TWEEN } from '../weather/animation';
 import { webChatProviders } from '../web-ai/providers';
+import { freeLicense } from '../free';
+import { normalizeVoiceCommand, canRunVoiceResult } from '../keyboard/voice-command';
+import { calendarDate, shiftReminder, validRepeat, hasInvalidCalendarDate } from '../reminders/calendar';
+import { ReminderAdjustments } from '../reminders/ReminderAdjustments';
+import { VpnPicker } from '../vpn/VpnPicker';
+import { vpnErrorMessage } from '../vpn/profiles';
+import { PhonePanel, PhoneIcon } from '../phone/PhonePanel';
+import { ShelfObject, ShelfRow } from '../phone/ShelfArtwork';
+import { phoneState, phoneLinked } from '../phone/state';
+import { HolidayEffects } from '../holidays/HolidayEffects';
 import { calculateIslandGeometry, agentQuestionHeight as dj } from '../island/geometry';
 import { WeatherPlaces } from '../weather/WeatherPlaces';
 import { focusInputAfterActivation } from '../island/input-focus';
@@ -19,6 +31,7 @@ import { AgentQuestion } from "../components/AgentQuestion";
 import {
   A as e,
   B as t,
+  B as reminderLanguage,
   C as n,
   D as r,
   F as i,
@@ -1080,7 +1093,7 @@ var Pi = Object.assign(Ni(), { addEffect: jr, removeEffect: Mr });
 function Fi(e) {
   if (e.onChat && e.chat) return [`chat`];
   let t = [`shelf`];
-  return (e.launcher && t.push(`launcher`), e.chat && t.push(`chat`), t);
+  return (e.phone && t.push(`phone`), e.launcher && t.push(`launcher`), e.chat && t.push(`chat`), t);
 }
 
 var Ri = 6e4,
@@ -1141,6 +1154,8 @@ function Gi(e, t, n, r) {
 function Ki(e, t = new Date()) {
   let n = Wi(e.toLowerCase().replace(/ё/g, `е`).replace(/\s+/g, ` `).trim());
   if (!n) return null;
+  const calendar = calendarDate(n, t);
+  if (calendar !== undefined) return calendar;
   let r = /^(через|in)\s+/.test(n);
   if (((n = n.replace(/^(через|in)\s+/, ``)), /^(полчаса|half an hour)$/.test(n)))
     return new Date(t.getTime() + 30 * Ri);
@@ -1176,6 +1191,7 @@ function Ki(e, t = new Date()) {
   ) {
     let e = l[3] ? (l[3].length === 2 ? 2e3 + Number(l[3]) : Number(l[3])) : t.getFullYear();
     ((c = new Date(e, Number(l[2]) - 1, Number(l[1]))), a.shift());
+    if (c.getDate() !== Number(l[1]) || c.getMonth() !== Number(l[2]) - 1) return null;
   }
   let u = Vi,
     d = 0,
@@ -1273,13 +1289,14 @@ function Qi(e) {
     .join(`, `);
 }
 function $i(e, t = new Date()) {
+  if (hasInvalidCalendarDate(Wi(e.toLowerCase().replace(/ё/g, `е`)), t)) return null;
   let n = e.trim().split(/\s+/).filter(Boolean),
     r = (e) => {
       let n = Zi(e, t);
       if (n) return n;
       if (/^\d+$/.test(e)) return null;
       let r = Ki(e, t);
-      return r ? { at: r } : null;
+      return r ? { at: r, weekday: qi.some(([pattern]) => pattern.test(e.toLowerCase().split(/\s+/).filter(token => !['в', 'во', 'at', 'на', 'on'].includes(token))[0] ?? '')) } : null;
     };
   for (let e = n.length; e >= 1; e--) {
     let t = r(n.slice(n.length - e).join(` `));
@@ -1350,15 +1367,7 @@ var ia = Date.now(),
   aa = new Set();
 function oa(e) {
   let t = e.repeat;
-  if (
-    (t &&
-      Array.isArray(t.days) &&
-      t.days.length > 0 &&
-      t.days.every((e) => Number.isInteger(e) && e >= 0 && e <= 6) &&
-      Number.isInteger(t.h) &&
-      Number.isInteger(t.m)) ||
-    !t
-  )
+  if (validRepeat(t) || !t)
     return e;
   let { repeat: n, ...r } = e;
   return r;
@@ -2324,6 +2333,7 @@ function Os() {
       onChat: useIslandStore((e) => e.expanded && e.tab === `chat`),
       launcher: useIslandStore((e) => e.settings?.moduleLauncher !== !1),
       chat: useIslandStore((e) => e.license.pro),
+      phone: useIslandStore((e) => phoneLinked(e.phone)),
     }),
     n = Dn(),
     r =
@@ -2352,6 +2362,13 @@ function Os() {
             },
             t,
           )
+        : t === `phone`
+          ? (0, jsxRuntime.jsx)(Ds, {
+              id: t, active: e === t,
+              icon: (0, jsxRuntime.jsx)(PhoneIcon, { size: 22 }),
+              title: o(`На телефон`, `To the phone`),
+              hint: o(`файл появится на странице телефона`, `the file appears on the phone page`),
+            }, t)
         : t === `launcher`
           ? (0, jsxRuntime.jsx)(
               Ds,
@@ -3997,7 +4014,7 @@ function Sc() {
       (i ? u.takeFocus() : Promise.resolve())
         .then(() => u.controlsSet(e, n))
         .then(t)
-        .catch((e) => c(String(e)))
+        .catch((e) => c(vpnErrorMessage(e, o('ru', 'en'))))
         .finally(() => {
           (r(null), i && u.releaseFocus());
         });
@@ -4009,7 +4026,7 @@ function Sc() {
     T = x.length === 1 ? x[0] : w.length === 1 ? w[0] : null,
     E = () => {
       if (C) return C.ready ? b(`vpn:${C.id}`, !1) : C.launchPath && u.openPath(C.launchPath);
-      if (T?.onSource === `command`) return d(!0);
+      if (T?.ready && typeof T.on !== `boolean`) return d(!0);
       if (T) return T.ready ? b(`vpn:${T.id}`, !0) : T.launchPath && u.openPath(T.launchPath);
       d(!0);
     },
@@ -4040,67 +4057,14 @@ function Sc() {
       { id: `restart`, icon: (0, jsxRuntime.jsx)(ts, { size: 16 }), label: o(`Перезагрузка`, `Restart`) },
       { id: `shutdown`, icon: (0, jsxRuntime.jsx)(yn, { size: 16 }), label: o(`Выключение`, `Shut down`) },
     ];
+  (0, ReactRuntime.useEffect)(() => { if (!S) d(!1); }, [S]);
   return (0, jsxRuntime.jsxs)(`div`, {
     className: `flex h-full flex-col gap-2.5`,
     children: [
       (0, jsxRuntime.jsxs)(`div`, {
         className: `relative flex min-h-0 flex-1 gap-2.5`,
         children: [
-          l &&
-            (0, jsxRuntime.jsxs)(`div`, {
-              "data-vpn-choice": !0,
-              className: `absolute inset-0 z-10 flex flex-col gap-1.5 rounded-2xl bg-sheet p-3 ring-1 ring-white/10`,
-              children: [
-                (0, jsxRuntime.jsxs)(`div`, {
-                  className: `flex items-center gap-2`,
-                  children: [
-                    (0, jsxRuntime.jsx)(`span`, {
-                      className: `min-w-0 flex-1 truncate text-[12px] font-semibold text-ink-2`,
-                      children: o(`Подключения VPN`, `VPN connections`),
-                    }),
-                    (0, jsxRuntime.jsx)(`button`, {
-                      title: o(`Закрыть`, `Close`),
-                      onClick: () => d(!1),
-                      className: `press grid size-6 place-items-center rounded-md text-ink-3 hover:bg-white/8 hover:text-ink`,
-                      children: (0, jsxRuntime.jsx)(yr, { size: 13 }),
-                    }),
-                  ],
-                }),
-                (0, jsxRuntime.jsx)(`div`, {
-                  className: `scroll-thin flex min-h-0 flex-1 flex-wrap content-start gap-1.5 overflow-y-auto`,
-                  children: x.map((e) => e.onSource === `command`
-                    ? (0, jsxRuntime.jsxs)(`div`, {
-                      "data-custom-vpn": true,
-                      className: `flex w-full flex-wrap items-center gap-2 rounded-xl bg-white/5 p-2`,
-                      children: [
-                        (0, jsxRuntime.jsx)(`span`, { className: `w-full text-[12px] text-ink`, children: `${e.name} · ${o(`состояние неизвестно`, `status unknown`)}` }),
-                        (0, jsxRuntime.jsx)(`span`, { className: `w-full text-[11px] text-ink-3`, children: e.lastRequestedOn == null
-                          ? o(`Команды не проверяют состояние туннеля.`, `Commands do not verify tunnel status.`)
-                          : o(`Последняя команда выполнена; проверь соединение в VPN-клиенте.`, `Last command completed; check the connection in your VPN client.`) }),
-                        ...[true, false].map(on => (0, jsxRuntime.jsx)(`button`, {
-                          "data-vpn-command": on ? `connect` : `disconnect`, disabled: n === `vpn`,
-                          onClick: () => b(`vpn:${e.id}`, on),
-                          className: `press h-8 rounded-full bg-white/10 px-3 text-[12px] text-ink disabled:opacity-50`,
-                          children: on ? o(`Подключить`, `Connect`) : o(`Отключить`, `Disconnect`),
-                        }, String(on))),
-                      ],
-                    }, e.id)
-                    : (0, jsxRuntime.jsx)(
-                      `button`,
-                      {
-                        onClick: () => {
-                          (d(!1), e.ready ? b(`vpn:${e.id}`, !0) : e.launchPath && u.openPath(e.launchPath));
-                        },
-                        className: `press h-8 max-w-full truncate rounded-full bg-white/10 px-3 text-[12px] font-medium text-ink hover:bg-white/16`,
-                        children: e.ready ? e.name : `${e.name} · ${o(`Открыть`, `Open`)}`,
-                        title: e.ready ? e.name : o(`Подключение в окне VPN-клиента`, `Connect in the VPN client window`),
-                      },
-                      e.id,
-                    ),
-                  ),
-                }),
-              ],
-            }),
+          l && S && (0, jsxRuntime.jsx)(VpnPicker, { profiles: x, busy: n === `vpn`, language: o(`ru`, `en`), onClose: () => d(!1), onOpen: path => u.openPath(path), onPick: (profile, on) => b(`vpn:${profile.id}`, on) }),
           v === `ethernet`
             ? (0, jsxRuntime.jsx)(xc, {
                 id: `ethernet`,
@@ -4189,7 +4153,8 @@ function Sc() {
           }),
           x.length > 0 &&
             S &&
-            (0, jsxRuntime.jsx)(xc, {
+            (0, jsxRuntime.jsxs)(`div`, { className: `relative flex min-w-0 flex-1`, children: [
+(0, jsxRuntime.jsx)(xc, {
               id: `vpn`,
               icon: C ? (0, jsxRuntime.jsx)(cs, { size: 19 }) : (0, jsxRuntime.jsx)(us, { size: 19 }),
               title: `VPN`,
@@ -4203,6 +4168,8 @@ function Sc() {
               loading: !e,
               onFlip: E,
             }),
+              (0, jsxRuntime.jsx)(`button`, { "data-vpn-list": !0, title: o(`Выбрать VPN-клиент`, `Choose a VPN client`), "aria-label": o(`Выбрать VPN-клиент`, `Choose a VPN client`), disabled: n === `vpn` || !e, onClick: () => d(!0), className: `press absolute right-2 top-2 grid size-6 place-items-center rounded-md text-ink-3 hover:bg-white/8 hover:text-ink disabled:opacity-40`, children: (0, jsxRuntime.jsx)(`svg`, { width: 13, height: 13, viewBox: `0 0 24 24`, fill: `none`, stroke: `currentColor`, strokeWidth: 2, "aria-hidden": !0, children: (0, jsxRuntime.jsx)(`path`, { d: `M5 6h14M5 12h14M5 18h14` }) }) }),
+            ] }),
           _ &&
             (0, jsxRuntime.jsxs)(`div`, {
               "data-control": `battery`,
@@ -4880,29 +4847,31 @@ function ik({ seed: e }) {
     [n, r] = (0, ReactRuntime.useState)(``),
     [i, a] = (0, ReactRuntime.useState)(!1),
     [s, c] = (0, ReactRuntime.useState)(null),
+    [woodsShift, setWoodsShift] = (0, ReactRuntime.useState)(0),
     l = (0, ReactRuntime.useRef)(null);
   (an(t.length > 0, 5e3),
     (0, ReactRuntime.useEffect)(() => {
-      e && (r(e.text ? `${e.text} ` : ``), a(!1), c(null), u.takeFocus(), l.current?.focus());
+      e && (r(e.text ? `${e.text} ` : ``), a(!1), c(null), setWoodsShift(0), u.takeFocus(), l.current?.focus());
     }, [e?.n]),
     (0, ReactRuntime.useEffect)(() => {
       s !== null && !t.some((e) => e.id === s) && c(null);
     }, [t, s]));
   let d = n.trim(),
-    f = d ? $i(d) : null,
+    woodsParsed = d ? $i(d) : null,
+    f = woodsParsed && woodsShift ? { ...woodsParsed, at: shiftReminder(woodsParsed.at, woodsShift) } : woodsParsed,
     p = (e, t, n) => {
       let i = e.trim() || o(`Напоминание`, `Reminder`);
       (s === null ? ca.getState().add(i, t.getTime(), n) : ca.getState().change(s, i, t.getTime(), n),
         r(``),
         a(!1),
-        c(null));
+        c(null), setWoodsShift(0));
     },
     m = (e) => {
       let n = t.find((t) => t.id === e);
-      n && (c(e), a(!1), r(ta(n.text, n.at, n.repeat)), u.takeFocus(), l.current?.focus());
+      n && (c(e), a(!1), setWoodsShift(0), r(ta(n.text, n.at, n.repeat)), u.takeFocus(), l.current?.focus());
     },
     h = () => {
-      (r(``), a(!1), c(null));
+      (r(``), a(!1), c(null), setWoodsShift(0));
     },
     g = [
       [o(`10 мин`, `10 min`), `10`],
@@ -5006,7 +4975,7 @@ function ik({ seed: e }) {
         "data-reminder-input": !0,
         value: n,
         onChange: (e) => {
-          (r(e.target.value), a(!1));
+          (r(e.target.value), a(!1), setWoodsShift(0));
         },
         ...nk,
         onKeyDown: _,
@@ -5058,6 +5027,13 @@ function ik({ seed: e }) {
                 ],
               }),
         }),
+      f && !f.repeat && (0, jsxRuntime.jsx)(ReminderAdjustments, {
+        date: f.at,
+        weekday: f.weekday && !woodsShift,
+        language: reminderLanguage(),
+        onShift: minutes => setWoodsShift(value => value + minutes),
+        onSave: (date, repeat) => p(f.text, date, repeat),
+      }),
     ],
   });
 }
@@ -5347,7 +5323,7 @@ function ck({ feature: e }) {
                 }),
                 (0, jsxRuntime.jsx)(`div`, {
                   className: `text-[12px] text-ink-3`,
-                  children: o(`Покупается один раз и остаётся навсегда`, `Bought once, kept for good`),
+                  children: o(`Все функции доступны бесплатно`, `Every feature is free`),
                 }),
               ],
             }),
@@ -5375,14 +5351,14 @@ function ck({ feature: e }) {
             (0, jsxRuntime.jsx)(`button`, {
               onClick: () => void u.openPath(zn()),
               className: `press h-8 flex-1 rounded-lg bg-[#8ea2ff] text-[12.5px] font-semibold text-neutral-950 hover:bg-[#a9b8ff]`,
-              children: o(`Купить за ${$n()}`, `Buy for ${$n()}`),
+              children: o(`О Woods Island`, `About Woods Island`),
             }),
             (0, jsxRuntime.jsx)(`button`, {
               onClick: () => {
                 (useIslandStore.getState().close(), u.openSettings());
               },
               className: `press h-8 flex-1 rounded-lg bg-white/10 text-[12.5px] font-medium text-ink hover:bg-white/15`,
-              children: o(`У меня есть ключ`, `I have a key`),
+              children: o(`Настройки`, `Settings`),
             }),
           ],
         }),
@@ -5431,106 +5407,60 @@ function fk(e, t) {
   };
 }
 function pk({ item: e }) {
-  let t = fk(() => [e.path], e.icon);
+  const linked = useIslandStore((state) => phoneLinked(state.phone));
+  return jsxRuntime.jsx(ShelfObject, {
+    item: e, linked, dragProps: fk(() => [e.path], e.icon),
+    onOpen: item => void u.openPath(item.path),
+    onReveal: item => void u.openPath(item.path, true),
+    onRemove: item => void u.shelfRemove(item.id).then(shelf => useIslandStore.setState({ shelf })),
+    onSend: item => void sendPhoneFiles([item.path]),
+  });
+}
+const makePhoneQr = (url) => Hk.toDataURL(url, { margin: 1, width: 240, errorCorrectionLevel: `M` });
+const acceptPhoneState = (value) => useIslandStore.setState({ phone: phoneState(value) });
+const setPhoneWaiting = (phoneWaiting) => useIslandStore.setState({ phoneWaiting });
+async function sendPhoneFiles(paths) {
+  try {
+    acceptPhoneState(await peripheralInvoke('phone_send', { paths }));
+    useIslandStore.getState().pushPeek({ kind: `phone`, direction: `sent`, name: paths[0]?.split(/[\\/]/).pop() ?? ``, count: paths.length });
+  } catch (reason) {
+    useIslandStore.getState().pushPeek({ kind: `error`, message: String(reason) });
+  }
+}
+function mk() {
+  const phone = useIslandStore((state) => state.phone);
   return (0, jsxRuntime.jsxs)(`div`, {
-    ...t,
-    onDoubleClick: () => void u.openPath(e.path),
-    title: `${e.path}\n${o(`Перетащи наружу · двойной клик — открыть`, `Drag it out · double-click to open`)}`,
-    className: `group relative flex h-[104px] w-[92px] shrink-0 cursor-grab flex-col items-center gap-1.5 rounded-2xl p-2 pt-3 hover:bg-tile active:cursor-grabbing ${e.exists ? `` : `opacity-40`}`,
+    'data-phone-shelf': true,
+    className: `flex h-full min-h-0 gap-3`,
     children: [
-      e.icon
-        ? (0, jsxRuntime.jsx)(`img`, {
-            src: e.icon,
-            alt: ``,
-            draggable: !1,
-            className: `size-11 rounded-md object-contain`,
-          })
-        : (0, jsxRuntime.jsx)(`div`, {
-            className: `grid size-11 place-items-center text-ink-3`,
-            children: (0, jsxRuntime.jsx)(io, { size: 28 }),
-          }),
-      (0, jsxRuntime.jsx)(`div`, {
-        className: `line-clamp-2 w-full text-center text-[11px] leading-tight break-all text-ink`,
-        children: e.name,
-      }),
-      (0, jsxRuntime.jsx)(`div`, {
-        className: `text-[10px] text-ink-3`,
-        children: e.exists ? dr(e.size) : o(`нет файла`, `missing`),
-      }),
-      (0, jsxRuntime.jsxs)(`div`, {
-        className: `absolute top-1 right-1 hidden gap-0.5 group-hover:flex`,
-        children: [
-          (0, jsxRuntime.jsx)(`button`, {
-            title: o(`Показать в папке`, `Show in folder`),
-            onPointerDown: (e) => e.stopPropagation(),
-            onClick: () => void u.openPath(e.path, !0),
-            className: `on-dark press grid size-5 place-items-center rounded-full bg-neutral-800 text-ink-2 hover:text-ink`,
-            children: (0, jsxRuntime.jsx)(Te, { size: 11 }),
-          }),
-          (0, jsxRuntime.jsx)(`button`, {
-            title: o(`Убрать с полки`, `Remove from the shelf`),
-            onPointerDown: (e) => e.stopPropagation(),
-            onClick: () => void u.shelfRemove(e.id).then((e) => useIslandStore.setState({ shelf: e })),
-            className: `on-dark press grid size-5 place-items-center rounded-full bg-neutral-800 text-ink-2 hover:bg-danger hover:text-white`,
-            children: (0, jsxRuntime.jsx)(yr, { size: 11, strokeWidth: 3 }),
-          }),
-        ],
+      (0, jsxRuntime.jsx)(`div`, { className: `min-w-0 flex-1`, children: (0, jsxRuntime.jsx)(ShelfFiles, {}) }),
+      (0, jsxRuntime.jsx)(PhonePanel, { state: phone, onState: acceptPhoneState, makeQr: makePhoneQr, onWaiting: setPhoneWaiting,
+        onFocus: () => void u.takeFocus(),
       }),
     ],
   });
 }
-function mk() {
-  let e = useIslandStore((e) => e.shelf),
-    t = e.filter((e) => e.exists),
-    n = fk(() => t.map((e) => e.path), t[0]?.icon);
-  return e.length === 0
-    ? (0, jsxRuntime.jsx)(Ze, {
-        icon: (0, jsxRuntime.jsx)(Hn, { size: 22 }),
-        title: o(`Полка пуста`, `The shelf is empty`),
-        hint: o(
-          `Перетащи файлы на остров — они полежат здесь, пока ты не вытащишь их в нужное окно`,
-          `Drop files on the island and they wait here until you drag them into the right window`,
-        ),
-      })
-    : (0, jsxRuntime.jsxs)(`div`, {
-        className: `flex h-full flex-col gap-2`,
-        children: [
-          (0, jsxRuntime.jsxs)(`div`, {
-            className: `flex items-center gap-2`,
-            children: [
-              (0, jsxRuntime.jsxs)(`div`, {
-                ...n,
-                title: o(`Потяни, чтобы перетащить все файлы сразу`, `Drag to move all files at once`),
-                className: `press flex h-9 cursor-grab items-center gap-1.5 rounded-xl bg-tile pr-3 pl-2 text-[12.5px] font-medium text-ink hover:bg-tile-hover active:cursor-grabbing`,
-                children: [
-                  (0, jsxRuntime.jsx)(po, { size: 15, className: `text-ink-3` }),
-                  o(`Перетащить все (${t.length})`, `Drag all (${t.length})`),
-                ],
-              }),
-              (0, jsxRuntime.jsx)(`div`, { className: `flex-1` }),
-              (0, jsxRuntime.jsxs)(`button`, {
-                className: `press flex h-9 items-center gap-1.5 rounded-xl px-3 text-[12.5px] text-ink-3 hover:bg-tile hover:text-danger`,
-                onClick: () => void u.shelfClear().then((e) => useIslandStore.setState({ shelf: e })),
-                children: [(0, jsxRuntime.jsx)(Se, { size: 14 }), o(`Очистить`, `Clear`)],
-              }),
-            ],
-          }),
-          (0, jsxRuntime.jsx)(`div`, {
-            className: `scroll-thin -mx-1 flex min-h-0 flex-1 flex-wrap content-start gap-0.5 overflow-y-auto`,
-            children: e.map((e, t) =>
-              (0, jsxRuntime.jsx)(
-                `div`,
-                {
-                  className: `pop-in`,
-                  style: { animationDelay: `${Math.min(t, 10) * 22}ms` },
-                  children: (0, jsxRuntime.jsx)(pk, { item: e }),
-                },
-                e.id,
-              ),
-            ),
-          }),
-        ],
-      });
+function ShelfFiles() {
+  const shelf = useIslandStore(state => state.shelf), linked = useIslandStore(state => phoneLinked(state.phone));
+  const files = shelf.filter(item => item.exists), drag = fk(() => files.map(item => item.path), files[0]?.icon);
+  return jsxRuntime.jsxs('div', {
+    className: 'flex h-full min-h-0 flex-col gap-2',
+    children: [
+      shelf.length > 0 && jsxRuntime.jsxs('div', { className: 'flex items-center gap-2', children: [
+        jsxRuntime.jsxs('div', { ...drag, title: o('Потяни, чтобы перетащить все файлы сразу', 'Drag to move all files at once'),
+          className: 'press flex h-9 cursor-grab items-center gap-1.5 rounded-xl bg-tile pr-3 pl-2 text-[12.5px] font-medium text-ink hover:bg-tile-hover active:cursor-grabbing',
+          children: [jsxRuntime.jsx(po, { size: 15, className: 'text-ink-3' }), o('Перетащить все (' + files.length + ')', 'Drag all (' + files.length + ')')],
+        }),
+        jsxRuntime.jsx('div', { className: 'flex-1' }),
+        jsxRuntime.jsxs('button', {
+          className: 'press flex h-9 items-center gap-1.5 rounded-xl px-3 text-[12.5px] text-ink-3 hover:bg-tile hover:text-danger',
+          onClick: () => void u.shelfClear().then(shelf => useIslandStore.setState({ shelf })),
+          children: [jsxRuntime.jsx(Se, { size: 14 }), o('Очистить', 'Clear')],
+        }),
+      ] }),
+      jsxRuntime.jsx(ShelfRow, { linked, empty: shelf.length === 0, children: shelf.map(item => jsxRuntime.jsx(pk, { item }, item.id)) }),
+    ],
+  });
 }
 var hk = s((e, t) => {
     t.exports = function () {
@@ -7319,7 +7249,7 @@ function pA({ w: e, onCity: t }) {
       (0, jsxRuntime.jsx)(nn, { sky: r, night: !e.now.isDay, size: 54, className: `relative mt-2 -ml-1` }),
       (0, jsxRuntime.jsx)(`div`, {
         className: `tabular relative mt-1 font-display text-[46px] leading-none font-light tracking-tight`,
-        children: at(e.now.temp),
+        children: (0, jsxRuntime.jsx)(AnimatedWeatherValue, { value: e.now.temp, format: at }),
       }),
       (0, jsxRuntime.jsx)(`div`, {
         className: `relative mt-1.5 text-[14px] leading-tight font-semibold`,
@@ -7467,6 +7397,7 @@ function _A({ title: e, hint: t, mark: n, children: r }) {
   });
 }
 function vA({ from: e }) {
+  const angle = useWeatherTween(e + 180, { ...WEATHER_GAUGE_TWEEN, delay: 70, from: e + 30 });
   let [n, r, i, a] = t() === `ru` ? [`С`, `В`, `Ю`, `З`] : [`N`, `E`, `S`, `W`];
   return (0, jsxRuntime.jsxs)(`svg`, {
     width: `52`,
@@ -7498,7 +7429,7 @@ function vA({ from: e }) {
         ],
       }),
       (0, jsxRuntime.jsxs)(`g`, {
-        transform: `rotate(${e + 180} 26 26)`,
+        transform: `rotate(${angle} 26 26)`,
         children: [
           (0, jsxRuntime.jsx)(`path`, { d: `M26 11 L30 26 L26 23.5 L22 26 Z`, fill: `currentColor` }),
           (0, jsxRuntime.jsx)(`path`, {
@@ -7528,7 +7459,7 @@ function yA({ w: e }) {
             (0, jsxRuntime.jsxs)(`div`, {
               className: `tabular text-[20px] leading-none font-semibold text-ink`,
               children: [
-                Math.round(e.now.wind),
+                (0, jsxRuntime.jsx)(AnimatedWeatherValue, { value: e.now.wind, format: Math.round, delay: 70 }),
                 ` `,
                 (0, jsxRuntime.jsx)(`span`, { className: `text-[11px] font-medium text-ink-2`, children: t }),
               ],
@@ -7553,6 +7484,7 @@ function yA({ w: e }) {
   });
 }
 function bA({ w: e }) {
+  const humidity = useWeatherTween(e.now.humidity, { delay: 140 });
   let t = (e.now.pressure ?? 0) > 0;
   return (0, jsxRuntime.jsxs)(_A, {
     mark: `humidity`,
@@ -7560,13 +7492,13 @@ function bA({ w: e }) {
     children: [
       (0, jsxRuntime.jsxs)(`div`, {
         className: `tabular mt-1 text-[22px] leading-none font-semibold text-ink`,
-        children: [e.now.humidity, `%`],
+        children: [Math.round(humidity), `%`],
       }),
       (0, jsxRuntime.jsx)(`div`, {
         className: `mt-2 h-[5px] rounded-full bg-white/10`,
         children: (0, jsxRuntime.jsx)(`div`, {
           className: `h-full rounded-full bg-gradient-to-r from-[#5dcaa5] to-rain`,
-          style: { width: `${Math.min(100, e.now.humidity)}%` },
+          style: { width: `${Math.min(100, Math.max(0, humidity))}%` },
         }),
       }),
       (0, jsxRuntime.jsx)(`span`, { className: `flex-1` }),
@@ -7579,7 +7511,8 @@ function bA({ w: e }) {
   });
 }
 function xA({ w: e }) {
-  let t = e.now.pressure ?? 0,
+  const pressure = useWeatherTween(e.now.pressure ?? 0, { ...WEATHER_GAUGE_TWEEN, delay: 210, from: 960 });
+  let t = e.now.pressure > 0 ? pressure : 0,
     [n, r] = Gt(t, e.units),
     i = Math.min(1, Math.max(0, (t - 960) / 100)),
     a = Math.PI * (1 - i),
@@ -7650,7 +7583,10 @@ function xA({ w: e }) {
 }
 function SA({ w: e }) {
   let t = e.days[0];
-  if (!t || !t.sunrise || !t.sunset)
+  const duration = (t?.sunset ?? 0) - (t?.sunrise ?? 0);
+  const progress = duration > 0 ? (Math.floor(Date.now() / 1e3) - t.sunrise) / duration : 0;
+  const sunProgress = useWeatherTween(Math.min(1, Math.max(0, progress)), { ms: 1300, delay: 280 });
+  if (!t || !t.sunrise || !t.sunset || duration <= 0)
     return (0, jsxRuntime.jsx)(_A, {
       mark: `sun`,
       title: o(`Солнце`, `Sun`),
@@ -7663,7 +7599,7 @@ function SA({ w: e }) {
     r = t.sunset - t.sunrise,
     i = (n - t.sunrise) / r,
     a = i >= 0 && i <= 1,
-    s = Math.min(1, Math.max(0, i)),
+    s = sunProgress,
     c = 6 + s * 106,
     l = 40 - Math.sin(Math.PI * s) * 34,
     u = Math.floor(r / 3600),
@@ -7711,7 +7647,8 @@ function SA({ w: e }) {
   });
 }
 function CA({ w: e }) {
-  let [t, ...n] = Fe(e.days[0]?.precip ?? 0, e.units, !0).split(` `),
+  const factor = useWeatherTween(1, { delay: 350 });
+  let [t, ...n] = Fe((e.days[0]?.precip ?? 0) * factor, e.units, !0).split(` `),
     r = Math.max(1, ...e.hours.map((e) => e.precip));
   return (0, jsxRuntime.jsxs)(_A, {
     mark: `precip`,
@@ -7740,7 +7677,7 @@ function CA({ w: e }) {
             `div`,
             {
               className: `min-w-0 flex-1 rounded-[2px] ${e.precip >= 0.1 ? `bg-rain` : `bg-white/12`}`,
-              style: { height: e.precip >= 0.1 ? `${Math.max(12, (e.precip / r) * 100)}%` : 2 },
+              style: { height: e.precip >= 0.1 ? `${Math.max(12, (e.precip / r) * 100) * factor}%` : 2 },
             },
             e.time,
           ),
@@ -7750,6 +7687,7 @@ function CA({ w: e }) {
   });
 }
 function wA({ w: e }) {
+  const uv = useWeatherTween(e.now.uv ?? 0, { delay: 420 });
   if (!Number.isFinite(e.now.uv))
     return (0, jsxRuntime.jsx)(_A, {
       mark: `uv`,
@@ -7759,7 +7697,7 @@ function wA({ w: e }) {
         children: o(`Нет данных у источника`, `No data from the provider`),
       }),
     });
-  let t = e.now.uv,
+  let t = uv,
     n = e.days[1]?.uvMax;
   return (0, jsxRuntime.jsxs)(_A, {
     mark: `uv`,
@@ -8669,9 +8607,13 @@ function ij({ onResize: e }) {
     [v, y] = (0, ReactRuntime.useState)(null),
     b = (0, ReactRuntime.useRef)(null),
     x = (0, ReactRuntime.useRef)(null),
+    woodsVoiceSeed = useIslandStore((state) => state.paletteSeed),
+    woodsVoicePending = (0, ReactRuntime.useRef)(null),
+    [woodsAppsReady, setWoodsAppsReady] = (0, ReactRuntime.useState)(false),
     S = useIslandStore((e) => e.settings),
     C = useIslandStore((e) => e.recording !== null),
     w = useIslandStore((e) => e.settings?.through === !0),
+    woodsHideFs = useIslandStore((e) => e.settings?.hideInFullscreen !== !1),
     T = S?.moduleControls !== !1,
     E = S?.showVpn !== !1,
     D = S?.paletteFiles !== !1;
@@ -8696,7 +8638,7 @@ function ij({ onResize: e }) {
     }, [n, D]),
     (0, ReactRuntime.useEffect)(
       () => (
-        u.paletteApps().then(c),
+        u.paletteApps().then(apps => { c(apps); setWoodsAppsReady(true); }).catch(() => setWoodsAppsReady(true)),
         u.paletteRecent().then(d),
         u
           .rates()
@@ -8710,6 +8652,12 @@ function ij({ onResize: e }) {
       ),
       [],
     ));
+  (0, ReactRuntime.useEffect)(() => {
+    if (!woodsVoiceSeed) return;
+    woodsVoicePending.current = woodsVoiceSeed;
+    r(woodsVoiceSeed.text);
+    useIslandStore.setState({ paletteSeed: null });
+  }, [woodsVoiceSeed]);
   let O = () => useIslandStore.getState().closePalette(),
     k = (e, t) => {
       (O(), u.clipSetText(e).then(() => useIslandStore.getState().pushPeek({ kind: `done`, label: t })));
@@ -8801,6 +8749,16 @@ function ij({ onResize: e }) {
           run: () => void u.themeFlip(),
         },
         {
+          t: woodsHideFs
+            ? o(`Прятать над программами на весь экран: выключить`, `Hide over fullscreen apps: turn off`)
+            : o(`Прятать над программами на весь экран: включить`, `Hide over fullscreen apps: turn on`),
+          k: `полный экран скрыть прятать игры игра видео full screen fullscreen hide games video`,
+          i: (0, jsxRuntime.jsx)(Vo, { size: 17 }),
+          run: () => {
+            (O(), u.fullscreenHideToggle());
+          },
+        },
+        {
           t: w
             ? o(`Сквозной режим: выключить`, `Through mode: turn off`)
             : o(`Сквозной режим: клики проходят сквозь остров`, `Through mode: clicks go through the island`),
@@ -8873,6 +8831,15 @@ function ij({ onResize: e }) {
           },
         },
         {
+          t: o(`Голосовая команда`, `Voice command`),
+          k: `голос команда открыть запустить voice command open launch`,
+          i: (0, jsxRuntime.jsx)(ba, { size: 17 }),
+          run: () => {
+            O();
+            setTimeout(() => u.dictateToggle(`command`).catch(error => useIslandStore.getState().pushPeek({ kind: `error`, message: String(error) })), 150);
+          },
+        },
+        {
           t: o(`Погода`, `Weather`),
           k: `погода прогноз температура дождь снег weather forecast temperature rain`,
           i: (0, jsxRuntime.jsx)(nr, { size: 17 }),
@@ -8911,7 +8878,7 @@ function ij({ onResize: e }) {
           },
         },
         {
-          t: o(`Настройки Island`, `Island settings`),
+          t: o(`Настройки Woods Island`, `Woods Island settings`),
           k: `настройки settings preferences options`,
           i: (0, jsxRuntime.jsx)(rs, { size: 17 }),
           run: () => {
@@ -8919,7 +8886,7 @@ function ij({ onResize: e }) {
           },
         },
         {
-          t: o(`Что нового в Island`, `What's new in Island`),
+          t: o(`Что нового в Woods Island`, `What's new in Woods Island`),
           k: `что нового новое изменения версия обновление список changelog whats new changes version release notes`,
           i: (0, jsxRuntime.jsx)(fr, { size: 17 }),
           run: () => {
@@ -8993,7 +8960,7 @@ function ij({ onResize: e }) {
             ]
           : []),
       ],
-      [C, T, E, w],
+      [C, T, E, w, woodsHideFs],
     ),
     oe = (0, ReactRuntime.useMemo)(() => {
       let e = n.trim(),
@@ -9178,7 +9145,7 @@ function ij({ onResize: e }) {
       }
       for (let t of ae) {
         let n = Math.max(rj(t.t, e), ...t.k.split(` `).map((t) => rj(t, e) - 2));
-        n > 0 && r.push({ key: `a` + t.t, icon: t.i, title: t.t, sub: `Island`, score: n + 3, run: t.run });
+        n > 0 && r.push({ key: `a` + t.t, icon: t.i, title: t.t, sub: `Woods Island`, score: n + 3, run: t.run });
       }
       for (let t of s) {
         let n = rj(t.name, e);
@@ -9272,6 +9239,21 @@ function ij({ onResize: e }) {
     }, [n, s, l, m, f, g, ae, S?.aiModel, S?.searchEngine, S?.searchUrl]);
   return (
     (0, ReactRuntime.useEffect)(() => a(0), [n]),
+    (0, ReactRuntime.useEffect)(() => {
+      const seed = woodsVoicePending.current;
+      if (!seed || !woodsAppsReady || n.trim() !== seed.text.trim()) return;
+      const result = oe[0];
+      if (!seed.autoRun || !result || !canRunVoiceResult(result.key, result.title, n)) {
+        woodsVoicePending.current = null;
+        return;
+      }
+      const timer = setTimeout(() => {
+        if (woodsVoicePending.current !== seed) return;
+        woodsVoicePending.current = null;
+        result.run();
+      }, 450);
+      return () => clearTimeout(timer);
+    }, [n, oe, woodsAppsReady]),
     (0, ReactRuntime.useLayoutEffect)(() => e(oe.length, v !== null), [oe.length, v, e]),
     (0, jsxRuntime.jsxs)(`div`, {
       className: `flex h-full flex-col`,
@@ -9282,9 +9264,10 @@ function ij({ onResize: e }) {
             (0, jsxRuntime.jsx)(kn, { size: 18, className: `text-ink-3` }),
             (0, jsxRuntime.jsx)(`input`, {
               ref: x,
+              "data-palette-input": !0,
               value: n,
               onChange: (e) => {
-                (r(e.target.value), v && y(null));
+                (woodsVoicePending.current = null, r(e.target.value), v && y(null));
               },
               onKeyDown: (e) => {
                 if (e.key === `Escape`) (e.preventDefault(), v ? (b.current?.(), y(null)) : O());
@@ -9494,18 +9477,18 @@ function oj({ peek: e }) {
 function sj({ peek: e }) {
   let t = e.agent,
     n = t.agent === `codex` ? `Codex` : t.agent === `opencode` ? `opencode` : `Claude Code`,
-    r = t.state === `waiting`;
+    r = t.state === `waiting`, failed = t.state === `error`;
   return (0, jsxRuntime.jsx)(aj, {
     icon: (0, jsxRuntime.jsx)($, {
-      tone: r ? `bg-[#ffb340]/20 text-[#ffb340]` : `bg-ok/20 text-ok`,
-      children: r
+      tone: failed ? `bg-danger/20 text-danger` : r ? `bg-[#ffb340]/20 text-[#ffb340]` : `bg-ok/20 text-ok`,
+      children: r || failed
         ? (0, jsxRuntime.jsx)(In, { size: 17 })
         : (0, jsxRuntime.jsx)(_r, { size: 17, className: `pop-in` }),
     }),
     title: (0, jsxRuntime.jsxs)(`span`, {
       "data-agent-card": t.state,
       children: [
-        r ? o(`${n} ждёт ответа`, `${n} waits for an answer`) : o(`${n} закончил`, `${n} is done`),
+        failed ? o(`${n}: ошибка`, `${n}: error`) : r ? o(`${n} ждёт ответа`, `${n} waits for an answer`) : o(`${n} закончил`, `${n} is done`),
         t.project &&
           (0, jsxRuntime.jsx)(`span`, {
             className: `ml-2 text-[11.5px] font-medium text-ink-3`,
@@ -9540,6 +9523,9 @@ function uj(e) {
   switch (e) {
     case `Bash`:
     case `PowerShell`:
+    case `shell`:
+    case `exec_command`:
+    case `local_shell`:
       return o(`выполнить команду`, `run a command`);
     case `Edit`:
     case `MultiEdit`:
@@ -9560,10 +9546,14 @@ function uj(e) {
 }
 
 function fj({ peek: e }) {
+  const pendingAnswer = ReactRuntime.useRef(false), [busy, setBusy] = ReactRuntime.useState(false);
   let t = e.ask,
     n = async (e, n) => {
+      if (pendingAnswer.current) return false;
+      pendingAnswer.current = true;setBusy(true);
       try { await u.agentsAnswer(t.id, e, n); useIslandStore.getState().dropAsk(t.id); return true; }
       catch (error) { useIslandStore.getState().pushPeek({kind: 'error', message: String(error)}); return false; }
+      finally { pendingAnswer.current = false;setBusy(false); }
     },
     r = t.project
       ? (0, jsxRuntime.jsx)(`span`, {
@@ -9573,15 +9563,18 @@ function fj({ peek: e }) {
       : null,
     i = (0, jsxRuntime.jsxs)(`button`, {
       "data-ask-terminal": !0,
+      disabled: busy,
       title: o(`Ответить в терминале, как обычно`, `Answer in the terminal, as usual`),
       onClick: () => n(`terminal`),
       className: `press flex h-7 shrink-0 items-center gap-1.5 rounded-full bg-white/8 px-2.5 text-[11.5px] text-ink-2 hover:bg-white/14 hover:text-ink`,
       children: [(0, jsxRuntime.jsx)(gs, { size: 13 }), o(`В терминале`, `In the terminal`)],
     });
   if (t.kind === `permission`) {
-    let e = t.tool === `Bash` || t.tool === `PowerShell`;
+    let e = [`Bash`, `PowerShell`, `shell`, `exec_command`, `local_shell`].includes(t.tool);
+    const provider = t.agent === `codex` ? `Codex` : t.agent === `opencode` ? `opencode` : `Claude Code`;
     return (0, jsxRuntime.jsxs)(`div`, {
       "data-agent-ask": `permission`,
+      'aria-busy': busy,
       className: `relative flex h-full flex-col justify-center gap-2 px-4 pb-1.5`,
       children: [
         (0, jsxRuntime.jsxs)(`div`, {
@@ -9596,7 +9589,7 @@ function fj({ peek: e }) {
               children: [
                 (0, jsxRuntime.jsxs)(`div`, {
                   className: `truncate text-[13px] font-semibold text-ink`,
-                  children: [o(`Claude хочет`, `Claude wants to`), ` `, uj(t.tool), r],
+                  children: [o(`${provider} хочет`, `${provider} wants to`), ` `, uj(t.tool), r],
                 }),
                 (0, jsxRuntime.jsx)(`div`, {
                   className: `truncate text-[12px] text-ink-2`,
@@ -9606,11 +9599,13 @@ function fj({ peek: e }) {
             }),
             (0, jsxRuntime.jsx)(hj, {
               title: o(`Запретить`, `Deny`),
+              disabled: busy,
               onClick: () => n(`deny`),
               children: (0, jsxRuntime.jsx)(yr, { size: 16 }),
             }),
             (0, jsxRuntime.jsx)(hj, {
               title: o(`Разрешить`, `Allow`),
+              disabled: busy,
               tone: `bg-ink text-island hover:opacity-90`,
               onClick: () => n(`allow`),
               children: (0, jsxRuntime.jsx)(_r, { size: 16, strokeWidth: 2.6 }),
@@ -9661,10 +9656,12 @@ function hj({
   title: e,
   onClick: t,
   children: n,
+  disabled = false,
   tone: r = `bg-white/10 text-ink-2 hover:bg-white/16 hover:text-ink`,
 }) {
   return (0, jsxRuntime.jsx)(`button`, {
     title: e,
+    disabled,
     className: `press grid size-9 shrink-0 place-items-center rounded-full ${r}`,
     onClick: (e) => {
       (e.stopPropagation(), t());
@@ -9673,12 +9670,14 @@ function hj({
   });
 }
 function gj({ peek: e }) {
+  const showCharacter = cr();
   let t = Date.now() - e.at > 9e4,
     n = ca((t) => t.list.find((t) => t.id === e.reminder)?.repeat);
   return (0, jsxRuntime.jsxs)(`div`, {
+    'data-reminder-peek': true,
     className: `flex h-full items-center gap-3 px-3.5`,
     children: [
-      (0, jsxRuntime.jsx)($, {
+      showCharacter ? (0, jsxRuntime.jsx)(mj, { mood: `attn` }) : (0, jsxRuntime.jsx)($, {
         tone: `bg-timer/20 text-timer`,
         children: (0, jsxRuntime.jsx)(Ea, { size: 17 }),
       }),
@@ -9715,11 +9714,13 @@ function gj({ peek: e }) {
   });
 }
 function _j({ peek: e }) {
+  const showCharacter = cr();
   let t = Date.now() - e.at > 9e4;
   return (0, jsxRuntime.jsxs)(`div`, {
+    'data-timer-peek': true,
     className: `flex h-full items-center gap-3 px-3.5`,
     children: [
-      (0, jsxRuntime.jsx)($, {
+      showCharacter ? (0, jsxRuntime.jsx)(mj, { mood: `attn` }) : (0, jsxRuntime.jsx)($, {
         tone: `bg-timer/20 text-timer`,
         children: (0, jsxRuntime.jsx)(_o, { size: 17 }),
       }),
@@ -10155,6 +10156,16 @@ function wj({ peek: e }) {
         sub: e.count > 1 ? o(`${e.name} и ещё ${e.count - 1}`, `${e.name} and ${e.count - 1} more`) : e.name,
         onClick: () => t(`click`, `shelf`),
       });
+    case `phone`:
+      return (0, jsxRuntime.jsx)(aj, {
+        icon: (0, jsxRuntime.jsx)($, { children: (0, jsxRuntime.jsx)(PhoneIcon, { size: 17 }) }),
+        title: e.direction === `sent` ? o(`Отправлено на телефон`, `Sent to the phone`)
+          : e.direction === `taken` ? o(`Телефон забрал файл`, `Phone received the file`)
+          : e.receivedKind === `file` ? o(`Файл с телефона · на полке`, `File from the phone · on the shelf`)
+          : o(`Текст с телефона`, `Text from the phone`),
+        sub: e.text?.replace(/\s+/g, ` `) || (e.count > 1 ? o(`${e.name} и ещё ${e.count - 1}`, `${e.name} and ${e.count - 1} more`) : e.name),
+        onClick: () => { if (e.text) n(e.text); t(`click`, e.text ? `text` : `shelf`); },
+      });
     case `launcher`:
       return (0, jsxRuntime.jsx)(aj, {
         icon: i
@@ -10285,7 +10296,7 @@ function wj({ peek: e }) {
               tone: `bg-accent/20 text-accent`,
               children: (0, jsxRuntime.jsx)(fr, { size: 17 }),
             }),
-        title: o(`Island обновлён до ${e.version}`, `Island is updated to ${e.version}`),
+        title: o(`Woods Island обновлён до ${e.version}`, `Woods Island is updated to ${e.version}`),
         sub: o(`Посмотри, что изменилось`, `See what has changed`),
         onClick: () => void u.openSettings(`updates`),
         children: (0, jsxRuntime.jsx)(`button`, {
@@ -10331,8 +10342,8 @@ function wj({ peek: e }) {
         }),
         title: Xn(e.feature),
         sub: o(
-          `Купить за ${$n()} или ввести ключ — в настройках`,
-          `Buy for ${$n()} or enter a key in Settings`,
+          `Все функции Woods Island доступны бесплатно`,
+          `Every Woods Island feature is free`,
         ),
         onClick: () => void u.openSettings(),
       });
@@ -10469,6 +10480,7 @@ function useIslandGeometry(e) {
           onChat: e.expanded && e.tab === `chat`,
           launcher: e.settings?.moduleLauncher !== !1,
           chat: e.license.pro,
+          phone: phoneLinked(e.phone),
         }).length,
     ),
     o = useIslandStore((e) => e.peek),
@@ -10569,6 +10581,10 @@ function useRuntimeEvents() {
     let e = useIslandStore,
       c = () => e.getState().settings;
     let disposed = false;
+    let phoneObserved = false, shelfObserved = false;
+    peripheralInvoke('phone_state').then(payload => {
+      if (!disposed && !phoneObserved) acceptPhoneState(payload);
+    }).catch(() => {});
     const peripheralEvents = createPeripheralEvents();
     const acceptPeripherals = (payload, notify = true) => {
       if (disposed) return;
@@ -10606,7 +10622,7 @@ function useRuntimeEvents() {
         if (disposed) return;
         (e.setState({
           settings: t.settings,
-          shelf: t.shelf,
+          shelf: shelfObserved ? e.getState().shelf : t.shelf,
           launcher: t.launcher,
           media: t.media,
           mediaLive: t.media?.playing ?? !1,
@@ -10619,11 +10635,10 @@ function useRuntimeEvents() {
           version: t.version,
           caps: t.capsLock,
           layoutCode: t.layout,
-          license: t.license,
+          license: freeLicense,
           battery: t.battery,
           vdesk: t.vdesk ?? null,
         }),
-          t.trialOver && e.getState().pushPeek({ kind: `pro`, feature: `trial` }),
           !t.news.told &&
             t.news.from !== t.news.version &&
             (e.getState().pushPeek({ kind: `news`, version: t.version }), u.newsTold()),
@@ -10690,7 +10705,7 @@ function useRuntimeEvents() {
         T(`vpn:update`, (t) => {
           let n = e.getState().vpn;
           (e.setState({ vpn: t }),
-            l(`showVpn`) && n && n.active !== t.active && e.getState().pushPeek({ kind: `vpn`, vpn: t }));
+            l(`showVpn`) && n && t && n.active !== t.active && e.getState().pushPeek({ kind: `vpn`, vpn: t }));
         }),
         T(`downloads:update`, (t) => e.setState({ downloads: t })),
         T(`downloads:done`, (t) => {
@@ -10764,10 +10779,12 @@ function useRuntimeEvents() {
         T(`dictation:done`, (t) => {
           t.target === `chat`
             ? M.setState((e) => ({ draft: e.draft.trim() ? `${e.draft.trimEnd()} ${t.text}` : t.text }))
-            : e.getState().pushPeek({ kind: `dictated`, text: t.text, pasted: t.pasted });
+            : t.target === `command`
+              ? e.getState().openPaletteWith(normalizeVoiceCommand(t.text), !0)
+              : e.getState().pushPeek({ kind: `dictated`, text: t.text, pasted: t.pasted });
         }),
         T(`license:changed`, (t) => {
-          if ((e.setState({ license: t }), !t.pro)) return;
+          e.setState({ license: freeLicense });
           let n = e.getState();
           (n.queue.some((e) => e.kind === `pro`) &&
             e.setState({ queue: n.queue.filter((e) => e.kind !== `pro`) }),
@@ -10794,7 +10811,10 @@ function useRuntimeEvents() {
           e.setState({settings: t, queue: state.queue.filter(n => n.kind !== 'peripheralEvent' || peripheralEventEnabled(n, t))});
           if (state.peek?.kind === 'peripheralEvent' && !peripheralEventEnabled(state.peek, t)) e.getState().nextPeek();
         }),
-        T(`shelf:changed`, (t) => e.setState({ shelf: t })),
+        T(`shelf:changed`, (t) => { shelfObserved = true; e.setState({ shelf: t }); }),
+        T(`phone:state`, (value) => { phoneObserved = true; if (!disposed) acceptPhoneState(value); }),
+        T(`phone:got`, (value) => e.getState().pushPeek({ kind: `phone`, direction: `received`, receivedKind: value.kind, name: value.name, text: value.text })),
+        T(`phone:taken`, (value) => e.getState().pushPeek({ kind: `phone`, direction: `taken`, name: typeof value === `string` ? value : value.name })),
         T(`launcher:changed`, (t) => e.setState({ launcher: t })),
         xr().onDragDropEvent((n) => {
           let r = n.payload,
@@ -10803,6 +10823,7 @@ function useRuntimeEvents() {
               onChat: i.expanded && i.tab === `chat`,
               launcher: c()?.moduleLauncher !== !1,
               chat: i.license.pro,
+              phone: phoneLinked(i.phone),
             }),
             o = (e) => {
               let t = window.devicePixelRatio,
@@ -10824,7 +10845,9 @@ function useRuntimeEvents() {
             if ((e.setState({ dragOver: null, expanded: !1 }), r.paths.length === 0)) return;
             let n = r.paths[0].split(/[\\/]/).pop() ?? ``,
               i = r.paths.length;
-            t === `launcher`
+            t === `phone`
+              ? void sendPhoneFiles(r.paths)
+              : t === `launcher`
               ? u.launcherAdd(r.paths).then((t) => {
                   (e.setState({ launcher: t }),
                     e.getState().pushPeek({ kind: `launcher`, count: i, name: n }));
@@ -10887,6 +10910,10 @@ function qj(e) {
   return t === `lyrics` && e.settings?.lyrics !== !0 ? `title` : t;
 }
 const Jj = hasPersistentActivity;
+function IslandHolidayEffects({ width, height, capsule, visible, mode }) {
+  const settings=useIslandStore(state=>state.settings),level=useIslandStore(state=>state.level),still=useIslandStore(state=>state.asleep);
+  return jsxRuntime.jsx(HolidayEffects,{settings:settings??{},width,height,capsule,visible,musicLevel:level,still,falling:['idle','liveStatus','liveMedia','liveShelf','liveDownloads'].includes(mode)});
+}
 function IslandApp() {
   useRuntimeEvents();
   let e = Kj(),
@@ -10913,7 +10940,7 @@ function IslandApp() {
     ee = useIslandStore((e) =>
       r({
         autoHide: S({
-          autoHide: e.settings?.autoHide === !0,
+          autoHide: e.settings?.autoHide === !0 && e.settings?.notchBar !== !0,
           showOnDesktop: e.settings?.showOnDesktop === !0 || e.settings?.hideOnlyUnder === !0,
           desktop: e.desktop,
           shy: e.shy,
@@ -10924,8 +10951,12 @@ function IslandApp() {
         atEdge: e.atEdge,
       }),
     ),
-    [te, ne] = (0, ReactRuntime.useState)(!1);
+    [te, ne] = (0, ReactRuntime.useState)(!1),
+    veNotch = useIslandStore((e) => e.settings?.notchBar === !0);
   ((0, ReactRuntime.useEffect)(() => {
+    veNotch && a === `idle` && u.notchPill(c);
+  }, [veNotch, a, c]),
+    (0, ReactRuntime.useEffect)(() => {
     if (ee) {
       ne(!1);
       return;
@@ -10999,8 +11030,10 @@ function IslandApp() {
         if (r) {
           const attachment = document.querySelector("[data-island] > [data-attached-character]");
           const inset = name => Math.max(0, Math.min(128, Number(attachment?.dataset[name]) || 0));
+          const snow=document.querySelector('[data-island] > [data-holiday-effects]');
+          const snowBottom=Math.max(0,Math.min(128,Number(snow?.dataset.snowBottom)||0));
           const args = [Math.floor(r.x), Math.floor(r.y), Math.ceil(r.width), Math.ceil(r.height), k, te, re,
-            inset('attachmentRight'), inset('attachmentBottom')];
+            inset('attachmentRight'), Math.max(inset('attachmentBottom'),snowBottom)];
           const key = [...args, window.innerWidth, window.innerHeight].join(",");
           if (key !== t) {
             t = key;
@@ -11111,6 +11144,7 @@ function IslandApp() {
         onClick: ve ? () => f(`click`) : void 0,
         onWheel: be,
         children: [
+          jsxRuntime.jsx(IslandHolidayEffects, { width: s, height: c, capsule: p, visible: ee && !te, mode: a }),
           g &&
             (0, jsxRuntime.jsx)(ar, {
               mood: E,

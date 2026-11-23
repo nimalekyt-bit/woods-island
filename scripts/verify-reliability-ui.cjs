@@ -4,7 +4,8 @@ const fs=require('node:fs/promises'),path=require('node:path'),http=require('nod
 const root=path.resolve(__dirname,'..');
 const esbuild=require(require.resolve('esbuild',{paths:[path.dirname(require.resolve('vite/package.json'))]}));
 const {chromium}=require(process.env.WOODS_PLAYWRIGHT_MODULE||'playwright-core');
-const scratch=path.join(root,'.qa-temp','reliability-shell');
+const scratch=path.join(process.env.WOODS_QA_TEMP||path.join(root,'.qa-temp'),'reliability-shell');
+const buildVersion=require(path.join(root,'package.json')).version;
 let browser,server;
 (async()=>{
  await fs.mkdir(scratch,{recursive:true});
@@ -24,13 +25,14 @@ let browser,server;
   const page=await context.newPage(),errors=[];
   page.on('pageerror',error=>{errors.push(error.message);console.error('UI exception:',error.message);});
   page.on('console',message=>{if(message.type()==='error')console.error('UI console:',message.text());});
-  await page.addInitScript(({defaults,lang})=>{
+  await page.addInitScript(({defaults,lang,buildVersion})=>{
    let next=1;const callbacks=new Map(),subscriptions=new Map();
    window.calls=[];window.saved={...defaults,language:lang,onboardingCompleted:false,hotkeyToggle:'Alt+I',hotkeyPalette:'Ctrl+Space',uploadService:'imgbb'};
    window.__TAURI_EVENT_PLUGIN_INTERNALS__={unregisterListener:()=>{}};
-   window.updateFixture={status:'ready',version:'1.2.1',downloaded:100,total:100,canInstall:true,error:null,reason:null};
+   window.updateFixture={status:'ready',version:'1.3.2',downloaded:100,total:100,canInstall:true,error:null,reason:null};
    const emit=(event,payload)=>{for(const item of subscriptions.values())if(item.event===event)callbacks.get(item.handler)?.({event,payload});};
    window.setUpdate=value=>{window.updateFixture={...window.updateFixture,...value};emit('update:state',window.updateFixture);};
+   window.setLegacyLicense=()=>emit('license:changed',{pro:false,source:'expired',trialDaysLeft:0});
    window.__TAURI_INTERNALS__={metadata:{currentWindow:{label:'settings'},currentWebview:{label:'settings'}},
     transformCallback:callback=>{const id=next++;callbacks.set(id,callback);return id;},unregisterCallback:id=>callbacks.delete(id),
     invoke:async(command,args={})=>{
@@ -44,8 +46,8 @@ let browser,server;
      if(command==='installed_browsers')return ['chrome.exe','msedge.exe'];
      if(command==='open_programs')return [{executable:'code.exe',name:'Code',title:'Fixture project'},{executable:'chrome.exe',name:'Chrome',title:'Fixture page'}];
      if(command==='ai_proxy_set'){window.saved={...window.saved,aiProxy:args.proxy};emit('settings:changed',window.saved);return true;}
-     if(command==='plugin:app|version')return '1.2.0';
-     if(command==='license_status')return {pro:true,active:true};
+     if(command==='plugin:app|version'){if(location.search.includes('version-error'))throw new Error('Fixture version lookup failure');return buildVersion;}
+     if(command==='license_status')return {pro:false,source:'expired',trialDaysLeft:0};
      if(command==='pets_catalog')return {status:'ready',pets:[]};
      if(['hotkeys_check','audio_devices','audio_inputs','launcher_list','ai_models'].includes(command))return [];
      if(command==='monitors_list')return [{name:'DISPLAY1',width:1920,height:1080,left:0,top:0,primary:true}];
@@ -72,7 +74,7 @@ let browser,server;
      throw new Error('Unmocked command: '+command);
     }
    };
-  },{defaults,lang});
+  },{defaults,lang,buildVersion});
   await page.goto(`http://127.0.0.1:${server.address().port}/settings.html`);
   const pick=(ru,en)=>lang==='ru'?ru:en;
   const screenshot=async(name)=>{
@@ -134,6 +136,14 @@ let browser,server;
   }
   await page.setViewportSize({width:820,height:720});
   await page.locator('[data-nav=general]').click();
+  await page.evaluate(()=>window.setLegacyLicense());
+  await page.locator('[data-nav=character]').click();
+  await page.locator('[data-character-option=bot]').click();
+  await page.waitForFunction(()=>window.saved.character==='bot');
+  await page.getByRole('switch',{name:pick('Жидкий остров под персонажем','A liquid island under the character'),exact:true}).click();
+  await page.waitForFunction(()=>window.saved.liquidWith===true);
+  assert(!/\bPro\b|399\s*₽|\$4\.99|Купить|Buy for/.test(await page.locator('body').innerText()),'Legacy licensing must not lock or sell any Woods feature');
+  await page.locator('[data-nav=general]').click();
   const mediaVisibility=page.locator('[data-media-visibility]');
   const player=mediaVisibility.getByRole('switch',{name:'Fixture Music',exact:true});await player.waitFor();
   await player.click();await page.waitForFunction(()=>window.saved.mediaHidden.includes('fixture.music'));
@@ -164,6 +174,16 @@ let browser,server;
   assert((await page.evaluate(()=>window.calls)).some(call=>call.command==='hotkeys_recording'&&call.args.on===true),'Recording releases native shortcuts');
   await page.waitForFunction(()=>window.calls.some(call=>call.command==='hotkeys_recording'&&call.args.on===false));
   await screenshot('hotkeys');
+  const voiceRow=page.locator('[data-hotkey-recorder]').filter({has:page.getByRole('button',{name:pick('Голосовая команда','Voice command'),exact:true})});
+  const voiceRecorder=voiceRow.getByRole('button');await voiceRecorder.focus();await page.keyboard.press('Control+Alt+F9');
+  await page.waitForFunction(()=>window.saved.hotkeyVoiceCommand==='Ctrl+Alt+F9');
+  await voiceRecorder.focus();await page.keyboard.press('Delete');await page.waitForFunction(()=>window.saved.hotkeyVoiceCommand==='');
+  await page.locator('[data-nav=events]').click();
+  const torrentSwitch=page.getByRole('switch',{name:pick('Торрент-загрузки','Torrent downloads'),exact:true});await torrentSwitch.waitFor();
+  assert.equal(await torrentSwitch.getAttribute('aria-checked'),'false');
+  await torrentSwitch.click();await page.waitForFunction(()=>window.saved.downloadsTorrents===true);
+  await torrentSwitch.click();await page.waitForFunction(()=>window.saved.downloadsTorrents===false);
+  await torrentSwitch.scrollIntoViewIfNeeded();await screenshot('torrent-downloads');
   await page.locator('[data-nav=ai]').click();
   await page.locator('[data-web-ai-open=chatgpt]').waitFor();
   assert.equal(await page.locator('[data-web-ai-open=chatgpt]').innerText(),'ChatGPT');
@@ -182,7 +202,7 @@ let browser,server;
   await page.setViewportSize({width:660,height:600});
   await page.locator('[data-nav=connections]').click();await page.locator('[data-connection=clipboard]').waitFor();
   await screenshot('connections-narrow');
-  await page.locator('[data-nav=updates]').click();await page.evaluate(()=>window.setUpdate({status:'ready',version:'1.2.1',canInstall:true,reason:null,error:null}));
+  await page.locator('[data-nav=updates]').click();await page.evaluate(()=>window.setUpdate({status:'ready',version:'1.3.2',canInstall:true,reason:null,error:null}));
   await page.getByRole('button',{name:pick('Установить','Install update'),exact:true}).waitFor();
   const clipped=await page.locator('[data-update-settings] button').evaluateAll(buttons=>buttons.some(button=>{const rect=button.getBoundingClientRect();return rect.width>0&&(rect.left<212||rect.right>innerWidth);}));assert.equal(clipped,false);
   await screenshot('updates-narrow');
@@ -230,12 +250,84 @@ let browser,server;
    await show.scrollIntoViewIfNeeded();await screenshot('peripherals-'+width);
    await disconnection.scrollIntoViewIfNeeded();await screenshot('peripheral-notifications-'+width);
   }
+  assert.equal(await page.locator('[data-holiday-effects]').count(),0,'Hidden holiday settings do not mount animated previews');
+  await page.locator('[data-nav=holidays]').click();
+  const holidays=page.locator('[data-holidays-settings]');await holidays.waitFor({state:'visible'});
+  const snowMode=async(mode)=>holidays.getByRole('group',{name:pick('Новый год на острове','New Year on the island'),exact:true}).getByRole('button',{name:mode==='on'?pick('Всегда','Always'):mode==='off'?pick('Нет','Off'):pick('По датам','By dates'),exact:true}).click();
+  await snowMode('on');
+  assert.equal(await page.evaluate(()=>window.saved.snow),'on');
+  const fall=holidays.getByRole('switch',{name:pick('Снег из-под острова','Snow beneath the island'),exact:true});
+  await fall.click();assert.equal(await page.evaluate(()=>window.saved.snowFall),false);
+  const screen=holidays.getByRole('switch',{name:pick('Снег по всему экрану','Snow over the whole screen'),exact:true});
+  await screen.click();assert.equal(await page.evaluate(()=>window.saved.snowScreen),true);
+  assert.equal(await page.evaluate(()=>window.saved.snowFall),false,'Screen snow is independent of the local snowfall control');
+  for(const theme of ['dark','light'])for(const width of [820,660])for(const zoom of [1,1.25]){
+   await page.setViewportSize({width,height:820});
+   await page.evaluate(({theme,zoom})=>{window.__TAURI_INTERNALS__.invoke('settings_set',{settings:{theme}});document.documentElement.style.zoom=String(zoom);},{theme,zoom});
+   const bounds=await holidays.evaluate(node=>{const parent=node.getBoundingClientRect();return {overflow:node.scrollWidth>node.clientWidth+1,controls:[...node.querySelectorAll('button,select,input')].some(control=>{const r=control.getBoundingClientRect();return r.left<parent.left-1||r.right>parent.right+1;})};});
+   assert(!bounds.overflow&&!bounds.controls,`Holidays fit ${width}px at ${zoom} scale`);
+   await holidays.scrollIntoViewIfNeeded();await screenshot(`holidays-${theme}-${width}-${zoom}`);
+  }
+  await page.evaluate(()=>document.documentElement.style.zoom='1');await page.setViewportSize({width:820,height:720});
+  await snowMode('auto');
+  const month=holidays.getByRole('combobox',{name:pick('Начало: месяц','Start: month'),exact:true});
+  const day=holidays.getByRole('combobox',{name:pick('Начало: день','Start: day'),exact:true});
+  await month.selectOption('2');await day.selectOption('29');assert.equal(await page.evaluate(()=>window.saved.snowFrom),'02-29');
+  await month.selectOption('4');assert.equal(await page.evaluate(()=>window.saved.snowFrom),'04-29');
+  await day.selectOption('30');await month.selectOption('2');assert.equal(await page.evaluate(()=>window.saved.snowFrom),'02-29','Month changes clamp to a real recurring date');
+  await snowMode('off');assert.equal(await holidays.getByRole('switch').count(),0);
+  await snowMode('on');
+  await fall.focus();await page.keyboard.press('Space');assert.equal(await page.evaluate(()=>window.saved.snowFall),true);
+  await page.locator('[data-nav=general]').click();assert.equal(await page.locator('[data-holiday-effects]').count(),0,'Leaving holidays unmounts animation work');
+  // The About tab and release history use the production version API and our
+  // canonical release content, including prose-only fixes in 1.3.1.
+  await page.locator('[data-nav=pro]').click();
+  const about=page.locator('[data-woods-about]');await about.waitFor({state:'visible'});
+  assert((await about.innerText()).includes(pick('Никита Кузнецов','Nikita Kuznetsov')));
+  assert((await about.locator('[data-about-version]').innerText()).includes(buildVersion));
+  assert.equal(await about.locator('[data-woods-logo]').evaluate(img=>img.complete&&img.naturalWidth>0),true);
+  assert(!/exuupery|exupery|399\s*₽|\$4\.99|trial days|Купить/i.test(await about.innerText()));
+  for(const theme of ['dark','light'])for(const width of [820,660])for(const zoom of [1,1.25]){
+   await page.setViewportSize({width,height:820});
+   await page.evaluate(({theme,zoom})=>{window.__TAURI_INTERNALS__.invoke('settings_set',{settings:{theme}});document.documentElement.style.zoom=String(zoom);},{theme,zoom});
+   await about.scrollIntoViewIfNeeded();
+   const overflow=await about.evaluate(node=>node.scrollWidth>node.clientWidth+1||[...node.querySelectorAll('button')].some(button=>{const r=button.getBoundingClientRect(),p=node.getBoundingClientRect();return r.left<p.left||r.right>p.right;}));
+   assert.equal(overflow,false,`About fits ${width}px at ${zoom} scale with ${theme} island theme`);
+   await screenshot(`about-${theme}-${width}-${zoom}`);
+  }
+  await page.evaluate(()=>document.documentElement.style.zoom='1');await page.setViewportSize({width:820,height:720});
+  await about.locator('[data-about-version]').hover();await screenshot('about-version-hover');
+  await about.locator('[data-about-version]').focus();await page.keyboard.press('Enter');
+  await page.locator('[data-nav=updates][data-now=true]').waitFor();
+  const history=page.locator('[data-whats-new]');
+  assert(!(await history.innerText()).includes('{{'),'Release summaries must resolve version placeholders');
+  assert.equal(await history.locator('[data-release]').first().getAttribute('data-release'),buildVersion);
+  assert((await history.innerText()).includes(pick('QR','QR')),'Current release highlights must be visible');
+  if(buildVersion!=='1.3.1'){await history.locator('[data-release="1.3.1"] summary').click();}
+  assert((await history.innerText()).includes(pick('опрос','polling')),'Prose-only 1.3.1 notes must be visible');
+  assert((await page.locator('[data-update-installed]').innerText()).includes(buildVersion));
+  await history.locator('[data-release-open="'+buildVersion+'"]').click();assert.equal(await page.evaluate(()=>window.opened),'https://github.com/nimalekyt-bit/woods-island/releases/tag/v'+buildVersion);
+  await page.locator('[data-update-settings] .wi-update-links button').first().click();assert.equal(await page.evaluate(()=>window.opened),'https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.3.2','Available release links must target the offered update');
+  await history.locator('[data-release="1.3.0"] summary').focus();await page.keyboard.press('Enter');
+  assert.equal(await history.locator('[data-release="1.3.0"]').evaluate(details=>details.open),true);
+  for(const width of [820,660]){
+   await page.setViewportSize({width,height:720});
+   assert.equal(await history.evaluate(node=>node.scrollWidth>node.clientWidth+1),false,'Release history fits settings width');
+   await history.scrollIntoViewIfNeeded();await screenshot('release-history-'+width);
+  }
+  await page.locator('[data-nav=pro]').click();
+  await page.locator('[data-woods-telegram]').click();assert.equal(await page.evaluate(()=>window.opened),'https://t.me/woodskilla');
+  await page.locator('[data-woods-github]').click();assert.equal(await page.evaluate(()=>window.opened),'https://github.com/nimalekyt-bit/woods-island/issues/new/choose');
   await page.locator('[data-nav=updates]').click();
   await page.evaluate(()=>window.__TAURI_INTERNALS__.invoke('settings_set',{settings:{language:window.saved.language==='ru'?'en':'ru'}}));
   await page.locator('[data-nav=updates][data-now=true]').waitFor();
   await page.getByRole('button',{name:pick('Install update','Установить'),exact:true}).waitFor();
   assert.equal(await page.locator('[data-update-settings]').count(),1,'Changing language preserves the active section');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+  await page.goto(`http://127.0.0.1:${server.address().port}/settings.html?version-error`);
+  await page.locator('[data-nav=pro]').click();await page.locator('[data-woods-about]').waitFor({state:'visible'});
+  assert((await page.locator('[data-about-version]').innerText()).includes(pick('Недоступна','Unavailable')));
+  await page.locator('[data-about-version]').click();assert.equal(await page.locator('[data-whats-new] [data-release]').count(),0,'Unknown installed version cannot label a bundled release as installed');
   assert.deepEqual(errors,[]);results.push({language:lang,shell:['820x720','660x600'],verified:['Existing settings flows','Weather city switching with per-city timezone','Weather city controls at 820/660px','Visibility preference persistence','Held modifiers, conflict action names and Alt+Space recording','Peripheral switch and selector persistence','Conditional notification settings','Keyboard switch activation','Full-width layout and 44x24 accessible switches at 820/660px'],errors:0,overflow:false});
   await context.close();
  }

@@ -11,6 +11,7 @@ pub mod network;
 pub mod webai;
 pub mod notifications;
 pub mod telemetry;
+mod file_owners;
 pub mod peripherals;
 pub mod steam;
 pub mod notes;
@@ -31,6 +32,11 @@ pub mod win;
 mod visibility;
 pub mod pets;
 pub mod updates;
+pub mod watchdog;
+pub mod phone;
+pub mod snow_surface;
+pub mod appbar;
+pub mod clips;
 pub mod diagnostics;
 #[cfg(test)]
 mod update_tests;
@@ -66,6 +72,8 @@ pub struct IslandRect {
 pub struct AppState {
     pub is_expanded: AtomicBool,
     pub is_tall: AtomicBool,
+    pub is_tucked: AtomicBool,
+    pub is_hidden: AtomicBool,
     pub click_through: AtomicBool,
     pub clipboard_store: ClipboardStore,
     pub settings: std::sync::Mutex<Value>,
@@ -92,6 +100,14 @@ fn default_settings() -> Value {
     "openOnHover": false,
     "collapseDelayMs": 350,
     "style": "notch",
+    "snow": "auto",
+    "snowFrom": "12-15",
+    "snowTo": "01-15",
+    "snowAmount": 100,
+    "snowFall": true,
+    "snowCap": true,
+    "snowScreen": false,
+    "garland": "off",
     "hideInFullscreen": true,
     "mediaHidden": [],
     "hideOnlyUnder": false,
@@ -104,6 +120,8 @@ fn default_settings() -> Value {
     "opacityThrough": 45,
     "offsetX": 0,
     "underTaskbar": true,
+    "notchBar": false,
+    "notchLook": "black",
     "monitor": "",
     "liquidSpectrum": false,
     "opacityRest": 100,
@@ -154,6 +172,7 @@ fn default_settings() -> Value {
     "hotkeyRecord": "Ctrl+Alt+R",
     "hotkeyChat": "Ctrl+Alt+A",
     "hotkeyDictate": "Ctrl+Alt+D",
+    "hotkeyVoiceCommand": "",
     "hotkeyThrough": "",
     "hotkeyVpn": "",
     "hotkeyMediaPill": "",
@@ -210,6 +229,7 @@ fn default_settings() -> Value {
     "vpnLookupIp": true,
     "downloadsDir": "",
     "downloadsIgnore": [],
+    "downloadsTorrents": false,
     "checkUpdates": true,
     "autoDownloadUpdates": true,
     "onboardingCompleted": false,
@@ -257,7 +277,7 @@ fn apply_island_geometry(app: &AppHandle, state: &AppState) -> Result<(), String
     let hwnd = HWND(window.hwnd().map_err(|e|e.to_string())?.0 as _);
     win::WindowManager::position_on_monitor(hwnd, monitor.position().x, monitor.position().y, monitor.size().width as i32, monitor.scale_factor(), zoom, settings["offsetX"].as_i64().unwrap_or(0).clamp(-10000,10000) as i32, settings["underTaskbar"].as_bool().unwrap_or(true), state.is_tall.load(Ordering::Relaxed));
     let rect = *state.island_rect.lock().unwrap();
-    win::WindowManager::update_island_region(hwnd, Some((rect.x-4,0,rect.x+rect.w+4,rect.y+rect.h+6)));
+    win::WindowManager::update_island_region(hwnd, if state.is_tucked.load(Ordering::Relaxed){None}else{Some((rect.x-4,0,rect.x+rect.w+4,rect.y+rect.h+6))});
     Ok(())
 }
 
@@ -327,6 +347,15 @@ fn start_cursor_loop(app: AppHandle, state: Arc<AppState>) {
             }
             if last_check.elapsed() >= std::time::Duration::from_millis(500) {
                 last_check = std::time::Instant::now();
+                if !state.is_hidden.load(Ordering::Relaxed)
+                    && !capture::is_capturing()
+                    && !unsafe { windows::Win32::UI::WindowsAndMessaging::IsWindowVisible(hwnd) }.as_bool()
+                {
+                    if let Some(window) = app.get_window("main") {
+                        let _ = window.show();
+                        let _ = apply_island_geometry(&app, &state);
+                    }
+                }
                 let mut context = win::WindowManager::system_context(hwnd);
                 let settings = state.settings.lock().unwrap().clone();
                 let recording_until=HOTKEY_RECORDING_UNTIL.load(Ordering::Relaxed);
@@ -415,6 +444,8 @@ fn report_island_rect(
     rect.w = w.ceil() as i32;
     rect.h = h.ceil() as i32;
     rect.expanded = expanded;
+    let actually_tucked=tucked&&rect.y+rect.h<=0;
+    if state.is_tucked.swap(actually_tucked,Ordering::Relaxed)!=actually_tucked{snow_surface::set_island_visible(!actually_tucked);}
     state.is_expanded.store(expanded, Ordering::Relaxed);
     state.click_through.store(through, Ordering::Relaxed);
     win::WindowManager::set_click_through(through);
@@ -495,6 +526,17 @@ fn news_told()->Result<bool,String>{storage::save_json_file("news.json",&json!({
 fn news_get()->Value{json!({"version":env!("CARGO_PKG_VERSION"),"from":env!("CARGO_PKG_VERSION"),"told":true})}
 
 #[tauri::command]
+async fn whatsnew_clip(version:String,name:String,lang:String)->Result<Vec<u8>,String>{
+ clips::fetch(&version,&name,&lang).await
+}
+
+#[tauri::command]
+fn page_pong(webview:tauri::Webview,sequence:u64,ready:bool)->bool{watchdog::page_pong(&webview,sequence,ready)}
+
+#[tauri::command]
+fn watchdog_status(app:AppHandle)->Value{watchdog::status(&app)}
+
+#[tauri::command]
 fn license_status()->Value{json!({"pro":true,"source":"free","serial":"","trialDaysLeft":null})}
 
 #[tauri::command]
@@ -523,11 +565,14 @@ fn settings_set(settings:Option<Value>,app:AppHandle,state:tauri::State<'_, Arc<
  };
  if patch["audioOutput"].is_string() || patch["audioInput"].is_string() {audio::configure(&updated);}
  if patch["mediaHidden"].is_array() {media::configure(&updated);}
- if patch.as_object().unwrap().keys().any(|key|key.starts_with("vpnCustom")) {network::configure_vpn(&updated);}
+ if patch["agentsAsk"].is_boolean(){agents::configure(updated["agentsAsk"]!=false);}
+ if patch.as_object().unwrap().keys().any(|key|key.starts_with("vpnCustom")||key=="showVpn") {network::configure_vpn(&updated);}
  if patch["captureVisible"].is_boolean() {if let Some(window)=app.get_window("main"){if let Err(e)=window.set_content_protected(!updated["captureVisible"].as_bool().unwrap_or(false)){warnings.push(e.to_string());}}}
- if patch.as_object().unwrap().keys().any(|k|["scale","monitor","offsetX","underTaskbar"].contains(&k.as_str())) {if let Err(e)=apply_island_geometry(&app,&state){warnings.push(e);}}
+ if patch.as_object().unwrap().keys().any(|k|["scale","monitor","offsetX","underTaskbar","notchBar","style"].contains(&k.as_str())) {if let Err(e)=apply_island_geometry(&app,&state){warnings.push(e);}}
+ if patch.as_object().unwrap().keys().any(|key|key.starts_with("snow")||["garland","reducedMotion","monitor"].contains(&key.as_str())){snow_surface::refresh();}
+ if patch.as_object().unwrap().keys().any(|key|["notchBar","notchLook","monitor","scale","style","underTaskbar","offsetX"].contains(&key.as_str())){appbar::refresh();}
  if let Some(on)=patch["autostart"].as_bool(){if std::env::var_os("WOODS_ISLAND_DATA_DIR").is_none(){if let Err(e)=system::autostart(on){warnings.push(e);}}}
- if patch.as_object().unwrap().keys().any(|k|k.starts_with("hotkey")){warnings.extend(register_hotkeys(&app,&updated));}
+ if patch.as_object().unwrap().keys().any(|k|k.starts_with("hotkey")||k=="showVpn"){warnings.extend(register_hotkeys(&app,&updated));}
  if patch["through"].is_boolean(){let on=updated["through"].as_bool().unwrap_or(false);state.click_through.store(on,Ordering::Relaxed);win::WindowManager::set_click_through(on);}
  if ["weatherCity","weatherLat","weatherLon","weatherUnits","weatherUtcOffset","weatherTimezone"].iter().any(|key|before[*key]!=updated[*key]){
    let weather_settings=updated.clone();let weather_app=app.clone();let weather_state=state.inner().clone();
@@ -545,23 +590,58 @@ fn settings_target(state: tauri::State<'_, Arc<AppState>>) -> Option<String> {
 fn monitors_list(app:AppHandle)->Vec<Value>{let primary=app.primary_monitor().ok().flatten();app.available_monitors().unwrap_or_default().into_iter().map(|m|{let is_primary=primary.as_ref().map(|p|p.position()==m.position()&&p.name()==m.name()).unwrap_or(false);json!({"name":m.name().cloned().unwrap_or_default(),"left":m.position().x,"top":m.position().y,"width":m.size().width,"height":m.size().height,"primary":is_primary,"scale":m.scale_factor()})}).collect()}
 
 #[tauri::command]
-fn shelf_list(state: tauri::State<'_, Arc<AppState>>) -> Vec<Value> {
-    shelf_snapshot(&state)
+async fn shelf_list(state: tauri::State<'_, Arc<AppState>>) -> Result<Vec<Value>,String> {
+    let state=state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move||shelf_snapshot(&state)).await.map_err(|error|error.to_string())
 }
 
 fn shelf_snapshot(state: &AppState) -> Vec<Value> {
-    state.shelf_items.lock().unwrap().iter().cloned().map(|mut item| {
+    let saved=state.shelf_items.lock().unwrap().clone();
+    saved.into_iter().map(|mut item| {
         if let Some(path) = item["path"].as_str() {
-            let details = system::item(std::path::Path::new(path));
-            item["exists"] = details["exists"].clone();
-            item["size"] = details["size"].clone();
+            let details = phone::shelf_item(std::path::Path::new(path));
+            for key in ["exists","size","name","icon","preview","isDir","kind"]{item[key]=details[key].clone();}
         }
         item
     }).collect()
 }
 
 #[tauri::command]
-fn shelf_add(paths:Option<Vec<String>>,app:AppHandle,state:tauri::State<'_, Arc<AppState>>)->Result<Vec<Value>,String>{let mut items=state.shelf_items.lock().unwrap();for path in paths.unwrap_or_default(){let p=std::path::Path::new(&path);if !p.exists(){return Err(format!("File does not exist: {path}"));}if items.iter().any(|item|item["path"].as_str()==Some(&path)){continue;}let mut value=system::item(p);value["id"]=json!(new_item_id("shelf"));items.push(value);}storage::save_json_file("shelf.json",&json!(*items))?;let _=app.emit("shelf:changed",items.clone());Ok(items.clone())}
+async fn shelf_add(paths:Option<Vec<String>>,app:AppHandle,state:tauri::State<'_, Arc<AppState>>)->Result<Vec<Value>,String>{
+ let state=state.inner().clone();
+ tauri::async_runtime::spawn_blocking(move||{
+   let paths=paths.unwrap_or_default();
+   for path in &paths{if !std::path::Path::new(path).exists(){return Err(format!("File does not exist: {path}"));}}
+   let fresh=paths.iter().map(|path|phone::shelf_item(std::path::Path::new(path))).collect::<Vec<_>>();
+   let mut items=state.shelf_items.lock().unwrap();let before=items.clone();
+   for mut value in fresh{
+     if items.iter().any(|item|item["path"]==value["path"]){continue;}
+     value["id"]=json!(new_item_id("shelf"));value["added"]=json!(media::now_ms());value["fromPhone"]=json!(false);items.push(value);
+   }
+   if let Err(error)=storage::save_json_file("shelf.json",&json!(*items)){*items=before;return Err(error);}
+   let snapshot=items.clone();drop(items);let _=app.emit("shelf:changed",&snapshot);Ok(snapshot)
+ }).await.map_err(|error|error.to_string())?
+}
+
+fn phone_value(state:phone::PhoneState)->Result<Value,String>{serde_json::to_value(state).map_err(|error|error.to_string())}
+#[tauri::command]
+async fn phone_start()->Result<Value,String>{phone_value(phone::phone_start().await?)}
+#[tauri::command]
+fn phone_state()->Result<Value,String>{phone_value(phone::phone_state()?)}
+#[tauri::command]
+fn phone_stop()->Result<Value,String>{phone_value(phone::phone_stop()?)}
+#[tauri::command]
+fn phone_renew()->Result<Value,String>{phone_value(phone::phone_renew()?)}
+#[tauri::command]
+fn phone_allow(id:Option<String>)->Result<Value,String>{phone_value(phone::phone_allow(id)?)}
+#[tauri::command]
+fn phone_deny(id:String)->Result<Value,String>{phone_value(phone::phone_deny(id)?)}
+#[tauri::command]
+async fn phone_send(paths:Option<Vec<String>>)->Result<Value,String>{phone_value(phone::phone_send(paths.unwrap_or_default()).await?)}
+#[tauri::command]
+fn phone_unsend(id:String)->Result<Value,String>{phone_value(phone::phone_unsend(id)?)}
+#[tauri::command]
+async fn phone_firewall()->Result<Value,String>{phone_value(phone::phone_firewall().await?)}
 
 #[tauri::command]
 fn shelf_remove(id:Option<String>,app:AppHandle,state:tauri::State<'_, Arc<AppState>>)->Result<Vec<Value>,String>{let target=id.ok_or("Item ID is required")?;let mut items=state.shelf_items.lock().unwrap();items.retain(|item|item["id"].as_str()!=Some(&target));storage::save_json_file("shelf.json",&json!(*items))?;let _=app.emit("shelf:changed",items.clone());Ok(items.clone())}
@@ -767,10 +847,10 @@ async fn peripherals_g435_measure(id:String,allow_audio_pause:bool,app:AppHandle
 async fn bt_switch(id:Option<String>,on:Option<bool>)->Result<bool,String>{let id=id.ok_or("Bluetooth device ID is required")?;tauri::async_runtime::spawn_blocking(move||network::bt_switch(&id,on.unwrap_or(true))).await.map_err(|e|e.to_string())?.map(|_|true)}
 
 #[tauri::command]
-async fn vpn_chip(app:AppHandle)->Result<bool,String>{let profiles=tauri::async_runtime::spawn_blocking(network::vpn_profiles).await.map_err(|e|e.to_string())?;let available:Vec<_>=profiles.iter().filter(|p|p["ready"]==json!(true)).collect();if available.is_empty(){return Err("No supported VPN connection is installed".into());}if let Some(profile)=available.iter().find(|p|p["on"]==json!(true)){let id=profile["id"].as_str().unwrap_or_default().to_owned();tauri::async_runtime::spawn_blocking(move||network::vpn_toggle(&id,false)).await.map_err(|e|e.to_string())??;vpn_refresh(app).await?;return Ok(false);}if available.len()==1 && available[0]["onSource"]!="command"{let id=available[0]["id"].as_str().unwrap_or_default().to_owned();tauri::async_runtime::spawn_blocking(move||network::vpn_toggle(&id,true)).await.map_err(|e|e.to_string())??;vpn_refresh(app).await?;return Ok(false);}let _=app.emit("vpn:choose",());Ok(true)}
+async fn vpn_chip(app:AppHandle)->Result<bool,String>{if app.state::<Arc<AppState>>().settings.lock().unwrap()["showVpn"]==false{return Ok(false);}let profiles=tauri::async_runtime::spawn_blocking(network::vpn_profiles).await.map_err(|e|e.to_string())?;let available:Vec<_>=profiles.iter().filter(|p|p["ready"]==json!(true)).collect();if available.is_empty(){return Err("No supported VPN connection is installed".into());}if let Some(profile)=available.iter().find(|p|p["on"]==json!(true)){let id=profile["id"].as_str().unwrap_or_default().to_owned();tauri::async_runtime::spawn_blocking(move||network::vpn_toggle(&id,false)).await.map_err(|e|e.to_string())??;vpn_refresh(app).await?;return Ok(false);}if available.len()==1 && available[0]["onSource"]!="command"{let id=available[0]["id"].as_str().unwrap_or_default().to_owned();tauri::async_runtime::spawn_blocking(move||network::vpn_toggle(&id,true)).await.map_err(|e|e.to_string())??;vpn_refresh(app).await?;return Ok(false);}let _=app.emit("vpn:choose",());Ok(true)}
 
 #[tauri::command]
-async fn vpn_refresh(app:AppHandle)->Result<Value,String>{let profiles=tauri::async_runtime::spawn_blocking(network::vpn_profiles).await.map_err(|e|e.to_string())?;let mut payload=network::vpn_summary(&profiles);let lookup=app.state::<Arc<AppState>>().settings.lock().unwrap()["vpnLookupIp"].as_bool().unwrap_or(true);if lookup{let client=reqwest::Client::builder().timeout(std::time::Duration::from_secs(5)).build().map_err(|e|e.to_string())?;if let Ok(response)=client.get("https://api.country.is").send().await{if let Ok(data)=response.json::<Value>().await{payload["ip"]=data["ip"].clone();payload["country"]=data["country"].clone();payload["countryCode"]=data["country"].clone();}}}let _=app.emit("vpn:update",&payload);Ok(payload)}
+async fn vpn_refresh(app:AppHandle)->Result<Value,String>{if app.state::<Arc<AppState>>().settings.lock().unwrap()["showVpn"]==false{let _=app.emit("vpn:update",Value::Null);return Ok(Value::Null);}let profiles=tauri::async_runtime::spawn_blocking(network::vpn_profiles).await.map_err(|e|e.to_string())?;let mut payload=network::vpn_summary(&profiles);let lookup=app.state::<Arc<AppState>>().settings.lock().unwrap()["vpnLookupIp"].as_bool().unwrap_or(true);if lookup{let client=reqwest::Client::builder().timeout(std::time::Duration::from_secs(5)).build().map_err(|e|e.to_string())?;if let Ok(response)=client.get("https://api.country.is").send().await{if let Ok(data)=response.json::<Value>().await{payload["ip"]=data["ip"].clone();payload["country"]=data["country"].clone();payload["countryCode"]=data["country"].clone();}}}let _=app.emit("vpn:update",&payload);Ok(payload)}
 
 #[tauri::command]
 async fn vpn_toggle_now(app:AppHandle)->Result<bool,String>{vpn_chip(app).await}
@@ -829,13 +909,29 @@ fn hover(state:Option<bool>,app:AppHandle)->bool{let _=app.emit("hover",state.un
 fn island_tall(on:Option<bool>,app:AppHandle,state:tauri::State<'_, Arc<AppState>>)->Result<bool,String>{state.is_tall.store(on.unwrap_or(false),Ordering::Relaxed);apply_island_geometry(&app,&state).map(|_|true)}
 
 #[tauri::command]
-fn set_island_hidden(hidden:Option<bool>,app:AppHandle)->Result<bool,String>{let window=app.get_window("main").ok_or("Main window unavailable")?;if hidden.unwrap_or(false){window.hide()}else{window.show()}.map(|_|true).map_err(|e|e.to_string())}
+fn set_island_hidden(hidden:Option<bool>,app:AppHandle,state:tauri::State<'_,Arc<AppState>>)->Result<bool,String>{let window=app.get_window("main").ok_or("Main window unavailable")?;let hidden=hidden.unwrap_or(false);if hidden{window.hide()}else{window.show()}.map_err(|e|e.to_string())?;state.is_hidden.store(hidden,Ordering::Relaxed);snow_surface::refresh();appbar::refresh();Ok(true)}
+
+#[tauri::command]
+fn snow_state()->Value{snow_surface::state()}
+
+#[tauri::command]
+fn notch_pill(height:f64){appbar::set_pill_height(height);}
+
+#[tauri::command]
+fn notch_state()->Value{appbar::state()}
 
 #[tauri::command]
 fn fullscreen(state:tauri::State<'_, Arc<AppState>>)->bool{state.main_hwnd.lock().unwrap().map(|h|win::WindowManager::system_context(HWND(h as _))["fullscreen"].as_bool().unwrap_or(false)).unwrap_or(false)}
 
 #[tauri::command]
-fn hotkeys_check(app:AppHandle,state:tauri::State<'_,Arc<AppState>>)->Vec<String>{use tauri_plugin_global_shortcut::{GlobalShortcutExt,Shortcut};let settings=state.settings.lock().unwrap().clone();settings.as_object().into_iter().flatten().filter(|(k,_)|k.starts_with("hotkey")).filter_map(|(_,v)|v.as_str()).filter(|s|!s.is_empty()).filter_map(|s|match s.parse::<Shortcut>(){Ok(shortcut)if app.global_shortcut().is_registered(shortcut)=>None,_=>Some(format!("Shortcut unavailable: {s}"))}).collect()}
+fn fullscreen_hide_toggle(app:AppHandle,state:tauri::State<'_,Arc<AppState>>)->Result<bool,String>{
+ let on=!state.settings.lock().unwrap()["hideInFullscreen"].as_bool().unwrap_or(true);
+ let _=settings_set(Some(json!({"hideInFullscreen":on})),app,state);
+ Ok(on)
+}
+
+#[tauri::command]
+fn hotkeys_check(app:AppHandle,state:tauri::State<'_,Arc<AppState>>)->Vec<String>{use tauri_plugin_global_shortcut::{GlobalShortcutExt,Shortcut};let settings=state.settings.lock().unwrap().clone();let settings=visibility::shortcut_settings(&settings,false);settings.as_object().into_iter().flatten().filter(|(k,_)|k.starts_with("hotkey")).filter_map(|(_,v)|v.as_str()).filter(|s|!s.is_empty()).filter_map(|s|match s.parse::<Shortcut>(){Ok(shortcut)if app.global_shortcut().is_registered(shortcut)=>None,_=>Some(format!("Shortcut unavailable: {s}"))}).collect()}
 
 #[tauri::command]
 async fn open_settings(section: Option<String>, app: AppHandle, state: tauri::State<'_, Arc<AppState>>) -> Result<bool, String> {
@@ -872,7 +968,92 @@ fn quit(app: AppHandle) {
     app.exit(0);
 }
 
+fn restore_island_visible(app: &AppHandle, state: &Arc<AppState>, toggle: bool) {
+    state.is_hidden.store(false, Ordering::Relaxed);
+    state.is_tucked.store(false, Ordering::Relaxed);
+    if let Some(window) = app.get_window("main") {
+        let _ = window.show();
+    }
+    let _ = apply_island_geometry(app, state);
+    snow_surface::refresh();
+    appbar::refresh();
+    if toggle {
+        let _ = app.emit("island:toggle", json!({}));
+    }
+}
+
+fn setup_tray(app: &AppHandle, state: Arc<AppState>) {
+    if win::WindowManager::passive_qa() { return; }
+    use tauri::menu::{MenuBuilder, MenuItemBuilder};
+    use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+    let lang = state.settings.lock().unwrap()["language"].as_str().unwrap_or("auto").to_owned();
+    let en = lang == "en";
+    let t = |ru: &'static str, english: &'static str| if en { english } else { ru };
+    let Ok(open_item) = MenuItemBuilder::with_id("open", t("Открыть остров", "Open the island")).build(app) else { return; };
+    let Ok(settings_item) = MenuItemBuilder::with_id("settings", t("Настройки", "Settings")).build(app) else { return; };
+    let Ok(updates_item) = MenuItemBuilder::with_id("updates", t("Проверить обновления", "Check for updates")).build(app) else { return; };
+    let Ok(restart_item) = MenuItemBuilder::with_id("restart", t("Перезапустить остров", "Restart the island")).build(app) else { return; };
+    let Ok(quit_item) = MenuItemBuilder::with_id("quit", t("Выход", "Quit")).build(app) else { return; };
+    let Ok(menu) = MenuBuilder::new(app)
+        .item(&open_item)
+        .item(&settings_item)
+        .item(&updates_item)
+        .separator()
+        .item(&restart_item)
+        .item(&quit_item)
+        .build() else { return; };
+    let mut builder = TrayIconBuilder::with_id("woods-tray")
+        .tooltip("Woods Island")
+        .menu(&menu)
+        .show_menu_on_left_click(false);
+    if let Some(icon) = app.default_window_icon().cloned() {
+        builder = builder.icon(icon);
+    }
+    let click_state = state.clone();
+    let menu_state = state;
+    let _ = builder
+        .on_tray_icon_event(move |tray, event| {
+            if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+                restore_island_visible(tray.app_handle(), &click_state, true);
+            }
+        })
+        .on_menu_event(move |app, event| match event.id().as_ref() {
+            "open" => restore_island_visible(app, &menu_state, true),
+            "settings" => {
+                let app_handle = app.clone();
+                let st = menu_state.clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Ok(win) = tauri::async_runtime::spawn_blocking(move || ensure_aux_window(&app_handle, "settings")).await.unwrap_or_else(|e| Err(e.to_string())) {
+                        let _ = win.unminimize();
+                        let _ = win.show();
+                        let _ = win.set_focus();
+                    }
+                    let _ = st;
+                });
+            }
+            "updates" => {
+                *menu_state.settings_target.lock().unwrap() = Some("updates".into());
+                let app_handle = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Ok(win) = tauri::async_runtime::spawn_blocking(move || ensure_aux_window(&app_handle, "settings")).await.unwrap_or_else(|e| Err(e.to_string())) {
+                        let _ = win.unminimize();
+                        let _ = win.show();
+                        let _ = win.set_focus();
+                    }
+                });
+            }
+            "restart" => { let _ = restart_island(app.clone()); }
+            "quit" => { finalize_background(app); app.exit(0); }
+            _ => {}
+        })
+        .build(app);
+}
+
 fn finalize_background(app:&AppHandle){
+ watchdog::stop(app);
+ appbar::stop();
+ snow_surface::stop();
+ phone::shutdown();
  speech::cancel(app);
  match recorder::finalize_active(){Ok(Some(result))=>{let _=app.emit("record:done",result);},Ok(None)=>{},Err(error)=>{let _=app.emit("record:done",Value::Null);let _=app.emit("capture:error",error);}}
 }
@@ -996,17 +1177,43 @@ fn chime_try(sound:Option<String>)->bool{play_chime(sound.as_deref())}
 #[tauri::command]
 fn capture_start(mode:Option<String>,app:AppHandle,state:tauri::State<'_, Arc<AppState>>)->Result<bool,String>{let mode=mode.unwrap_or_else(||"area".into());let rect=capture::screen_rect();let mut visibility=capture::hide_main(&app);std::thread::sleep(std::time::Duration::from_millis(70));let image=capture::screenshot(rect)?;capture::set_frame(&image);if mode=="screen"{let settings=state.settings.lock().unwrap().clone();let result=capture::save(&image,&settings)?;capture::clear_frame();let _=clipboard::set_png(&capture::data_url(&image)?);let _=app.emit("capture:done",result);if let Some(main)=app.get_window("main"){let _=main.show();}return Ok(true);}let overlay=app.get_webview_window("overlay").ok_or("Capture overlay is unavailable")?;overlay.set_position(tauri::PhysicalPosition::new(rect.left,rect.top)).map_err(|e|e.to_string())?;overlay.set_size(tauri::PhysicalSize::new((rect.right-rect.left) as u32,(rect.bottom-rect.top) as u32)).map_err(|e|e.to_string())?;let frame=capture::data_url(&image)?;let _=app.emit_to("overlay","overlay:start",json!({"mode":mode,"frame":frame,"below":0}));overlay.show().map_err(|e|e.to_string())?;if !win::WindowManager::passive_qa(){overlay.set_focus().map_err(|e|e.to_string())?;}visibility.keep_hidden();Ok(true)}
 
-#[tauri::command]
-fn capture_cancel(app:AppHandle)->bool{capture::clear_frame();if let Some(w)=app.get_webview_window("overlay"){let _=w.hide();}if let Some(w)=app.get_window("main"){let _=w.show();}true}
+static OVERLAY_TOKEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+static OVERLAY_LEAVE: std::sync::Mutex<Option<(u64, std::sync::mpsc::Sender<()>)>> = std::sync::Mutex::new(None);
+
+fn hide_overlay_cleanly(app: &AppHandle) {
+    let Some(overlay) = app.get_webview_window("overlay") else { return; };
+    if overlay.is_visible().unwrap_or(false) {
+        let token = OVERLAY_TOKEN.fetch_add(1, Ordering::SeqCst);
+        let (tx, rx) = std::sync::mpsc::channel();
+        *OVERLAY_LEAVE.lock().unwrap() = Some((token, tx));
+        let _ = app.emit_to("overlay", "overlay:leave", token);
+        let _ = rx.recv_timeout(std::time::Duration::from_millis(140));
+        let mut guard = OVERLAY_LEAVE.lock().unwrap();
+        if guard.as_ref().is_some_and(|(id, _)| *id == token) { *guard = None; }
+    }
+    let _ = overlay.hide();
+}
 
 #[tauri::command]
-fn capture_region(x:Option<f64>,y:Option<f64>,w:Option<f64>,h:Option<f64>,mode:Option<String>,app:AppHandle,state:tauri::State<'_, Arc<AppState>>)->Result<bool,String>{let rect=capture::region(x.unwrap_or(0.),y.unwrap_or(0.),w.unwrap_or(1.),h.unwrap_or(1.))?;if let Some(overlay)=app.get_webview_window("overlay"){let _=overlay.hide();}std::thread::sleep(std::time::Duration::from_millis(70));let result:Result<Value,String>=(||{let image=capture::selected_image(rect)?;let settings=state.settings.lock().unwrap().clone();match mode.as_deref().unwrap_or("area"){"ocr"=>{let saved=capture::save(&image,&settings)?;let text=capture::ocr(std::path::Path::new(saved["path"].as_str().unwrap()))?;let _=clipboard::set_text(&text);Ok(json!({"kind":"ocr","text":text}))},"qr"=>{let text=capture::qr(&image)?;let url=reqwest::Url::parse(&text).ok().filter(|u|["http","https"].contains(&u.scheme())).map(|u|u.to_string());Ok(json!({"kind":"qr","text":text,"url":url}))},_=>{let saved=capture::save(&image,&settings)?;clipboard::set_png(&capture::data_url(&image)?)?;Ok(saved)}}})();capture::clear_frame();if let Some(main)=app.get_window("main"){let _=main.show();}match result{Ok(payload)=>{let _=app.emit("capture:done",payload);Ok(true)},Err(error)=>{let _=app.emit("capture:error",&error);Err(error)}}}
+async fn overlay_left(token: u64) -> bool {
+    let sender = {
+        let mut guard = OVERLAY_LEAVE.lock().unwrap();
+        if guard.as_ref().is_some_and(|(id, _)| *id == token) { guard.take().map(|(_, tx)| tx) } else { None }
+    };
+    if let Some(tx) = sender { let _ = tx.send(()); true } else { false }
+}
+
+#[tauri::command]
+fn capture_cancel(app:AppHandle)->bool{capture::clear_frame();hide_overlay_cleanly(&app);if let Some(w)=app.get_window("main"){let _=w.show();}true}
+
+#[tauri::command]
+fn capture_region(x:Option<f64>,y:Option<f64>,w:Option<f64>,h:Option<f64>,mode:Option<String>,app:AppHandle,state:tauri::State<'_, Arc<AppState>>)->Result<bool,String>{let rect=capture::region(x.unwrap_or(0.),y.unwrap_or(0.),w.unwrap_or(1.),h.unwrap_or(1.))?;hide_overlay_cleanly(&app);std::thread::sleep(std::time::Duration::from_millis(40));let result:Result<Value,String>=(||{let image=capture::selected_image(rect)?;let settings=state.settings.lock().unwrap().clone();match mode.as_deref().unwrap_or("area"){"ocr"=>{let saved=capture::save(&image,&settings)?;let text=capture::ocr(std::path::Path::new(saved["path"].as_str().unwrap()))?;let _=clipboard::set_text(&text);Ok(json!({"kind":"ocr","text":text}))},"qr"=>{let text=capture::qr(&image)?;let url=reqwest::Url::parse(&text).ok().filter(|u|["http","https"].contains(&u.scheme())).map(|u|u.to_string());Ok(json!({"kind":"qr","text":text,"url":url}))},_=>{let saved=capture::save(&image,&settings)?;clipboard::set_png(&capture::data_url(&image)?)?;Ok(saved)}}})();capture::clear_frame();if let Some(main)=app.get_window("main"){let _=main.show();}match result{Ok(payload)=>{let _=app.emit("capture:done",payload);Ok(true)},Err(error)=>{let _=app.emit("capture:error",&error);Err(error)}}}
 
 #[tauri::command]
 fn capture_region_drawn(x:Option<f64>,y:Option<f64>,w:Option<f64>,h:Option<f64>,drawing:Option<String>,app:AppHandle,state:tauri::State<'_, Arc<AppState>>)->Result<bool,String>{
  let Some(drawing)=drawing else{return capture_region(x,y,w,h,Some("area".into()),app,state);};
  use base64::Engine;let encoded=drawing.split_once(',').ok_or("Invalid annotation image")?.1;let bytes=base64::engine::general_purpose::STANDARD.decode(encoded).map_err(|e|e.to_string())?;let annotated=image::load_from_memory(&bytes).map_err(|e|e.to_string())?.into_rgba8();
- let rect=capture::region(x.unwrap_or(0.),y.unwrap_or(0.),w.unwrap_or(1.),h.unwrap_or(1.))?;if let Some(overlay)=app.get_webview_window("overlay"){let _=overlay.hide();}std::thread::sleep(std::time::Duration::from_millis(70));
+ let rect=capture::region(x.unwrap_or(0.),y.unwrap_or(0.),w.unwrap_or(1.),h.unwrap_or(1.))?;hide_overlay_cleanly(&app);std::thread::sleep(std::time::Duration::from_millis(40));
  let mut image=capture::selected_image(rect)?;capture::clear_frame();let drawing=image::imageops::resize(&annotated,image.width(),image.height(),image::imageops::FilterType::Lanczos3);image::imageops::overlay(&mut image,&drawing,0,0);
  let settings=state.settings.lock().unwrap().clone();let result=capture::save(&image,&settings)?;clipboard::set_png(&capture::data_url(&image)?)?;let _=app.emit("capture:done",result);if let Some(main)=app.get_window("main"){let _=main.show();}Ok(true)
 }
@@ -1084,6 +1291,9 @@ async fn notifications_access()->Result<String,String>{tauri::async_runtime::spa
 
 #[tauri::command]
 async fn notifications_request()->Result<String,String>{tauri::async_runtime::spawn_blocking(notifications::request).await.map_err(|e|e.to_string())?}
+
+#[tauri::command]
+async fn notifications_icon(aumid:String)->Result<Option<String>,String>{tauri::async_runtime::spawn_blocking(move||notifications::icon(&aumid)).await.map_err(|error|error.to_string())}
 
 #[tauri::command]
 async fn palette_apps()->Vec<Value>{tauri::async_runtime::spawn_blocking(system::apps).await.unwrap_or_default()}
@@ -1250,6 +1460,7 @@ fn handle_hotkey(app:&AppHandle,key:&str){let state=app.state::<Arc<AppState>>()
  "hotkeyPlainPaste"=>{if let Some(text)=clip_current_text(){let _=clipboard::paste_to_focused_window(&text);}},"hotkeyMic"=>{let _=audio::toggle_mute(true);},"hotkeyThrough"=>{let _=through_toggle(app.clone(),state);},"hotkeyTheme"=>{let mut settings=state.settings.lock().unwrap();let next=if settings["theme"]==json!("dark"){"light"}else{"dark"};settings["theme"]=json!(next);let _=storage::save_json_file("settings.json",&settings);let _=app.emit("settings:changed",settings.clone());},
  "hotkeyMediaPill"=>{let mut settings=state.settings.lock().unwrap();let kinds=["normal","title","player","lyrics"];let current=settings["mediaPill"].as_str().unwrap_or("normal");let next=kinds[(kinds.iter().position(|s|*s==current).unwrap_or(0)+1)%kinds.len()];settings["mediaPill"]=json!(next);let _=storage::save_json_file("settings.json",&settings);let _=app.emit("settings:changed",settings.clone());},
  "hotkeyDictate"=>{let _=speech::toggle(app.clone(),state.settings.lock().unwrap().clone(),None);},
+ "hotkeyVoiceCommand"=>{if let Err(error)=speech::toggle(app.clone(),state.settings.lock().unwrap().clone(),Some("command".into())){let _=app.emit("dictation:error",error);}},
  "hotkeyVpn"=>{let app=app.clone();tauri::async_runtime::spawn(async move{let _=vpn_toggle_now(app).await;});},
  "hotkeyWebAi"=>{let _=webai::open(app,None);},
  _=>{let _=app.emit("island:warn","This shortcut integration is unavailable");}}}
@@ -1355,6 +1566,7 @@ pub fn run() {
     audio::configure(&loaded_settings);
     media::configure(&loaded_settings);
     network::configure_vpn(&loaded_settings);
+    agents::configure(loaded_settings["agentsAsk"]!=false);
     if loaded_settings["gpuAcceleration"]==false {
         let arguments=std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").unwrap_or_default();
         std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", format!("{arguments} --disable-gpu"));
@@ -1363,7 +1575,7 @@ pub fn run() {
     let loaded_controls = std::thread::spawn(system::controls).join()
         .unwrap_or_else(|_| json!({"wifi":null,"bluetooth":null,"dark":null,"ethernet":null,"vpns":[]}));
 
-    let loaded_launcher_groups = storage::load_string_file("launcher_groups.json", "{}");
+    let loaded_launcher_groups = storage::load_string_file("launcher_groups.json", "[]");
     let loaded_launcher_hotkeys = storage::load_string_file("launcher_hotkeys.json", "{}");
     let loaded_timer = storage::load_string_file("timer.json", "");
     let loaded_reminders = storage::load_string_file("reminders.json", "[]");
@@ -1375,6 +1587,8 @@ pub fn run() {
     let state = Arc::new(AppState {
         is_expanded: AtomicBool::new(false),
         is_tall: AtomicBool::new(false),
+        is_tucked: AtomicBool::new(false),
+        is_hidden: AtomicBool::new(false),
         click_through: AtomicBool::new(false),
         clipboard_store,
         settings: std::sync::Mutex::new(loaded_settings),
@@ -1410,6 +1624,7 @@ pub fn run() {
         .manage(state)
         .setup(move |app| {
             app_log("setup hook executing");
+            phone::initialize(app.handle().clone(),state_clone.clone());
             let surface_app=app.handle().clone();
             app.listen("settings:changed",move |_|{let app=surface_app.clone();tauri::async_runtime::spawn_blocking(move||webai::refresh_surfaces(&app));});
             if let Some(window) = app.get_window("main") {
@@ -1430,6 +1645,10 @@ pub fn run() {
                     app_log("setup_island_window completed");
                     window.set_content_protected(!state_clone.settings.lock().unwrap()["captureVisible"].as_bool().unwrap_or(false))?;
                     apply_island_geometry(app.handle(), &state_clone).map_err(std::io::Error::other)?;
+                    watchdog::start(app.handle().clone(), hwnd_val);
+                    snow_surface::start(app.handle().clone(),state_clone.clone());
+                    appbar::start(app.handle().clone(),state_clone.clone(),apply_island_geometry);
+                    setup_tray(app.handle(), state_clone.clone());
                 }
             }
             for win_label in ["overlay"] {
@@ -1466,6 +1685,11 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             window_diagnostics,
+            page_pong,
+            watchdog_status,
+            snow_state,
+            notch_pill,
+            notch_state,
             bootstrap,
             pets_catalog, pets_import_codex, pets_asset,
             report_page_scale,
@@ -1490,6 +1714,7 @@ pub fn run() {
             runs_as_admin,
             news_told,
             news_get,
+            whatsnew_clip,
             license_status,
             license_activate,
             license_remove,
@@ -1501,6 +1726,15 @@ pub fn run() {
             shelf_add,
             shelf_remove,
             shelf_clear,
+            phone_start,
+            phone_state,
+            phone_stop,
+            phone_renew,
+            phone_allow,
+            phone_deny,
+            phone_send,
+            phone_unsend,
+            phone_firewall,
             launcher_list,
             launcher_add,
             launcher_add_link,
@@ -1564,6 +1798,7 @@ pub fn run() {
             island_tall,
             set_island_hidden,
             fullscreen,
+            fullscreen_hide_toggle,
             hotkeys_check,
             hotkeys_recording,
             open_settings,
@@ -1600,6 +1835,7 @@ pub fn run() {
             chime_try,
             capture_start,
             capture_cancel,
+            overlay_left,
             capture_region,
             capture_region_drawn,
             prtsc_taken,
@@ -1620,6 +1856,7 @@ pub fn run() {
             attachments_prune,
             notifications_access,
             notifications_request,
+            notifications_icon,
             palette_apps,
             installed_browsers,
             open_programs,
@@ -1660,9 +1897,12 @@ pub fn run() {
                 app_log(&format!("RunEvent::ExitRequested with code {:?}", code));
                 if code.is_none() { api.prevent_exit(); } else { finalize_background(_app); }
             }
-            _ => {
-                app_log(&format!("RunEvent: {:?}", event));
+            tauri::RunEvent::MainEventsCleared => {}
+            tauri::RunEvent::TrayIconEvent(tauri::tray::TrayIconEvent::Move { .. }) => {}
+            tauri::RunEvent::Exit => {
+                app_log("RunEvent: Exit");
             }
+            _ => {}
         }
     });
 }

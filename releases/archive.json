@@ -1,0 +1,26 @@
+[
+  {
+    "version": "1.1.1",
+    "summary": { "ru": "Установщик Windows и маскот Woods Island", "en": "Windows installer and Woods Island mascot" },
+    "notes": {
+      "ru": ["Установщик Windows с автоматической подготовкой WebView2 и FFmpeg.", "Новый маскот Woods Island и системные иконки.", "Публичные установщик, portable-архив и контрольные суммы."],
+      "en": ["Windows installer with WebView2 setup and bundled FFmpeg.", "New Woods Island mascot and app icons.", "Public installer, portable archive and checksums."]
+    }
+  },
+  {
+    "version": "1.1.0",
+    "summary": { "ru": "Авторские питомцы и анимации", "en": "Original pets and animations" },
+    "notes": {
+      "ru": ["11 одобренных авторских bitmap-питомцев, включая рыжего котёнка Искорку.", "Слежение за курсором, анимации настроений и автоматическое моргание.", "Девять питомцев Codex доступны через локальный импорт установленного приложения.", "Настройки доступности, музыка и сон; версия и заметки о выпуске обновлены."],
+      "en": ["11 approved original bitmap pets, including Iskorka the ginger kitten.", "Cursor gaze, mood animations and automatic blinking.", "Nine Codex pets are available through a local import from the installed app.", "Availability controls, music and sleep; updated version and release notes."]
+    }
+  },
+  {
+    "version": "1.0.0",
+    "summary": { "ru": "Первая версия Woods Island", "en": "The first Woods Island release" },
+    "notes": {
+      "ru": ["Бесплатные функции без ключа и подписки.", "Музыка, заметки и экспорт в Obsidian, OBS и ИИ-агенты.", "Исправления масштаба и прозрачности острова."],
+      "en": ["Free features without a key or subscription.", "Music, notes and Obsidian export, OBS and AI agents.", "Island scale and transparency fixes."]
+    }
+  }
+]

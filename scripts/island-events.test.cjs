@@ -97,6 +97,18 @@ function mediaFixture() {
   });
   return { state, controller, colors, ...time };
 }
+test('Phone pairing keeps its approval visible and rechecks a scheduled collapse; Escape still closes it', () => {
+  const f = interactionFixture();
+  Object.assign(f.state, {expanded:true,tab:'shelf',enteredSinceOpen:true,hovered:true});
+  f.controller.hover(false);
+  f.state.phoneWaiting=true;
+  f.advance(1000);
+  f.controller.outsideClick();
+  assert.equal(f.state.expanded,true,'A pending collapse and an outside click must retain the QR/approval panel');
+  f.controller.escape();assert.equal(f.state.expanded,false);
+  Object.assign(f.state,{expanded:true,phoneWaiting:false});
+  f.controller.hover(false);f.advance(350);assert.equal(f.state.expanded,false,'Ending pairing restores ordinary collapse behavior');
+});
 const track = (key, playing = true) => ({ key, playing, title: key });
 const flush = () => new Promise(resolve => setImmediate(resolve));
 

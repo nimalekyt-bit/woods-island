@@ -1,9 +1,12 @@
 import { webChatProviders } from '../web-ai/providers';
+import { freeLicense } from '../free';
 import { MediaVisibilitySettings } from '../media/MediaSources';
 import { ObsidianVaultSettings } from '../components/ObsidianVaultSettings';
 import { PeripheralSettings } from '../peripherals/PeripheralSettings';
 import { React as WoodsReact } from '../react';
 import { ConnectionSettings, UpdateSettings, UploadKeySettings } from '../components/ReliabilitySettings';
+import { AboutSettings, AboutContact, ReleaseHistory } from '../components/AboutSettings';
+import { HolidaysSettings } from '../holidays/HolidaysSettings';
 import { WeatherTimezoneSettings, WeatherDataSources } from '../components/WeatherTimezoneSettings';
 import { WeatherPlaces } from '../weather/WeatherPlaces';
 import { placePatch } from '../weather/places';
@@ -16,7 +19,7 @@ import { usePetLibrary } from '../characters/pet-library';
 const WoodsSettingLabel = WoodsReact.createContext('');
 const WoodsShortcutBindings = WoodsReact.createContext([]);
 // Compatibility application source; migrate components incrementally.
-import { woodsAbout, woodsContact, woodsInfoIcon } from "./../components/woods-extensions.js";
+import { woodsInfoIcon } from "./../components/woods-extensions.js";
 
 import {
   B as e,
@@ -179,62 +182,7 @@ var L = `Woods Island 1.1.0`,
   ze = `Woods Island 1.1.0`,
   Be = `Woods Island 1.1.0`,
   Ve = `Woods Island 1.1.0`,
-  z = `Woods Island 1.1.0`,
-  He = `https://github.com/nimalekyt-bit`,
-  Ue = {
-    "../../release-notes/1.2.0.md": `Woods Island 1.2.0
-
-- Проверенные обновления с прогрессом загрузки и установкой по кнопке.
-- Знакомство с островом, готовность подключений и сведения для отчёта об ошибке.
-- Восстановление локальных данных, приватность буфера и защищённый ключ загрузки изображений.
-- Доступные переключатели, уменьшение движения и часовые пояса IANA.
-
----
-
-- Verified updates with download progress and installation when you choose it.
-- Quick introduction, connection readiness and safe details for bug reports.
-- Local data recovery, clipboard privacy and protected image-upload keys.
-- Accessible switches, reduced motion and IANA weather time zones.
-`,
-    "../../release-notes/1.1.1.md": `Woods Island 1.1.1
-
-- Установщик Windows с автоматической подготовкой WebView2 и FFmpeg.
-- Новый маскот Woods Island и системные иконки.
-- Публичные установщик, portable-архив и контрольные суммы.
-
----
-
-- Windows installer with WebView2 setup and bundled FFmpeg.
-- New Woods Island mascot and app icons.
-- Public installer, portable archive and checksums.
-`,
-    "../../release-notes/1.1.0.md": `Woods Island 1.1.0
-
-- 11 одобренных авторских bitmap-питомцев, включая рыжего котёнка Искорку.
-- Слежение за курсором, анимации настроений и автоматическое моргание.
-- Девять питомцев Codex доступны через локальный импорт установленного приложения.
-- Настройки доступности, музыка и сон; версия и заметки о выпуске обновлены.
-
----
-
-- 11 approved original bitmap pets, including Iskorka the ginger kitten.
-- Cursor gaze, mood animations and automatic blinking.
-- Nine Codex pets are available through a local import from the installed app.
-- Availability controls, music and sleep; updated version and release notes.
-`,
-    "../../release-notes/1.0.0.md": `Woods Island 1.0.0
-
-- Бесплатные функции без ключа и подписки.
-- Музыка, заметки и экспорт в Obsidian, OBS и ИИ-агенты.
-- Исправления масштаба и прозрачности острова.
-
----
-
-- Free features without a key or subscription.
-- Music, notes and Obsidian export, OBS and AI agents.
-- Island scale and transparency fixes.
-`,
-  };
+  z = `Woods Island 1.1.0`;
 function B(e) {
   let t = e
     .trim()
@@ -246,30 +194,6 @@ function V(e, t) {
   let [n, r] = [B(e), B(t)];
   for (let e = 0; e < 3; e++) if (n[e] !== r[e]) return n[e] > r[e];
   return !1;
-}
-function We(e, t) {
-  let [n, r] = e
-    .replace(
-      /\r\n/g,
-      `
-`,
-    )
-    .split(/\n---\n/);
-  return (t === `en` && r?.trim() ? r : n)
-    .split(
-      `
-`,
-    )
-    .map((e) => e.trim())
-    .filter((e) => e.startsWith(`- `))
-    .map((e) => e.slice(2).trim());
-}
-function Ge(t, n = 3, r = e()) {
-  return Object.entries(Ue)
-    .map(([e, t]) => ({ version: e.replace(/^.*\/|\.md$/g, ``), lines: We(t, r) }))
-    .filter((e) => e.lines.length > 0 && (!t || !V(e.version, t)))
-    .sort((e, t) => (V(e.version, t.version) ? -1 : 1))
-    .slice(0, n);
 }
 var Ke = `1.2.4`;
 function H(e, t, n = Date.now()) {
@@ -431,6 +355,7 @@ var U = o(),
     { id: `characters`, label: n(`Персонажи`, `Characters`) },
     { id: `creatures`, label: n(`Существа`, `Creatures`) },
     { id: `things`, label: n(`Вещи`, `Things`) },
+    { id: `holiday`, label: n(`Праздничные персонажи`, `Holiday characters`) },
     { id: `codex`, label: n(`Локальные питомцы Codex`, `Local Codex pets`) },
   ];
 function tt({ c: e, mood: t }) {
@@ -492,7 +417,7 @@ function nt({ value: e, onChange: t, pro: r, onLocked: i }) {
                   .filter((e) => e.group === n.id)
                   .map((n) => {
                     let o = e === n.id,
-                      s = !r && !Ce(n.id),
+                      s = !1,
                       unavailable = n.bitmap?.source === 'codex' && !petLibrary.pets.some(pet => pet.id === n.bitmap.file && pet.available),
                       { name: c, desc: l } = re(n);
                     return (0, U.jsxs)(
@@ -845,7 +770,7 @@ function pt({ children: e }) {
     children: e,
   });
 }
-function K({ id: e, title: t, stage: n, children: r }) {
+function K({ id: e, title: t, stage: n, children: r, plain = false }) {
   let { page: i } = (0, F.useContext)(G);
   return (0, U.jsxs)(`section`, {
     id: e,
@@ -854,7 +779,7 @@ function K({ id: e, title: t, stage: n, children: r }) {
     children: [
       (0, U.jsx)(pt, { children: t }),
       (!e || e === i) && n,
-      (0, U.jsx)(`div`, {
+      plain ? r : (0, U.jsx)(`div`, {
         className: `divide-y divide-white/[0.06] overflow-hidden rounded-2xl bg-white/[0.045]`,
         children: r,
       }),
@@ -1126,6 +1051,7 @@ var xt = () => [
   { id: `connections`, label: n(`Подключения`, `Connections`), icon: ke },
   { id: `pro`, label: n(`О приложении`, `About`), icon: WoodsInfo },
   { id: `character`, label: n(`Персонаж`, `Character`), icon: j, gap: !0 },
+  { id: `holidays`, label: n(`Праздники`, `Holidays`), icon: j },
   { id: `general`, label: n(`Общее`, `General`), icon: m },
   { id: `hotkeys`, label: n(`Клавиши`, `Hotkeys`), icon: f },
   { id: `ai`, label: n(`ИИ`, `AI`), icon: de },
@@ -1534,10 +1460,18 @@ function kt({ pro: e }) {
       u(`codex`, `Codex`, t?.codex),
       u(`opencode`, `opencode`, t?.opencode),
       (0, U.jsx)(`div`, {
+        "data-codex-hook-trust": !0,
+        className: `text-[11.5px] leading-snug text-white/45`,
+        children: n(
+          `Новые хуки Codex нужно одобрить: в приложении — Review hooks у поля ввода или Настройки → Hooks; в терминале — /hooks.`,
+          `Approve new Codex hooks: Review hooks beside the input or Settings → Hooks in the app; /hooks in the terminal.`,
+        ),
+      }),
+      (0, U.jsx)(`div`, {
         className: `text-[11.5px] leading-snug text-white/40`,
         children: n(
-          `Остров дописывает себя в настройки агента (у Claude Code — хуки в ~/.claude/settings.json, у Codex — notify в ~/.codex/config.toml), копия файла остаётся рядом. У opencode — свой плагин island.js в ~/.config/opencode/plugins. Действует для новых сессий.`,
-          `The island adds itself to the agent's settings (Claude Code's hooks in ~/.claude/settings.json, Codex's notify in ~/.codex/config.toml), and a copy of the file is kept beside it. For opencode, a plugin of its own, island.js in ~/.config/opencode/plugins. Works for new sessions.`,
+          `Woods Island добавляет хуки в ~/.claude/settings.json и ~/.codex/hooks.json. Другие хуки и программа notify сохраняются. У opencode — наш плагин woods-island.js в ~/.config/opencode/plugins. Копии изменённых файлов сохраняются рядом. Действует для новых сессий.`,
+          `Woods Island adds hooks to ~/.claude/settings.json and ~/.codex/hooks.json. Other hooks and the notify program are preserved. For opencode, our woods-island.js plugin lives in ~/.config/opencode/plugins. Backups stay beside the changed files. Applies to new sessions.`,
         ),
       }),
       !e &&
@@ -1849,7 +1783,7 @@ function Pt({ service: e, save: i }) {
   });
 }
 function Ft() {
-  return woodsContact(U, n, r.openPath);
+  return (0, U.jsx)(AboutContact, {});
 }
 function It({ onProblems: e }) {
   let [t, i] = (0, F.useState)(null),
@@ -1918,53 +1852,11 @@ function It({ onProblems: e }) {
     ],
   });
 }
-function Lt({ version: e }) {
-  let t = Ge(e, 3);
-  return t.length === 0
-    ? null
-    : (0, U.jsxs)(`div`, {
-        "data-whats-new": !0,
-        className: `flex flex-col gap-2.5 px-4 py-3`,
-        children: [
-          (0, U.jsx)(`div`, { className: `text-[13.5px]`, children: n(`Что нового`, `What's new`) }),
-          t.map((e, t) =>
-            (0, U.jsxs)(
-              `details`,
-              {
-                "data-release": e.version,
-                open: t === 0,
-                className: `group`,
-                children: [
-                  (0, U.jsxs)(`summary`, {
-                    className: `flex cursor-pointer list-none items-center gap-1.5 text-[12.5px] text-white/70 hover:text-white [&::-webkit-details-marker]:hidden`,
-                    children: [
-                      (0, U.jsx)(`span`, {
-                        className: `inline-block w-2 text-white/35 transition-transform group-open:rotate-90`,
-                        children: `›`,
-                      }),
-                      n(`Версия ${e.version}`, `Version ${e.version}`),
-                    ],
-                  }),
-                  (0, U.jsx)(`ul`, {
-                    className: `mt-1.5 flex list-disc flex-col gap-1 pl-7 text-[12.5px] leading-snug text-white/60 marker:text-white/25`,
-                    children: e.lines.map((e) => (0, U.jsx)(`li`, { children: e }, e)),
-                  }),
-                ],
-              },
-              e.version,
-            ),
-          ),
-          (0, U.jsx)(`button`, {
-            "data-releases-open": !0,
-            onClick: () => void r.openPath(He),
-            className: `self-start text-[12.5px] text-[#a9b8ff] underline-offset-2 hover:underline`,
-            children: n(`Автор проекта на GitHub`, `Project author on GitHub`),
-          }),
-        ],
-      });
+function Lt({ version }) {
+  return (0, U.jsx)(ReleaseHistory, { version });
 }
-function Rt() {
-  return woodsAbout(U, n);
+function Rt({ version, onUpdates }) {
+  return (0, U.jsx)(AboutSettings, { version, onUpdates });
 }
 // The language provider remounts its children. Keep navigation within this
 // window; a newly created settings webview still honors its requested target.
@@ -1984,7 +1876,7 @@ function zt() {
     return () => void e.then((e) => e());
   }, []);
   let [o, c] = (0, F.useState)(null),
-    [l, u] = (0, F.useState)(null),
+    [l, u] = (0, F.useState)(freeLicense),
     [d, f] = (0, F.useState)([]),
     [m, h] = (0, F.useState)(``),
     [g, ee] = (0, F.useState)(``),
@@ -2096,16 +1988,15 @@ function zt() {
               .catch(() => {}));
       }),
         r.hotkeysCheck().then(f),
-        Me().then(de),
+        Me().then(de).catch(() => de(``)),
         r.aiKeyStatus().then(me),
         r.sttKeyStatus().then(A),
-        r.licenseStatus().then(u),
         r
           .newsGet()
           .then(je)
           .catch(() => je(null)));
       let e = (e) => e && ((targetRequested.current = true), He((t) => ({ id: e, n: (t?.n ?? 0) + 1 })));
-      let n = s(`license:changed`, u),
+      let n = s(`license:changed`, () => u(freeLicense)),
         a = s(`settings:goto`, e);
       return () => {
         (n.then((e) => e()), a.then((e) => e()));
@@ -2223,7 +2114,7 @@ function zt() {
                   (0, U.jsxs)(`div`, {
                     hidden: y !== `pro`,
                     className: `flex flex-col gap-4`,
-                    children: [(0, U.jsx)(Rt, { license: l, onChange: u }), (0, U.jsx)(Ft, {})],
+                    children: [(0, U.jsx)(Rt, { version: x, onUpdates: () => b(`updates`) }), (0, U.jsx)(Ft, {})],
                   }),
                   y === `character` &&
                     (0, U.jsxs)(`section`, {
@@ -2261,7 +2152,7 @@ function zt() {
                                         {
                                           value: e.id,
                                           disabled: e.bitmap?.source === 'codex' && !petLibrary.pets.some(pet => pet.id === e.bitmap.file && pet.available),
-                                          children: [re(e).name, !l.pro && !Ce(e.id) ? ` · Pro` : ``],
+                                          children: re(e).name,
                                         },
                                         e.id,
                                       ),
@@ -2311,6 +2202,10 @@ function zt() {
                         }),
                       ],
                     }),
+                  y === `holidays` && (0, U.jsx)(K, {
+                    id: `holidays`, title: n(`Праздники`, `Holidays`), plain: true,
+                    children: (0, U.jsx)(HolidaysSettings, { settings: e, save: H, Row: J, Toggle: Y, Choice: X, Slider: Q }),
+                  }),
                   (0, U.jsxs)(K, {
                     id: `general`,
                     title: n(`Общее`, `General`),
@@ -2428,6 +2323,16 @@ function zt() {
                         ),
                         children: (0, U.jsx)(Y, { value: e.autoHide, onChange: (e) => H({ autoHide: e }) }),
                       }),
+                      e.autoHide &&
+                        e.notchBar === !0 &&
+                        (0, U.jsx)(`p`, {
+                          "data-notch-autohide": !0,
+                          className: `px-4 pb-3 text-[12px] leading-snug text-white/45`,
+                          children: n(
+                            `Пока включён режим выреза, остров не прячется: место под ним и так оставлено`,
+                            `While the notch mode is on the island does not hide: the room under it is kept anyway`,
+                          ),
+                        }),
                       (0, U.jsx)(J, {
                         since: `1.2.5`,
                         title: n(`Не прятать на рабочем столе`, `Stay in sight on the desktop`),
@@ -2624,6 +2529,36 @@ function zt() {
                           onChange: (e) => H({ underTaskbar: e }),
                         }),
                       }),
+                      (0, U.jsx)(J, {
+                        since: `1.2.11`,
+                        title: n(`Режим выреза, как на MacBook`, `Notch mode, like on a MacBook`),
+                        hint: n(
+                          `Полоса во всю ширину верха экрана высотой с пилюлю остаётся за островом, как место панели задач: развёрнутые окна начинаются под ней, и остров не закрывает вкладки и кнопки`,
+                          `A strip across the top of the screen, as tall as the pill, is kept for the island as the taskbar's room is: maximized windows begin under it, and the island covers no tabs or buttons`,
+                        ),
+                        children: (0, U.jsx)(Y, {
+                          value: e.notchBar === !0,
+                          onChange: (e) => H({ notchBar: e }),
+                        }),
+                      }),
+                      e.notchBar === !0 &&
+                        (0, U.jsx)(J, {
+                          since: `1.2.11`,
+                          title: n(`Полоса выреза`, `The notch strip`),
+                          hint: n(
+                            `Чёрная сливается с островом, стекло размывает то, что за ней, а с обоями полосы не видно`,
+                            `Black melts into the island, glass blurs what is behind it, and with the wallpaper the strip is not seen`,
+                          ),
+                          children: (0, U.jsx)(X, {
+                            value: e.notchLook || `black`,
+                            onChange: (e) => H({ notchLook: e }),
+                            options: [
+                              { value: `black`, label: n(`Чёрная`, `Black`) },
+                              { value: `glass`, label: n(`Стекло`, `Glass`) },
+                              { value: `wallpaper`, label: n(`Обои`, `Wallpaper`) },
+                            ],
+                          }),
+                        }),
                       (0, U.jsx)(J, {
                         since: `1.2.5`,
                         preview: `through`,
@@ -2865,6 +2800,17 @@ function zt() {
                         }),
                       }),
                       (0, U.jsx)(J, {
+                        title: n(`Голосовая команда`, `Voice command`),
+                        hint: n(
+                          `Нажми, скажи «открой Telegram» или «таймер 10 минут», нажми ещё раз: Woods Island найдёт и выполнит команду. Используется выбранный сервис «Голоса в текст».`,
+                          `Press, say “open Telegram” or “timer 10 minutes”, press again: Woods Island finds and runs the command. Uses your selected Voice to text service.`,
+                        ),
+                        children: (0, U.jsx)($, {
+                          value: e.hotkeyVoiceCommand ?? ``,
+                          onChange: (value) => H({ hotkeyVoiceCommand: value }),
+                        }),
+                      }),
+                      (0, U.jsx)(J, {
                         title: n(`Запись экрана: начать / остановить`, `Screen recording: start / stop`),
                         children: (0, U.jsx)($, {
                           value: e.hotkeyRecord,
@@ -2987,6 +2933,7 @@ function zt() {
                           e.hotkeyPalette,
                           e.hotkeyChat,
                           e.hotkeyDictate,
+                          e.hotkeyVoiceCommand,
                           e.hotkeyRecord,
                           e.hotkeyArea,
                           e.hotkeyScreen,
@@ -3473,6 +3420,17 @@ function zt() {
                         onSave: (e) => H({ downloadsIgnore: e }),
                       }),
                       (0, U.jsx)(J, {
+                        title: n(`Торрент-загрузки`, `Torrent downloads`),
+                        hint: n(
+                          `Показывать файлы, которые загружают qBittorrent, µTorrent, Transmission и другие торрент-клиенты. По умолчанию они скрыты, чтобы сотни файлов не заполняли остров.`,
+                          `Show files downloaded by qBittorrent, µTorrent, Transmission and other torrent clients. Hidden by default so hundreds of files do not fill the island.`,
+                        ),
+                        children: (0, U.jsx)(Y, {
+                          value: e.downloadsTorrents === !0,
+                          onChange: (e) => H({ downloadsTorrents: e }),
+                        }),
+                      }),
+                      (0, U.jsx)(J, {
                         since: `1.2.6`,
                         title: n(`OBS: запись и трансляция`, `OBS: recording and streaming`),
                         hint: n(
@@ -3575,8 +3533,8 @@ function zt() {
                           pro: !0,
                           title: n(`Отвечать Claude Code с острова`, `Answer Claude Code from the island`),
                           hint: n(
-                            `Разрешение на команду или правку файла и вопрос с вариантами приходят карточкой: разрешить, запретить или выбрать ответ. Две минуты без ответа — и Claude спросит в терминале, как обычно`,
-                            `A permission for a command or an edit and a question with choices come as a card: allow, deny or pick an answer. Two minutes without an answer, and Claude asks in its terminal as usual`,
+                            `Команды, правки и вопросы Claude Code или Codex приходят карточкой: разрешить, запретить или выбрать ответ. Если ответа нет, агент вернётся к своему обычному запросу в терминале`,
+                            `Commands, edits and questions from Claude Code or Codex arrive as a card: allow, deny or choose. If there is no answer, the agent falls back to its usual terminal prompt`,
                           ),
                           children: (0, U.jsx)(Y, {
                             value: e.agentsAsk !== !1,

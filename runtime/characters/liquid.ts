@@ -4,6 +4,8 @@ import { advanceLiquidWave, createEnvelope, gaussian, liquidBottomAt, LIQUID_POI
 
 export interface LiquidOptions {
   mood: CharacterMood; accent?: string | null; ears: boolean; round: boolean; rain: boolean; scaled: boolean;
+  /** False retains the historical sampled-corner geometry for reference fixtures. */
+  smoothCorners?: boolean;
 }
 export interface LiquidAudio {
   level: number; bands: readonly number[]; bandsAt: number; liquidSpectrum: boolean;
@@ -64,7 +66,8 @@ export function mountLiquidIsland(svg: SVGSVGElement, ports: LiquidPorts, initia
   let spectrumBlend = 0;
   const radius = () => Math.min(height / 2, height > 60 ? 32 : 26);
   const bottomAt = (x: number) => liquidBottomAt(x, width, height);
-  const xAt = (index: number) => -width / 2 + index / 89 * width;
+  const smoothCorners = () => ports.options().smoothCorners !== false;
+  const xAt = (index: number) => smoothCorners() ? -width / 2 + radius() + index / 89 * (width - 2 * radius()) : -width / 2 + index / 89 * width;
   const taperAt = (index: number) => Math.sin(Math.PI * index / 89) ** 0.7;
   const impulse = (x: number, strength: number, spread: number) => {
     for (let index = 0; index < LIQUID_POINTS; index++) velocity[index] += strength * gaussian((xAt(index) - x) / spread) * taperAt(index);
@@ -99,7 +102,10 @@ export function mountLiquidIsland(svg: SVGSVGElement, ports: LiquidPorts, initia
     center /= count;
     if (upward > 5) {
       const path = smoothLiquidPath(points.map(([x, y]): LiquidPoint => [x + halfWidth, y]).reverse());
-      clip.style.clipPath = `path("M0,0 H${(2 * halfWidth).toFixed(1)} L${(2 * halfWidth).toFixed(1)},${sideHeight.toFixed(1)} L${path} L0,${sideHeight.toFixed(1)} Z")`;
+      const r = radius();
+      clip.style.clipPath = smoothCorners()
+        ? `path("M0,0 H${(2 * halfWidth).toFixed(1)} L${(2 * halfWidth).toFixed(1)},${sideHeight.toFixed(1)} A${r.toFixed(1)},${r.toFixed(1)} 0 0 1 ${(2 * halfWidth - r).toFixed(1)},${height.toFixed(1)} L${path} A${r.toFixed(1)},${r.toFixed(1)} 0 0 1 0,${sideHeight.toFixed(1)} Z")`
+        : `path("M0,0 H${(2 * halfWidth).toFixed(1)} L${(2 * halfWidth).toFixed(1)},${sideHeight.toFixed(1)} L${path} L0,${sideHeight.toFixed(1)} Z")`;
       clipApplied = true;
     } else if (clipApplied) { clip.style.clipPath = ''; clipApplied = false; }
     if (!squash) return;
@@ -121,8 +127,9 @@ export function mountLiquidIsland(svg: SVGSVGElement, ports: LiquidPorts, initia
       + (top < 0 ? ' V0' : '')
       + (ears > 0 ? ` A${format(ears)},${format(ears)} 0 0 0 ${format(halfWidth)},${format(ears)}` : '')
       + (round > 0 ? ` A${format(round)},${format(round)} 0 0 1 ${format(halfWidth)},${format(round)}` : '')
-      + ` L${format(halfWidth)},${format(sideHeight)} L${smoothLiquidPath(points.slice().reverse())}`
-      + ` L${format(-halfWidth)},${format(sideHeight)}`
+      + (smoothCorners()
+        ? ` L${format(halfWidth)},${format(sideHeight)} A${format(curveRadius)},${format(curveRadius)} 0 0 1 ${format(halfWidth - curveRadius)},${format(height)} L${smoothLiquidPath(points.slice().reverse())} A${format(curveRadius)},${format(curveRadius)} 0 0 1 ${format(-halfWidth)},${format(sideHeight)}`
+        : ` L${format(halfWidth)},${format(sideHeight)} L${smoothLiquidPath(points.slice().reverse())} L${format(-halfWidth)},${format(sideHeight)}`)
       + (ears > 0 ? ` L${format(-halfWidth)},${format(ears)} A${format(ears)},${format(ears)} 0 0 0 ${format(-halfWidth - ears)},0` : '')
       + (round > 0 ? ` L${format(-halfWidth)},${format(round)} A${format(round)},${format(round)} 0 0 1 ${format(-halfWidth + round)},0` : '') + ' Z');
     rim.setAttribute('d', 'M' + smoothLiquidPath(points.slice(4, 86).map(([x, y]): LiquidPoint => [x, y - 2.2])));

@@ -57,9 +57,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node --test scripts/shortcuts.test.cjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --test scripts/reminders-calendar.test.cjs scripts/reminder-parser.test.cjs scripts/voice-command.test.cjs scripts/release-history.test.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node --test scripts/peripherals.test.cjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node scripts/verify-reliability-ui.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/verify-reminders-ui.cjs
       - name: Verify Web AI first paint and recovery
         run: node scripts/verify-web-ai-ui.cjs
       - name: Install verified Rust toolchain
@@ -76,7 +80,7 @@ jobs:
       - name: Verify native feature integration and bundled runtime
         shell: pwsh
         env:
-          WOODS_TEST_FILTER: 'Bundled runtime|Settings merge|Weather cities|AI proxy keeps|Open application|ChatGPT is|Hidden media|AI models|No unhandled|Explicit quit'
+          WOODS_TEST_FILTER: 'Bundled runtime|Settings merge|Weather cities|AI proxy keeps|Open application|ChatGPT is|Hidden media|Reminder named|Woods About|Screen snow|Notch AppBar|Phone transfer|Free Woods|Voice command|Torrent download|Browser final-name|Steam progress|AI models|No unhandled|Explicit quit'
         run: node scripts/verify-runtime.cjs src-tauri/target/release/woods-island.exe
       - name: Verify native Windows icons
         run: node scripts/verify-windows-icons.mjs src-tauri/icons/icon.ico src-tauri/target/release/woods-island.exe src-tauri/target/release/woods-island-pet-import.exe
