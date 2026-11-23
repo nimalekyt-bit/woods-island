@@ -2076,8 +2076,10 @@ async function quit(client) {
     try{
       await main.invoke('open_settings',{section:'pro'});
       settings=await attach((await pagesReady(page=>page.url.endsWith('/settings.html'))).find(page=>page.url.endsWith('/settings.html')));
+      await waitFor(settings,"!!document.querySelector('[data-nav=pro]')",'Settings navigation');
       for(const language of ['ru','en']){
         await settings.invoke('settings_set',{settings:{language}});
+        await settings.evaluate("if(document.querySelector('[data-nav=pro]')?.dataset.now!=='true')document.querySelector('[data-nav=pro]')?.click()");
         await waitFor(settings,`document.querySelector('[data-nav=pro]')?.dataset.now==='true'&&document.querySelector('[data-about-version]')?.textContent.includes(${JSON.stringify(version)})`,'About shows installed native version');
         const about=await settings.evaluate("document.querySelector('[data-woods-about]').textContent");
         assert(about.includes(language==='ru'?'Никита Кузнецов':'Nikita Kuznetsov'));
