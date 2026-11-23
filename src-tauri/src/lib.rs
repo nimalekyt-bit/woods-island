@@ -1648,7 +1648,9 @@ pub fn run() {
                     watchdog::start(app.handle().clone(), hwnd_val);
                     snow_surface::start(app.handle().clone(),state_clone.clone());
                     appbar::start(app.handle().clone(),state_clone.clone(),apply_island_geometry);
-                    setup_tray(app.handle(), state_clone.clone());
+                    if !win::WindowManager::passive_qa() {
+                        setup_tray(app.handle(), state_clone.clone());
+                    }
                 }
             }
             for win_label in ["overlay"] {

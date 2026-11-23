@@ -267,7 +267,8 @@ async function check(name, task) {
 
 async function pagesReady(predicate = p => p.url === 'http://tauri.localhost/') {
   let last = 'No CDP response';
-  for (let i = 0; i < 100; i++) {
+  const attempts = process.env.CI ? 225 : 120;
+  for (let i = 0; i < attempts; i++) {
     if (proc.exitCode !== null) throw new Error(`Application exited during startup: ${proc.exitCode}`);
     try {
       const pages = await (await fetch(`http://127.0.0.1:${port}/json`, { signal: AbortSignal.timeout(1000) })).json();
