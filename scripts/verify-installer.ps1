@@ -249,7 +249,9 @@ $policy=@(foreach ($key in @('HKLM:\SOFTWARE\Policies\Microsoft\Edge','HKCU:\SOF
   $adapter=Join-Path $taskRepoRoot '.qa-temp\verify-installed-runtime.cjs'
   # The relocated runner uses a sibling module for pixel assertions. Keep the
   # same helper beside the adapter; no test or installed payload is omitted.
-  Copy-Item -LiteralPath (Join-Path $taskRepoRoot 'scripts\web-ai-paint.cjs') -Destination (Join-Path $taskRepoRoot '.qa-temp\web-ai-paint.cjs')
+  foreach ($helper in @('web-ai-paint.cjs','phone-native-acceptance.cjs','agent-tauri-acceptance.cjs')) {
+    Copy-Item -LiteralPath (Join-Path $taskRepoRoot "scripts\$helper") -Destination (Join-Path $taskRepoRoot ".qa-temp\$helper")
+  }
   [IO.File]::WriteAllText($adapter,$source,[Text.UTF8Encoding]::new($false))
   & node --check $adapter
   Assert-True ($LASTEXITCODE -eq 0) 'Installed-location harness adapter has a syntax error'
