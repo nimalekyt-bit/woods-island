@@ -81,7 +81,7 @@ jobs:
         shell: pwsh
         env:
           WOODS_TEST_FILTER: 'Bundled runtime|Settings merge|Weather cities|AI proxy keeps|Open application|ChatGPT is|Hidden media|Reminder named|Woods About|Screen snow|Notch AppBar|Phone transfer|Free Woods|Voice command|Torrent download|Browser final-name|Steam progress|AI models|No unhandled|Explicit quit'
-        run: node scripts/verify-runtime.cjs src-tauri/target/release/woods-island.exe
+        run: ./scripts/verify-runtime-hosted.ps1 -Executable src-tauri/target/release/woods-island.exe
       - name: Verify native Windows icons
         run: node scripts/verify-windows-icons.mjs src-tauri/icons/icon.ico src-tauri/target/release/woods-island.exe src-tauri/target/release/woods-island-pet-import.exe
       - name: Upload Windows executable

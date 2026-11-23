@@ -347,7 +347,8 @@ fn start_cursor_loop(app: AppHandle, state: Arc<AppState>) {
             }
             if last_check.elapsed() >= std::time::Duration::from_millis(500) {
                 last_check = std::time::Instant::now();
-                if !state.is_hidden.load(Ordering::Relaxed)
+                if !win::WindowManager::passive_qa()
+                    && !state.is_hidden.load(Ordering::Relaxed)
                     && !capture::is_capturing()
                     && !unsafe { windows::Win32::UI::WindowsAndMessaging::IsWindowVisible(hwnd) }.as_bool()
                 {
