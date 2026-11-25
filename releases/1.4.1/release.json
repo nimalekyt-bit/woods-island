@@ -15,7 +15,7 @@
         "id": "performance",
         "icon": "updates",
         "title": {
-          "ru": "Производительность и ресурсы",
+          "ru": "Скорость и ресурсы",
           "en": "Performance and resources"
         },
         "items": [
