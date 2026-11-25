@@ -10,7 +10,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     GetClientRect, GetCursorPos, GetForegroundWindow, GetSystemMetrics, GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId,
     SetWindowLongPtrW, SetWindowPos,
     GWL_EXSTYLE, GWL_STYLE, HWND_TOPMOST, SM_CXSCREEN,
-    SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_SHOWWINDOW,
+    SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW,
     WS_BORDER, WS_CAPTION, WS_DLGFRAME, WS_EX_ACCEPTFILES, WS_EX_NOACTIVATE,
     WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_MAXIMIZEBOX, WS_MINIMIZEBOX,
     WS_POPUP, WS_THICKFRAME,
@@ -18,6 +18,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 const WM_ERASEBKGND: u32 = 0x0014;
 const WM_SHOWWINDOW: u32 = 0x0018;
+const WM_MOUSEACTIVATE: u32 = 0x0021;
 const WM_NCCALCSIZE: u32 = 0x0083;
 const WM_NCHITTEST: u32 = 0x0084;
 const WM_NCPAINT: u32 = 0x0085;
@@ -25,6 +26,8 @@ const WM_NCACTIVATE: u32 = 0x0086;
 
 const HTTRANSPARENT: isize = -1;
 const HTCLIENT: isize = 1;
+const MA_ACTIVATE: isize = 1;
+const MA_NOACTIVATE: isize = 3;
 
 #[link(name = "user32")]
 extern "system" {
@@ -61,6 +64,7 @@ static ISLAND_HWND: Mutex<isize> = Mutex::new(0);
 static PREVIOUS_FOCUS: Mutex<isize> = Mutex::new(0);
 static ISLAND_ZOOM: Mutex<f64> = Mutex::new(1.0);
 static PAGE_FACTOR: Mutex<Option<f64>> = Mutex::new(None);
+static LAST_FG_PROC: Mutex<(isize, u32, String)> = Mutex::new((0, 0, String::new()));
 
 fn scaled_bounds(rect: (i32, i32, i32, i32), scale: f64, width: i32, height: i32) -> (i32, i32, i32, i32) {
     let (x1, y1, x2, y2) = rect;
@@ -112,6 +116,13 @@ unsafe extern "system" fn island_subclass_proc(
         0x0219 => { crate::peripherals::request_refresh(); } // WM_DEVICECHANGE
         0x0218 if matches!(wparam.0, 7 | 18) => { crate::peripherals::request_refresh(); } // Resume broadcast
         WM_SHOWWINDOW => { crate::audio::set_spectrum_visible(wparam.0 != 0); }
+        WM_MOUSEACTIVATE => {
+            let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+            if ex & (WS_EX_NOACTIVATE.0 as isize) == 0 {
+                return LRESULT(MA_ACTIVATE);
+            }
+            return LRESULT(MA_NOACTIVATE);
+        }
         WM_NCCALCSIZE => {
             // When wParam is TRUE, returning 0 removes all non-client frame (titlebar, borders).
             // Zero caption pixels will ever be drawn by DWM across all island states.
@@ -162,6 +173,31 @@ impl WindowManager {
         std::env::var("WOODS_ISLAND_PASSIVE_QA").as_deref() == Ok("1")
     }
 
+    /// Toggles whether clicking inside the island (e.g. an embedded Web AI child
+    /// WebView2) is allowed to activate the parent window without stealing focus
+    /// preemptively.
+    pub fn set_activatable(hwnd: HWND, activatable: bool) {
+        if Self::passive_qa() { return; }
+        let allow = activatable || crate::webai::is_embedded_active();
+        unsafe {
+            let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+            let next = if allow {
+                style & !(WS_EX_NOACTIVATE.0 as isize)
+            } else {
+                style | (WS_EX_NOACTIVATE.0 as isize)
+            };
+            if next != style {
+                SetWindowLongPtrW(hwnd, GWL_EXSTYLE, next);
+                let _ = SetWindowPos(
+                    hwnd,
+                    HWND(std::ptr::null_mut()),
+                    0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+                );
+            }
+        }
+    }
+
     pub fn keyboard_focus(hwnd: HWND, active: bool) {
         if Self::passive_qa() { return; }
         unsafe {
@@ -169,9 +205,21 @@ impl WindowManager {
                 let foreground = GetForegroundWindow();
                 if foreground != hwnd && !foreground.0.is_null() { *PREVIOUS_FOCUS.lock().unwrap()=foreground.0 as isize; }
             }
+            let keep_activatable = active || crate::webai::is_embedded_active();
             let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, if active { style & !(WS_EX_NOACTIVATE.0 as isize) } else { style | WS_EX_NOACTIVATE.0 as isize });
-            if !active {
+            let next = if keep_activatable { style & !(WS_EX_NOACTIVATE.0 as isize) } else { style | WS_EX_NOACTIVATE.0 as isize };
+            if next != style {
+                SetWindowLongPtrW(hwnd, GWL_EXSTYLE, next);
+                let _ = SetWindowPos(
+                    hwnd,
+                    HWND(std::ptr::null_mut()),
+                    0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+                );
+            }
+            if active {
+                let _ = windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow(hwnd);
+            } else if !keep_activatable {
                 let previous=std::mem::take(&mut *PREVIOUS_FOCUS.lock().unwrap());
                 if previous!=0 && GetForegroundWindow()==hwnd { let _=windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow(HWND(previous as _)); }
             }
@@ -258,14 +306,25 @@ impl WindowManager {
                         fullscreen = MonitorFromWindow(island, MONITOR_DEFAULTTONEAREST)==monitor && rect.left <= m.left && rect.top <= m.top && rect.right >= m.right && rect.bottom >= m.bottom;
                     }
                 }
-                use windows::Win32::System::Threading::{OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION};
-                if let Ok(process) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) {
-                    let mut buffer = [0u16; 32768];
-                    let mut len = buffer.len() as u32;
-                    if QueryFullProcessImageNameW(process, PROCESS_NAME_WIN32, windows::core::PWSTR(buffer.as_mut_ptr()), &mut len).is_ok() {
-                        executable = std::path::Path::new(&String::from_utf16_lossy(&buffer[..len as usize])).file_name().map(|p|p.to_string_lossy().into_owned()).unwrap_or_default();
+                let fg_raw = foreground.0 as isize;
+                let cached = LAST_FG_PROC.lock().ok().and_then(|g| {
+                    if g.0 == fg_raw && g.1 == pid && pid != 0 { Some(g.2.clone()) } else { None }
+                });
+                if let Some(name) = cached {
+                    executable = name;
+                } else {
+                    use windows::Win32::System::Threading::{OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION};
+                    if let Ok(process) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) {
+                        let mut buffer = [0u16; 1024];
+                        let mut len = buffer.len() as u32;
+                        if QueryFullProcessImageNameW(process, PROCESS_NAME_WIN32, windows::core::PWSTR(buffer.as_mut_ptr()), &mut len).is_ok() {
+                            executable = std::path::Path::new(&String::from_utf16_lossy(&buffer[..len as usize])).file_name().map(|p|p.to_string_lossy().into_owned()).unwrap_or_default();
+                        }
+                        let _ = windows::Win32::Foundation::CloseHandle(process);
                     }
-                    let _ = windows::Win32::Foundation::CloseHandle(process);
+                    if let Ok(mut g) = LAST_FG_PROC.lock() {
+                        *g = (fg_raw, pid, executable.clone());
+                    }
                 }
             }
             serde_json::json!({"fullscreen": fullscreen, "desktop": desktop, "executable": executable, "pid": pid,"bounds":bounds})

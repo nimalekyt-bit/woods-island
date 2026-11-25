@@ -19,6 +19,7 @@ interface Subscriber {
 export function createCharacterScheduler(dependencies: CharacterSchedulerDependencies) {
   const subscribers = new Set<Subscriber>();
   const suspendReasons = new Set<string>();
+  const suspendListeners = new Set<() => void>();
   let frameHandle: number | null = null;
   let removeVisibilityListener: (() => void) | null = null;
   let disposed = false;
@@ -68,13 +69,24 @@ export function createCharacterScheduler(dependencies: CharacterSchedulerDepende
     return Object.assign(unsubscribe, { refresh });
   }
   function suspend(reason: string, value: boolean) {
+    const before = suspendReasons.size > 0;
     if (value) suspendReasons.add(reason); else suspendReasons.delete(reason);
+    const after = suspendReasons.size > 0;
     refresh();
+    if (before !== after) suspendListeners.forEach(listener => listener());
+  }
+  function isSuspended() {
+    return suspendReasons.size > 0;
+  }
+  function onSuspendChange(listener: () => void) {
+    suspendListeners.add(listener);
+    return () => { suspendListeners.delete(listener); };
   }
   function dispose() {
     disposed = true;
     subscribers.clear();
     suspendReasons.clear();
+    suspendListeners.clear();
     cancel();
     removeVisibilityListener?.();
     removeVisibilityListener = null;
@@ -83,7 +95,7 @@ export function createCharacterScheduler(dependencies: CharacterSchedulerDepende
     if (disposed || dependencies.isHidden()) return;
     subscribers.forEach(subscriber => { subscriber.last = time; subscriber.frame(time); });
   }
-  return { subscribe, suspend, refresh, repaint, dispose };
+  return { subscribe, suspend, isSuspended, onSuspendChange, refresh, repaint, dispose };
 }
 
 export function animationInterval(mood: CharacterMood, still = false): number {
@@ -102,6 +114,8 @@ const sharedScheduler = createCharacterScheduler({
 });
 export const subscribeAnimationFrames = sharedScheduler.subscribe;
 export const suspendCharacterAnimations = sharedScheduler.suspend;
+export const isCharacterAnimationSuspended = sharedScheduler.isSuspended;
+export const onCharacterSuspendChange = sharedScheduler.onSuspendChange;
 export const refreshCharacterScheduler = () => {
   sharedScheduler.repaint(performance.now());
   sharedScheduler.refresh();

@@ -26,7 +26,16 @@ export function LiquidIsland({ mood, accent, ears = false, round = false, rain =
       options: () => options.current, audio: () => audio.current(), cursor: getCursor,
     }, currentFill.current);
     engine.current = mounted;
-    const unsubscribe = subscribeAnimationFrames(mounted.draw, mounted.interval);
+    const effectiveInterval = () => {
+      const base = mounted.interval();
+      if (base === 16 && options.current.mood === 'idle' && !getCursor() && !options.current.rain) {
+        return 33;
+      }
+      // Cap 144Hz+ monitors at smooth 60fps for the liquid wave so music/active
+      // visualization doesn't burn 2.4x GPU/DWM compositing budget unnecessarily.
+      return base === 0 ? 16 : base;
+    };
+    const unsubscribe = subscribeAnimationFrames(mounted.draw, effectiveInterval);
     return () => { unsubscribe(); engine.current = null; mounted.dispose(); };
   }, []);
   return <svg ref={svg} data-character="liquid" data-character-mood={mood} className="pointer-events-none absolute top-0 left-0 overflow-visible" aria-hidden/>;

@@ -201,7 +201,11 @@ pub fn set_default(id: &str) -> Result<(), String> {
 }
 
 unsafe fn player_audio_session(active_only: bool) -> Result<(IMMDevice, IAudioSessionControl), String> {
-    let app = crate::media::get_current_media().and_then(|m|m["app"].as_str().map(str::to_owned)).ok_or("Нет активного плеера")?.to_lowercase();
+    let app = crate::media::cached_media()
+        .or_else(crate::media::get_current_media)
+        .and_then(|m|m["app"].as_str().map(str::to_owned))
+        .ok_or("Нет активного плеера")?
+        .to_lowercase();
     let aliases = ["yandex","spotify","chrome","msedge","firefox","opera","telegram","ayugram","vlc","aimp","foobar"];
     let alias = aliases.iter().find(|alias|app.contains(**alias)).copied();
     let all = enumerator().map_err(|e|e.to_string())?.EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE).map_err(|e|e.to_string())?;
@@ -331,7 +335,7 @@ fn decode_sample(data:&[u8],float:bool)->f32 {
     }
 }
 unsafe fn active_player_pid() -> Option<u32> {
-    if let Some(pid) = crate::media::get_current_media()
+    if let Some(pid) = crate::media::cached_media()
         .and_then(|m| m["pid"].as_u64())
         .and_then(|p| u32::try_from(p).ok())
         .filter(|p| *p != 0)
@@ -469,7 +473,7 @@ unsafe fn capture_session(app:&tauri::AppHandle, failed_pid: &mut Option<u32>)->
                 }
                 emitted=Instant::now();
             }
-            if checked.elapsed()>=Duration::from_secs(1) {
+            if checked.elapsed()>=Duration::from_secs(2) {
                 let explicit = SELECTED_OUTPUT.lock().unwrap().is_some();
                 if let Some(pid) = active_pid {
                     if explicit || active_player_pid() != Some(pid) { break; }
@@ -486,24 +490,109 @@ unsafe fn capture_session(app:&tauri::AppHandle, failed_pid: &mut Option<u32>)->
     let _=client.Stop();
     outcome
 }
+
+unsafe fn state_with_enumerator(
+    enumr: &IMMDeviceEnumerator,
+    name_cache: &mut std::collections::HashMap<String, String>,
+) -> Result<Value, String> {
+    let selected_out = SELECTED_OUTPUT.lock().unwrap().clone();
+    let device = if let Some(ref id) = selected_out {
+        let wide: Vec<u16> = id.encode_utf16().chain(Some(0)).collect();
+        match enumr.GetDevice(PCWSTR(wide.as_ptr())) {
+            Ok(dev) if dev.GetState().ok() == Some(DEVICE_STATE_ACTIVE) => dev,
+            _ => enumr.GetDefaultAudioEndpoint(eRender, eConsole).map_err(|e| e.to_string())?,
+        }
+    } else {
+        enumr.GetDefaultAudioEndpoint(eRender, eConsole).map_err(|e| e.to_string())?
+    };
+    let volume: IAudioEndpointVolume = device.Activate(CLSCTX_ALL, None).map_err(|e| e.to_string())?;
+    let id = device_id(&device).map_err(|e| e.to_string())?;
+    let name = if let Some(cached) = name_cache.get(&id) {
+        cached.clone()
+    } else {
+        let resolved = device_name(&device).map_err(|e| e.to_string())?;
+        if name_cache.len() >= 32 { name_cache.clear(); }
+        name_cache.insert(id.clone(), resolved.clone());
+        resolved
+    };
+    let selected_in = SELECTED_INPUT.lock().unwrap().clone();
+    let mic_muted = if let Some(ref in_id) = selected_in {
+        let wide: Vec<u16> = in_id.encode_utf16().chain(Some(0)).collect();
+        let dev = enumr.GetDevice(PCWSTR(wide.as_ptr())).ok()
+            .filter(|d| d.GetState().ok() == Some(DEVICE_STATE_ACTIVE))
+            .or_else(|| enumr.GetDefaultAudioEndpoint(eCapture, eConsole).ok());
+        dev.and_then(|d| d.Activate::<IAudioEndpointVolume>(CLSCTX_ALL, None).ok())
+            .and_then(|v| v.GetMute().ok().map(|b| b.as_bool()))
+    } else {
+        enumr.EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE).ok().and_then(|list| {
+            let count = list.GetCount().ok()?;
+            if count == 0 { return None; }
+            let mut all_muted = true;
+            for i in 0..count {
+                let v: IAudioEndpointVolume = list.Item(i).ok()?.Activate(CLSCTX_ALL, None).ok()?;
+                if !v.GetMute().ok()?.as_bool() {
+                    all_muted = false;
+                    break;
+                }
+            }
+            Some(all_muted)
+        })
+    };
+    let chosen = selected_out.as_ref() == Some(&id);
+    Ok(json!({
+        "level": volume.GetMasterVolumeLevelScalar().map_err(|e| e.to_string())?,
+        "muted": volume.GetMute().map_err(|e| e.to_string())?.as_bool(),
+        "device": name,
+        "deviceId": id,
+        "chosen": chosen,
+        "micMuted": mic_muted
+    }))
+}
+
 pub fn start_loopback(app:tauri::AppHandle) {
     let controls_app=app.clone();
-    std::thread::spawn(move||{
+    let _ = std::thread::Builder::new().name("woods-audio-state".into()).spawn(move||{
+        let Ok(_com) = ComApartment::new() else { return; };
+        let mut cached_enumr: Option<IMMDeviceEnumerator> = None;
+        let mut name_cache = std::collections::HashMap::<String, String>::new();
         let mut previous=Value::Null;
         loop {
-            if let Ok(current)=state(){if current!=previous {
-                let mic_changed=previous.get("micMuted")!=current.get("micMuted");
-                let reason=if previous.is_null(){"initial"}else if mic_changed{"mic"}else{"volume"};
-                let _=controls_app.emit("audio:state",json!({"state":current,"reason":reason}));previous=current;
-            }}
-            std::thread::sleep(Duration::from_millis(250));
+            if cached_enumr.is_none() {
+                cached_enumr = unsafe { enumerator().ok() };
+            }
+            if let Some(ref enumr) = cached_enumr {
+                match unsafe { state_with_enumerator(enumr, &mut name_cache) } {
+                    Ok(current) => {
+                        if current != previous {
+                            let mic_changed = previous.get("micMuted") != current.get("micMuted");
+                            let device_changed = previous.get("deviceId") != current.get("deviceId");
+                            let reason = if previous.is_null() {
+                                "initial"
+                            } else if mic_changed {
+                                "mic"
+                            } else if device_changed {
+                                "device"
+                            } else {
+                                "volume"
+                            };
+                            let _ = controls_app.emit("audio:state", json!({"state": current, "reason": reason}));
+                            previous = current;
+                        }
+                    }
+                    Err(_) => {
+                        cached_enumr = None;
+                    }
+                }
+            }
+            let sleep_ms = if crate::is_low_power() { 1000 } else { 350 };
+            std::thread::sleep(Duration::from_millis(sleep_ms));
         }
     });
-    std::thread::spawn(move||{
+    let _ = std::thread::Builder::new().name("woods-audio-spectrum".into()).spawn(move||{
         let _com=match ComApartment::new(){Ok(c)=>c,Err(e)=>{let _=app.emit("audio:error",e);return;}};
         let mut failed_pid: Option<u32> = None;
         loop {
-            if !spectrum_active() { std::thread::sleep(Duration::from_millis(100)); continue; }
+            if !spectrum_active() { std::thread::sleep(Duration::from_millis(250)); continue; }
             let outcome=unsafe{capture_session(&app, &mut failed_pid)};
             let failed=outcome.is_err();
             if let Err(error)=outcome {let _=app.emit("audio:error",error);}

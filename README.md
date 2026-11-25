@@ -7,11 +7,11 @@
 **Dynamic Island для Windows · 100% бесплатно · Woods Personal Corp**
 
 [![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011%20x64-18181b?style=flat-square)](https://github.com/nimalekyt-bit/woods-island/releases)
-[![Version](https://img.shields.io/badge/version-1.4.0-5b7cfa?style=flat-square)](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.4.0)
+[![Version](https://img.shields.io/badge/version-1.4.1-5b7cfa?style=flat-square)](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.4.1)
 ![RU / EN](https://img.shields.io/badge/interface-RU%20%7C%20EN-18181b?style=flat-square)
 ![Free](https://img.shields.io/badge/access-100%25%20free-2f9e66?style=flat-square)
 
-[**Скачать установщик 1.4.0**](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.4.0) · [**Что нового**](RELEASE_NOTES_1.4.0.md) · [**Сообщить об ошибке**](https://github.com/nimalekyt-bit/woods-island/issues/new/choose) · [**Telegram**](https://t.me/woodskilla)
+[**Скачать установщик 1.4.1**](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.4.1) · [**Что нового**](RELEASE_NOTES_1.4.1.md) · [**Сообщить об ошибке**](https://github.com/nimalekyt-bit/woods-island/issues/new/choose) · [**Telegram**](https://t.me/woodskilla)
 
 [**Сайт Woods Island**](https://island.woodslab.top/) · [**Портфолио автора**](https://me.woodslab.top/) · [**Woods Lab**](https://woodslab.top/) · [**support@woodslab.top**](mailto:support@woodslab.top)
 
@@ -33,7 +33,13 @@ Telegram — основной канал обсуждения проектов; 
 <img src="assets/readme/ru/home.png" width="860" alt="Woods Island: плеер, громкость, экранные инструменты и лаунчер">
 </div>
 
-## Что нового в 1.4.0
+## Что нового в 1.4.1
+
+- **Глубокая оптимизация CPU, GPU и RAM (без потерь в визуале):** медиаслужба Windows (GSMTC) переведена с постоянного опроса на события WinRT (`NPSMSvc` практически на нуле), убран постоянный `rAF`-пересчёт геометрии и лишние перерисовки атласов персонажей и жидкой пилюли, а фоновые циклы переходят в экономный режим в полноэкранных играх и при скрытом острове.
+- **Ввод с клавиатуры во встроенных веб-ИИ:** исправлен фокус окна при открытии ChatGPT, Gemini, Claude, DeepSeek, Grok и Qwen прямо внутри пилюли — текст теперь печатается сразу после клика.
+- **Стабильность watchdog в играх:** исправлены ложные перезапуски острова под высокой нагрузкой CPU и в полноэкранных приложениях.
+
+### Из крупного обновления 1.4.0
 
 - **Передача с телефона по QR (Wi-Fi):** отправляй фото, видео, файлы (до 256 МБ) и текст с iPhone или Android прямо на полку и в буфер Windows без облака и установки приложений. Поддерживается сохранение сессии и автопереподключение после перезапуска Woods Island.
 - **Режим выреза (Notch Bar):** опциональная верхняя полоса (AppBar) в стилях *Чёрная*, *Стекло* или *Обои*, чтобы развёрнутые окна начинались аккуратно под островом.
@@ -119,8 +125,8 @@ Woods-коннектор. Остров раскрывается по клику;
 
 ## Установка
 
-Скачай **Woods-Island-1.4.0-windows-x64-Setup.exe** из
-[релиза v1.4.0](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.4.0),
+Скачай **Woods-Island-1.4.1-windows-x64-Setup.exe** из
+[релиза v1.4.1](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.4.1),
 пройди установку и запусти Woods Island через ярлык. Требуются **Windows 10/11 x64**.
 FFmpeg для MP4/GIF входит в комплект. Если WebView2 Runtime отсутствует, установщик загрузит его у Microsoft.
 
@@ -128,7 +134,7 @@ FFmpeg для MP4/GIF входит в комплект. Если WebView2 Runtim
 Установщик пока без EV-сертификата Windows, поэтому SmartScreen может показать предупреждение — перед запуском сверь
 SHA256 с **SHA256SUMS.txt** в релизе.
 
-Для запуска без установки доступен **Woods-Island-1.4.0-windows-x64-portable.zip**:
+Для запуска без установки доступен **Woods-Island-1.4.1-windows-x64-portable.zip**:
 распакуй и запусти `woods-island.exe`, сохранив папку `bin` рядом.
 
 ### Горячие клавиши
@@ -164,7 +170,13 @@ clipboard, notes, AI and screen tools — 100% free.
 <img src="assets/readme/en/home.png" width="860" alt="Woods Island Home: player, volume, screen tools and launcher">
 </div>
 
-## What's new in 1.4.0
+## What's new in 1.4.1
+
+- **Deep CPU, GPU & RAM optimization (zero visual compromises):** Windows media integration (GSMTC) moved from continuous polling to native WinRT events (virtually eliminating `NPSMSvc` overhead), continuous layout polling and redundant character/liquid DOM redraws were eliminated, and background loops enter low-power mode during fullscreen games or while hidden.
+- **Keyboard input in embedded Web AI:** fixed window activation and WebView2 focus when opening ChatGPT, Gemini, Claude, DeepSeek, Grok or Qwen inside the pill so typing works immediately on click.
+- **Watchdog stability in games:** eliminated false self-restarts under heavy CPU load and in fullscreen apps.
+
+### Highlights from 1.4.0
 
 - **QR Phone Transfer over Wi-Fi:** send photos, videos, files (up to 256 MB) and clipboard text from iPhone/Android directly to the Windows shelf without any cloud or mobile app, with persistent session auto-reconnect across app restarts.
 - **Notch Bar Mode (AppBar):** optional MacBook-style top strip (*Black*, *Glass*, or *Wallpaper*) so maximized windows start cleanly below the island.
@@ -213,11 +225,11 @@ manual LIGHTSPEED measurement for Logitech G435 and presence display for FL680 (
 
 ## Install
 
-Download **Woods-Island-1.4.0-windows-x64-Setup.exe** from
-[release v1.4.0](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.4.0) (Windows 10/11 x64).
+Download **Woods-Island-1.4.1-windows-x64-Setup.exe** from
+[release v1.4.1](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.4.1) (Windows 10/11 x64).
 FFmpeg is bundled for MP4/GIF capture; built-in updates verify signatures automatically.
 Compare SHA256 against **SHA256SUMS.txt** before running.
-A standalone **Woods-Island-1.4.0-windows-x64-portable.zip** is also provided.
+A standalone **Woods-Island-1.4.1-windows-x64-portable.zip** is also provided.
 
 Settings, SQLite and notes live locally in `%APPDATA%\woods-island`; API keys and phone session tokens are
 protected with Windows DPAPI.

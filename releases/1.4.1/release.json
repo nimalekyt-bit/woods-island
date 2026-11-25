@@ -1,0 +1,919 @@
+{
+  "schemaVersion": 1,
+  "productId": "woods-island",
+  "version": "1.4.1",
+  "githubNotes": "# Woods Island 1.4.1\n\nОбновление производительности, ввода во встроенных веб-ИИ и стабильности работы в играх — без компромиссов по визуалу, анимациям и функциям.\n\n- Глубокая оптимизация CPU, GPU и RAM: интеграция с медиаслужбой Windows (GSMTC) переведена с постоянного опроса на нативные события WinRT — нагрузка на системную службу `NPSMSvc` сведена практически к нулю и устранены ошибки `0x80004003` в логах.\n- Убран постоянный 60–144 FPS опрос геометрии окна в интерфейсе и лишние перерисовки атласов персонажей и жидкой пилюли при неизменном кадре; частота анимации жидкой пилюли аккуратно выровнена на высокогерцовых экранах.\n- В полноэкранных играх и при скрытой пилюле фоновые циклы (курсор, аудио, телеметрия, уведомления) автоматически переходят в экономный режим.\n- Исправлен ввод текста с клавиатуры во встроенных веб-чатах ИИ (ChatGPT, Gemini, Claude, DeepSeek, Grok, Qwen) прямо внутри пилюли: окно и WebView2 теперь корректно принимают фокус при клике.\n- Исправлены ложные перезапуски watchdog под высокой нагрузкой CPU и во время полноэкранных игр.\n\nSetup сохраняет настройки. Portable обновляется вручную после закрытия острова.\n\n---\n\nPerformance, embedded Web AI input and gaming stability update — with zero compromises to visuals, animations or features.\n\n- Deep CPU, GPU and RAM optimization: Windows media integration (GSMTC) moved from continuous polling to native WinRT events, reducing `NPSMSvc` service load to near zero and eliminating `0x80004003` log errors.\n- Eliminated continuous 60–144 FPS layout polling in the pill and redundant bitmap character atlas and liquid SVG redraws when frames are unchanged, with clean frame pacing on high-refresh-rate monitors.\n- Background loops (cursor tracking, audio state, telemetry and notifications) automatically switch to low-power mode during fullscreen games or while the pill is hidden.\n- Fixed keyboard typing in embedded Web AI panels (ChatGPT, Gemini, Claude, DeepSeek, Grok, Qwen) inside the pill: window activation and WebView2 focus now engage immediately on click.\n- Fixed false watchdog self-restarts under heavy CPU load and during fullscreen games.\n\nSetup preserves preferences. Portable updates manually after closing the island.\n",
+  "updaterNotes": "Глубокая оптимизация CPU/GPU/RAM (WinRT-события медиаслужбы и экономный режим в играх), исправление ввода текста во встроенном веб-ИИ и стабильный watchdog под нагрузкой. / Deep CPU/GPU/RAM optimization (event-driven Windows media and gaming low-power mode), embedded Web AI keyboard input fix and load-tolerant watchdog.",
+  "site": {
+    "seoDescription": "Жидкая чёрная пилюля вверху экрана: музыка, телефон по QR, праздники, режим выреза, буфер обмена, полка, командная строка, OBS Studio, хуки агентов и ИИ. Выпуск {{version}} для Windows 10 и 11.",
+    "summary": {
+      "ru": "{{version}} · глубокая оптимизация CPU/GPU/RAM, ввод в веб-ИИ и стабильный watchdog в играх.",
+      "en": "{{version}} · deep CPU/GPU/RAM optimization, embedded Web AI typing fix and game-safe watchdog."
+    },
+    "groups": [
+      {
+        "id": "performance",
+        "icon": "updates",
+        "title": {
+          "ru": "Производительность и ресурсы",
+          "en": "Performance and resources"
+        },
+        "items": [
+          {
+            "ru": [
+              "Интеграция с медиаслужбой Windows (GSMTC) переведена на ",
+              {
+                "strong": "события WinRT вместо постоянного опроса"
+              },
+              ": нагрузка на системную службу NPSMSvc и потребление памяти снижены в разы, без потерь в визуале и скорости отклика."
+            ],
+            "en": [
+              "Windows media integration (GSMTC) moved to ",
+              {
+                "strong": "native WinRT events instead of continuous polling"
+              },
+              ", cutting NPSMSvc service load and memory usage dramatically with zero visual or responsiveness trade-offs."
+            ]
+          },
+          {
+            "ru": [
+              "Убраны ",
+              {
+                "strong": "лишние перерисовки атласов персонажей и пилюли"
+              },
+              ", постоянный rAF-опрос геометрии заменён наблюдателями, а на 144 Гц мониторах выровнена частота кадров."
+            ],
+            "en": [
+              "Eliminated ",
+              {
+                "strong": "redundant character atlas and pill redraws"
+              },
+              ", replaced continuous layout polling with observers, and smoothed frame pacing on high-refresh-rate monitors."
+            ]
+          },
+          {
+            "ru": [
+              "Фоновые циклы переходят в ",
+              {
+                "strong": "экономный режим в полноэкранных играх"
+              },
+              " и когда остров скрыт или свёрнут."
+            ],
+            "en": [
+              "Background loops enter ",
+              {
+                "strong": "low-power mode in fullscreen games"
+              },
+              " and whenever the island is hidden or tucked."
+            ]
+          }
+        ]
+      },
+      {
+        "id": "web-ai-input",
+        "icon": "connections",
+        "title": {
+          "ru": "Встроенный веб-ИИ",
+          "en": "Embedded Web AI"
+        },
+        "items": [
+          {
+            "ru": [
+              "Исправлен ",
+              {
+                "strong": "ввод с клавиатуры во встроенных чатах ИИ"
+              },
+              " (ChatGPT, Gemini, Claude, DeepSeek, Grok, Qwen) прямо внутри пилюли — текст печатается сразу после клика."
+            ],
+            "en": [
+              "Fixed ",
+              {
+                "strong": "keyboard input in embedded Web AI chats"
+              },
+              " (ChatGPT, Gemini, Claude, DeepSeek, Grok, Qwen) inside the pill so typing works immediately on click."
+            ]
+          },
+          {
+            "ru": [
+              "Фокус корректно возвращается в обычный неактивируемый режим пилюли сразу после закрытия или переноса чата в отдельное окно."
+            ],
+            "en": [
+              "Window focus returns cleanly to normal non-activating pill behavior as soon as the embedded chat is closed or popped out."
+            ]
+          }
+        ]
+      },
+      {
+        "id": "stability",
+        "icon": "data",
+        "title": {
+          "ru": "Стабильность в играх",
+          "en": "Stability in games"
+        },
+        "items": [
+          {
+            "ru": [
+              "Устранены ",
+              {
+                "strong": "ложные перезапуски watchdog"
+              },
+              " под тяжёлой нагрузкой на процессор и во время полноэкранных игр, с плавным возобновлением проверок после выхода."
+            ],
+            "en": [
+              "Eliminated ",
+              {
+                "strong": "false watchdog self-restarts"
+              },
+              " under heavy CPU load and during fullscreen games, with a clean resume grace window afterward."
+            ]
+          }
+        ]
+      }
+    ],
+    "updateInstructions": {
+      "ru": "Открой «Настройки → Обновления» или установи Setup {{version}} поверх текущей версии. Настройки сохраняются. Portable обновляй после закрытия острова, заменив файлы из нового ZIP.",
+      "en": "Open Settings → Updates or install Setup {{version}} over your current version. Settings are preserved. To update Portable, close the island and replace its files from the new ZIP."
+    },
+    "extra": {
+      "ru": "Все функции Woods Island бесплатны. Поддержка устройств DAREU A950 Air V3 и ручного замера G435 через LIGHTSPEED полностью сохранена.",
+      "en": "All Woods Island features are free. DAREU A950 Air V3 and manual G435 LIGHTSPEED battery readings remain fully supported."
+    },
+    "faqUpdate": {
+      "ru": "В установленной версии {{version}} открой «Настройки → Обновления». Приложение проверит и скачает новый выпуск; после проверки подписи пакета нажми «Установить». Автозагрузку можно отключить. Для перехода с 1.1.1 сначала скачай Setup с этой страницы. Portable обновляй вручную после закрытия острова.",
+      "en": "In the installed {{version}} app, open Settings → Updates. The app checks for and downloads a new release; after the package signature check, choose Install. You can turn automatic downloads off. To upgrade from 1.1.1, download Setup from this page first. Update Portable manually after closing the island."
+    },
+    "history": [
+      {
+        "version": "1.4.0",
+        "summary": {
+          "ru": "{{version}} · телефон по QR, праздники, режим выреза, ChatGPT, хуки агентов, AIMP/Winamp и автовосстановление.",
+          "en": "{{version}} · QR phone transfer, Holidays, notch mode, ChatGPT, agent hooks, AIMP/Winamp and auto-recovery."
+        },
+        "groups": [
+          {
+            "id": "phone-and-shelf",
+            "icon": "connections",
+            "title": {
+              "ru": "Телефон и полка",
+              "en": "Phone and shelf"
+            },
+            "items": [
+              {
+                "ru": [
+                  "Передача фото, файлов и текста ",
+                  {
+                    "strong": "с телефона по QR-коду"
+                  },
+                  " напрямую по локальной сети, без сторонних серверов и установки приложений."
+                ],
+                "en": [
+                  "Send photos, files and text ",
+                  {
+                    "strong": "from your phone via QR code"
+                  },
+                  " directly over your local network, with no third-party servers or companion apps."
+                ]
+              },
+              {
+                "ru": [
+                  {
+                    "strong": "Ступенчатая полка"
+                  },
+                  " с настоящими миниатюрами PNG/JPEG/WebP, нативными значками файлов, временем добавления и отправкой файлов обратно на телефон."
+                ],
+                "en": [
+                  {
+                    "strong": "Tiered file shelf"
+                  },
+                  " with genuine PNG/JPEG/WebP thumbnails, native file icons, timestamps and sending files back to your phone."
+                ]
+              }
+            ]
+          },
+          {
+            "id": "holidays-and-notch",
+            "icon": "appearance",
+            "title": {
+              "ru": "Праздники, персонажи и режим выреза",
+              "en": "Holidays, characters and notch mode"
+            },
+            "items": [
+              {
+                "ru": [
+                  "Раздел ",
+                  {
+                    "strong": "«Праздники»"
+                  },
+                  ": снег из-под пилюли, шапка снега, гирлянда в такт музыке, ежегодные даты и экранный снег без мигания."
+                ],
+                "en": [
+                  {
+                    "strong": "Holidays section"
+                  },
+                  ": pill snow, snow cap, music-reactive garland, annual schedules and flicker-free screen snow."
+                ]
+              },
+              {
+                "ru": [
+                  "Пять авторских ",
+                  {
+                    "strong": "новогодних персонажей Woods"
+                  },
+                  " (Снеговик, Дед Мороз, Снегирь, Пряник и Олень), скруглённые нижние углы жидкой пилюли и сохранение всех 20 питомцев."
+                ],
+                "en": [
+                  "Five original ",
+                  {
+                    "strong": "seasonal Woods characters"
+                  },
+                  " (Snowman, Frost, Bullfinch, Gingerbread and Reindeer), smooth liquid bottom corners and all 20 pets preserved."
+                ]
+              },
+              {
+                "ru": [
+                  {
+                    "strong": "Режим выреза, как на MacBook"
+                  },
+                  ": полоса высотой с пилюлю (Чёрная, Стекло или Обои) резервирует место сверху, чтобы развёрнутые окна начинались под островом."
+                ],
+                "en": [
+                  {
+                    "strong": "MacBook-style notch mode"
+                  },
+                  ": a pill-height top strip (Black, Glass or Wallpaper) reserves screen space so maximized windows start below the island."
+                ]
+              }
+            ]
+          },
+          {
+            "id": "ai-and-agents",
+            "icon": "updates",
+            "title": {
+              "ru": "ИИ, агенты и продуктивность",
+              "en": "AI, agents and productivity"
+            },
+            "items": [
+              {
+                "ru": [
+                  {
+                    "strong": "ChatGPT во вкладке «Чат»"
+                  },
+                  " рядом с Gemini и DeepSeek, текущая дата в запросах ИИ, понятные ошибки и HTTP/SOCKS5-прокси с хранением пароля в Windows DPAPI."
+                ],
+                "en": [
+                  {
+                    "strong": "ChatGPT in the Chat tab"
+                  },
+                  " alongside Gemini and DeepSeek, current date context in AI prompts, clear errors and HTTP/SOCKS5 proxy with Windows DPAPI."
+                ]
+              },
+              {
+                "ru": [
+                  {
+                    "strong": "Хуки Codex, Claude Code и OpenCode"
+                  },
+                  " с ответами на запросы разрешений прямо на острове, без перезаписи чужой команды notify."
+                ],
+                "en": [
+                  {
+                    "strong": "Codex, Claude Code and OpenCode hooks"
+                  },
+                  " with inline permission replies on the island without overwriting foreign notify commands."
+                ]
+              },
+              {
+                "ru": [
+                  "Напоминания с ",
+                  {
+                    "strong": "датами словами (RU/EN)"
+                  },
+                  ", сдвигом времени, голосовыми командами, погодой для нескольких городов и плавными анимациями."
+                ],
+                "en": [
+                  {
+                    "strong": "Natural-language reminders (RU/EN)"
+                  },
+                  ", time shifts, voice commands, multi-city weather and smooth animated values."
+                ]
+              }
+            ]
+          },
+          {
+            "id": "media-vpn-reliability",
+            "icon": "data",
+            "title": {
+              "ru": "Музыка, VPN, захват и надёжность",
+              "en": "Media, VPN, capture and reliability"
+            },
+            "items": [
+              {
+                "ru": [
+                  "Поддержка ",
+                  {
+                    "strong": "AIMP и Winamp"
+                  },
+                  ", имена PWA/Firefox, скрытие лишних плееров и захват звука самого плеера через WASAPI process loopback."
+                ],
+                "en": [
+                  {
+                    "strong": "AIMP and Winamp support"
+                  },
+                  ", proper PWA/Firefox names, hidden players and per-player WASAPI process loopback audio capture."
+                ]
+              },
+              {
+                "ru": [
+                  "Выбор и переключение ",
+                  {
+                    "strong": "VPN-клиентов"
+                  },
+                  ", иконки уведомлений приложений, фильтр торрентов, фикс «Сохранить как», декоративные QR и обновлённый редактор скриншотов."
+                ],
+                "en": [
+                  {
+                    "strong": "VPN client switcher"
+                  },
+                  ", native app notification icons, torrent filter, browser Save As fix, decorative QR decoding and improved screenshot editor."
+                ]
+              },
+              {
+                "ru": [
+                  {
+                    "strong": "Автовосстановление при зависании"
+                  },
+                  ", системный трей Woods Island, автовозврат скрытого окна и обновлённый раздел «О приложении» и «Что нового»."
+                ],
+                "en": [
+                  {
+                    "strong": "Watchdog auto-recovery"
+                  },
+                  ", Woods Island system tray, automatic window restore and redesigned About and What's New sections."
+                ]
+              }
+            ]
+          }
+        ],
+        "updateInstructions": {
+          "ru": "Открой «Настройки → Обновления» или установи Setup {{version}} поверх текущей версии. Настройки сохраняются. Portable обновляй после закрытия острова, заменив файлы из нового ZIP.",
+          "en": "Open Settings → Updates or install Setup {{version}} over your current version. Settings are preserved. To update Portable, close the island and replace its files from the new ZIP."
+        }
+      },
+      {
+        "version": "1.3.1",
+        "summary": {
+          "ru": "{{version}} · настройки заряда устройств в общем стиле Woods Island.",
+          "en": "{{version}} · device battery settings styled to match Woods Island."
+        },
+        "groups": [
+          {
+            "id": "peripheral-settings",
+            "icon": "appearance",
+            "title": {
+              "ru": "Настройки устройств",
+              "en": "Device settings"
+            },
+            "items": [
+              {
+                "ru": [
+                  "Блок заряда в ",
+                  {
+                    "strong": "«Настройки → Модули»"
+                  },
+                  " занимает всю ширину и использует те же переключатели, отступы и списки, что остальные настройки."
+                ],
+                "en": [
+                  "The battery section in ",
+                  {
+                    "strong": "Settings → Modules"
+                  },
+                  " uses full-width rows and the same switches, spacing and selectors as the other settings."
+                ]
+              },
+              {
+                "ru": [
+                  "Уведомления появляются и в свёрнутой пилюле. Подсказка объясняет ",
+                  {
+                    "strong": "задержку подтверждения отключения"
+                  },
+                  "; состояние самой DAREU проверено отдельно от USB-приёмника."
+                ],
+                "en": [
+                  "Notifications also appear in the collapsed Island. The hint explains the ",
+                  {
+                    "strong": "disconnection confirmation delay"
+                  },
+                  "; DAREU radio state was tested separately from USB receiver presence."
+                ]
+              }
+            ]
+          },
+          {
+            "id": "peripheral-battery",
+            "icon": "connections",
+            "title": {
+              "ru": "Заряд устройств",
+              "en": "Peripheral batteries"
+            },
+            "items": [
+              {
+                "ru": [
+                  "На главной появилась ",
+                  {
+                    "strong": "строка устройств и подробная карточка"
+                  },
+                  ". Имена, видимость и уведомления настраиваются отдельно."
+                ],
+                "en": [
+                  "Home now has a ",
+                  {
+                    "strong": "device row and expanded card"
+                  },
+                  ". Customize names, visibility and notifications."
+                ]
+              },
+              {
+                "ru": [
+                  "Для ",
+                  {
+                    "strong": "DAREU A950 Air V3"
+                  },
+                  " проверены заряд и зарядка через приёмник и USB-кабель. Поддержка других моделей зависит от их протокола."
+                ],
+                "en": [
+                  {
+                    "strong": "DAREU A950 Air V3"
+                  },
+                  " battery and charging have been tested through its receiver and USB cable. Other models depend on their protocol."
+                ]
+              },
+              {
+                "ru": [
+                  {
+                    "strong": "Logitech G435 через LIGHTSPEED"
+                  },
+                  " измеряется вручную после предупреждения о короткой паузе звука и микрофона. Процент приблизительный, по напряжению; показание сохраняется на 24 часа с отметкой времени."
+                ],
+                "en": [
+                  {
+                    "strong": "Logitech G435 over LIGHTSPEED"
+                  },
+                  " is measured manually after an audio and microphone interruption notice. The percentage is a voltage estimate, retained for 24 hours with its timestamp."
+                ]
+              },
+              {
+                "ru": [
+                  "Недоступный заряд отображается честно: ",
+                  {
+                    "strong": "FL680 видна без процента"
+                  },
+                  ". Зарядка и состояние связи не выводятся из сохранённого замера."
+                ],
+                "en": [
+                  "Unavailable levels are shown explicitly: ",
+                  {
+                    "strong": "FL680 is visible without a percentage"
+                  },
+                  ". Saved readings do not imply charging or a live radio connection."
+                ]
+              }
+            ]
+          }
+        ],
+        "updateInstructions": {
+          "ru": "Открой «Настройки → Обновления» или установи Setup {{version}} поверх текущей версии. Настройки сохраняются. Portable обновляй после закрытия острова, заменив файлы из нового ZIP.",
+          "en": "Open Settings → Updates or install Setup {{version}} over your current version. Settings are preserved. To update Portable, close the island and replace its files from the new ZIP."
+        }
+      },
+      {
+        "version": "1.3.0",
+        "summary": {
+          "ru": "1.3.0 · заряд устройств и ручной замер G435 через LIGHTSPEED.",
+          "en": "1.3.0 · peripheral batteries and manual G435 readings over LIGHTSPEED."
+        },
+        "groups": [
+          {
+            "id": "peripheral-battery",
+            "icon": "connections",
+            "title": {
+              "ru": "Заряд устройств",
+              "en": "Peripheral batteries"
+            },
+            "items": [
+              {
+                "ru": [
+                  "На главной появилась ",
+                  {
+                    "strong": "строка устройств и подробная карточка"
+                  },
+                  ". Имена, видимость и уведомления настраиваются отдельно."
+                ],
+                "en": [
+                  "Home now has a ",
+                  {
+                    "strong": "device row and expanded card"
+                  },
+                  ". Customize names, visibility and notifications."
+                ]
+              },
+              {
+                "ru": [
+                  "Для ",
+                  {
+                    "strong": "DAREU A950 Air V3"
+                  },
+                  " проверены заряд и зарядка через приёмник и USB-кабель. Поддержка других моделей зависит от их протокола."
+                ],
+                "en": [
+                  {
+                    "strong": "DAREU A950 Air V3"
+                  },
+                  " battery and charging have been tested through its receiver and USB cable. Other models depend on their protocol."
+                ]
+              },
+              {
+                "ru": [
+                  {
+                    "strong": "Logitech G435 через LIGHTSPEED"
+                  },
+                  " измеряется вручную после предупреждения о короткой паузе звука и микрофона. Процент приблизительный, по напряжению; показание сохраняется на 24 часа с отметкой времени."
+                ],
+                "en": [
+                  {
+                    "strong": "Logitech G435 over LIGHTSPEED"
+                  },
+                  " is measured manually after an audio and microphone interruption notice. The percentage is a voltage estimate, retained for 24 hours with its timestamp."
+                ]
+              },
+              {
+                "ru": [
+                  "Недоступный заряд отображается честно: ",
+                  {
+                    "strong": "FL680 видна без процента"
+                  },
+                  ". Зарядка и состояние связи не выводятся из сохранённого замера."
+                ],
+                "en": [
+                  "Unavailable levels are shown explicitly: ",
+                  {
+                    "strong": "FL680 is visible without a percentage"
+                  },
+                  ". Saved readings do not imply charging or a live radio connection."
+                ]
+              }
+            ]
+          },
+          {
+            "id": "home-scrolling",
+            "icon": "appearance",
+            "title": {
+              "ru": "Главная панель",
+              "en": "Home panel"
+            },
+            "items": [
+              {
+                "ru": [
+                  "Убраны стандартные полосы прокрутки и стрелки по краям. ",
+                  {
+                    "strong": "Прокрутка вниз сохранена"
+                  },
+                  " для раскрытого списка и небольших экранов."
+                ],
+                "en": [
+                  "Removed native scrollbar tracks and arrows. ",
+                  {
+                    "strong": "Vertical scrolling remains available"
+                  },
+                  " for expanded lists and small screens."
+                ]
+              }
+            ]
+          }
+        ],
+        "updateInstructions": {
+          "ru": "Открой «Настройки → Обновления» или установи Setup {{version}} поверх текущей версии. Настройки сохраняются. Portable обновляй после закрытия острова, заменив файлы из нового ZIP.",
+          "en": "Open Settings → Updates or install Setup {{version}} over your current version. Settings are preserved. To update Portable, close the island and replace its files from the new ZIP."
+        }
+      },
+      {
+        "version": "1.2.2",
+        "summary": {
+          "ru": "{{version}} · положение чата и оформление",
+          "en": "{{version}} · chat positioning and appearance"
+        },
+        "groups": [
+          {
+            "id": "connections",
+            "icon": "connections",
+            "title": {
+              "ru": "Подключения и перенос",
+              "en": "Connections and moving chats"
+            },
+            "items": [
+              {
+                "ru": [
+                  "Для ",
+                  {
+                    "strong": "Gemini и DeepSeek"
+                  },
+                  " видны загрузка и ошибка подключения. Если сервис не отвечает, можно повторить попытку или открыть его в браузере."
+                ],
+                "en": [
+                  {
+                    "strong": "Gemini and DeepSeek"
+                  },
+                  " show loading and connection errors. Retry or open the service in your browser if it does not respond."
+                ]
+              },
+              {
+                "ru": [
+                  "Между пилюлей и отдельным окном переносится ",
+                  {
+                    "strong": "та же страница"
+                  },
+                  ": с черновиком, местом прокрутки и сессией."
+                ],
+                "en": [
+                  "Move ",
+                  {
+                    "strong": "the same page"
+                  },
+                  " between the pill and a separate window, keeping your draft, scroll position and session."
+                ]
+              },
+              {
+                "ru": [
+                  "Чат ",
+                  {
+                    "strong": "заполняет свою рамку"
+                  },
+                  " при изменении масштаба пилюли. Содержимое больше не смещается относительно интерфейса."
+                ],
+                "en": [
+                  "The chat ",
+                  {
+                    "strong": "fills its frame"
+                  },
+                  " when you change the island scale. The page stays aligned with the interface."
+                ]
+              },
+              {
+                "ru": [
+                  "После переноса, изменения размера и перемещения чат ",
+                  {
+                    "strong": "остаётся внутри отдельного окна"
+                  },
+                  ". Вернуть его в пилюлю можно из шапки."
+                ],
+                "en": [
+                  "The chat ",
+                  {
+                    "strong": "stays inside the separate window"
+                  },
+                  " after transfer, resizing and moving. Return it to the pill from the header."
+                ]
+              }
+            ]
+          },
+          {
+            "id": "appearance",
+            "icon": "appearance",
+            "title": {
+              "ru": "Оформление чата",
+              "en": "Chat appearance"
+            },
+            "items": [
+              {
+                "ru": [
+                  "Убрана ",
+                  {
+                    "strong": "яркая белая обводка"
+                  },
+                  " встроенного чата. Скругления встроенного чата учитывают масштаб интерфейса; нижние углы страницы в отдельном окне следуют его рамке. Сохранена тонкая прокрутка."
+                ],
+                "en": [
+                  "Removed the ",
+                  {
+                    "strong": "bright white outline"
+                  },
+                  " around embedded chats. Embedded corners follow your interface scale; the page’s bottom corners in a separate window follow its frame. The slim scrollbar remains."
+                ]
+              },
+              {
+                "ru": [
+                  "Оформление следует ",
+                  {
+                    "strong": "светлой или тёмной теме острова"
+                  },
+                  ". Смена темы сохраняет состояние страницы и не требует перезагрузки."
+                ],
+                "en": [
+                  "The chat follows the island’s ",
+                  {
+                    "strong": "light or dark theme"
+                  },
+                  ". Changing themes keeps the page state without a reload."
+                ]
+              },
+              {
+                "ru": [
+                  "При переносе в отдельное окно ",
+                  {
+                    "strong": "оформление встроенного режима снимается"
+                  },
+                  ", и сайт использует собственные стили."
+                ],
+                "en": [
+                  "Moving to a separate window ",
+                  {
+                    "strong": "removes the embedded styling"
+                  },
+                  ", so the website uses its own appearance."
+                ]
+              },
+              {
+                "ru": [
+                  "Исправлен ",
+                  {
+                    "strong": "первый показ страницы"
+                  },
+                  " после загрузки и переноса. Сатиновый фон и исходный маскот сохранены; переход учитывает уменьшение движения."
+                ],
+                "en": [
+                  "Fixed the ",
+                  {
+                    "strong": "first presentation of the page"
+                  },
+                  " after loading and transfer. The satin background and original mascot remain; transitions respect reduced motion."
+                ]
+              }
+            ]
+          }
+        ],
+        "updateInstructions": {
+          "ru": "Версия 1.2.1 снята со стабильного распространения из-за смещения чата. Обновись через Setup {{version}} или «Настройки → Обновления». Portable обновляй после закрытия острова, заменив файлы из нового ZIP.",
+          "en": "Version 1.2.1 was withdrawn from stable distribution because of the chat positioning defect. Update with Setup {{version}} or Settings → Updates. To update Portable, close the island and replace its files from the new ZIP."
+        }
+      },
+      {
+        "version": "1.2.0",
+        "summary": {
+          "ru": "Ранее в 1.2.0",
+          "en": "Previously in 1.2.0"
+        },
+        "groups": [
+          {
+            "id": "updates",
+            "icon": "updates",
+            "title": {
+              "ru": "Обновления и подключения",
+              "en": "Updates and connections"
+            },
+            "items": [
+              {
+                "ru": [
+                  "Установленная копия ",
+                  {
+                    "strong": "проверяет новые выпуски"
+                  },
+                  " и может скачивать их в фоне. Установку запускаешь кнопкой."
+                ],
+                "en": [
+                  "The installed app ",
+                  {
+                    "strong": "checks for releases"
+                  },
+                  " and can download them in the background. You choose when to install."
+                ]
+              },
+              {
+                "ru": [
+                  "Перед установкой приложение ",
+                  {
+                    "strong": "проверяет подпись пакета"
+                  },
+                  ". Во время загрузки видны прогресс и кнопка отмены."
+                ],
+                "en": [
+                  "The app ",
+                  {
+                    "strong": "checks the package signature"
+                  },
+                  " before installation. Downloads show progress and a cancel button."
+                ]
+              },
+              {
+                "ru": [
+                  "В «Подключениях» можно ",
+                  {
+                    "strong": "проверить готовность модулей"
+                  },
+                  " и открыть нужные настройки."
+                ],
+                "en": [
+                  {
+                    "strong": "Check module readiness"
+                  },
+                  " and open the relevant settings from Connections."
+                ]
+              },
+              {
+                "ru": [
+                  "Для отчёта об ошибке можно скопировать версии и состояния модулей ",
+                  {
+                    "strong": "без ключей, истории и личных путей"
+                  },
+                  "."
+                ],
+                "en": [
+                  "Copy versions and module statuses for a bug report, ",
+                  {
+                    "strong": "without keys, history or personal paths"
+                  },
+                  "."
+                ]
+              }
+            ]
+          },
+          {
+            "id": "data",
+            "icon": "data",
+            "title": {
+              "ru": "Данные и поведение",
+              "en": "Data and behavior"
+            },
+            "items": [
+              {
+                "ru": [
+                  "При повреждении профиля приложение пробует ",
+                  {
+                    "strong": "восстановить резервную копию"
+                  },
+                  " и сообщает о проблеме."
+                ],
+                "en": [
+                  "If profile data is damaged, the app tries to ",
+                  {
+                    "strong": "restore a backup"
+                  },
+                  " and reports the problem."
+                ]
+              },
+              {
+                "ru": [
+                  "Очистка буфера ",
+                  {
+                    "strong": "удаляет незакреплённые записи"
+                  },
+                  " вместе с изображениями и миниатюрами. Ключ загрузки изображений хранится под защитой Windows."
+                ],
+                "en": [
+                  "Clearing clipboard history ",
+                  {
+                    "strong": "removes unpinned entries"
+                  },
+                  ", images and thumbnails. Windows encryption protects the image upload key."
+                ]
+              },
+              {
+                "ru": [
+                  "Переключателями можно ",
+                  {
+                    "strong": "пользоваться с клавиатуры"
+                  },
+                  "; персонажи учитывают настройку Windows для уменьшения анимации."
+                ],
+                "en": [
+                  "Use settings switches ",
+                  {
+                    "strong": "with the keyboard"
+                  },
+                  ". Characters respect the Windows reduced motion preference."
+                ]
+              },
+              {
+                "ru": [
+                  "Погода учитывает ",
+                  {
+                    "strong": "часовой пояс выбранного города"
+                  },
+                  ". При необходимости его можно задать вручную."
+                ],
+                "en": [
+                  "Weather follows the ",
+                  {
+                    "strong": "selected city's time zone"
+                  },
+                  ". You can set it manually when needed."
+                ]
+              }
+            ]
+          }
+        ],
+        "updateInstructions": {
+          "ru": "Для перехода с 1.1.1 установи 1.2.0 через Setup. Следующие выпуски установленной копии доступны в «Настройки → Обновления»; автозагрузку можно отключить. Portable обновляется вручную: закрой остров и замени файлы из нового ZIP.",
+          "en": "To upgrade from 1.1.1, install 1.2.0 using Setup. Future updates for the installed app appear in Settings → Updates; automatic downloads can be disabled. Update Portable manually: close the island and replace the files from the new ZIP."
+        }
+      }
+    ]
+  }
+}

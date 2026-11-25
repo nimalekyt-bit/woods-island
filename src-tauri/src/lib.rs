@@ -43,10 +43,30 @@ mod update_tests;
 
 use clipboard::ClipboardStore;
 use serde_json::{json, Value};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Listener, Manager};
 use windows::Win32::Foundation::HWND;
+
+static ISLAND_LOW_POWER: AtomicBool = AtomicBool::new(false);
+static ISLAND_FULLSCREEN: AtomicBool = AtomicBool::new(false);
+static SETTINGS_VERSION: AtomicU64 = AtomicU64::new(1);
+
+pub fn is_low_power() -> bool {
+    ISLAND_LOW_POWER.load(Ordering::Relaxed)
+}
+
+pub fn is_fullscreen_active() -> bool {
+    ISLAND_FULLSCREEN.load(Ordering::Relaxed)
+}
+
+fn update_low_power(tucked: bool, hidden: bool, fullscreen: bool) {
+    let low = tucked || hidden || fullscreen;
+    let prev = ISLAND_LOW_POWER.swap(low, Ordering::Relaxed);
+    if prev && !low {
+        media::notify_wake();
+    }
+}
 
 static AUX_WINDOW_BUILD: std::sync::Mutex<()> = std::sync::Mutex::new(());
 fn ensure_aux_window(app: &AppHandle, label: &str) -> Result<tauri::WebviewWindow, String> {
@@ -285,17 +305,24 @@ fn start_cursor_loop(app: AppHandle, state: Arc<AppState>) {
     // The acceptance runner supplies its own hover/click events. Real desktop
     // clicks and fullscreen changes must not collapse its cards mid-assertion.
     if win::WindowManager::passive_qa() { return; }
-    std::thread::spawn(move || {
+    let _ = std::thread::Builder::new().name("woods-cursor-loop".into()).spawn(move || {
         let mut is_hovered = false;
         let mut is_edge = false;
         let mut mouse_down = false;
+        let mut last_near: Option<(i32, i32)> = None;
         let mut last_context = Value::Null;
         let mut last_check = std::time::Instant::now() - std::time::Duration::from_secs(1);
+        let mut last_monitor_check = std::time::Instant::now() - std::time::Duration::from_secs(10);
+        let mut cached_settings = state.settings.lock().unwrap().clone();
+        let mut cached_settings_ver = SETTINGS_VERSION.load(Ordering::Relaxed);
         let mut geometry_key = String::new();
         let mut allow_edge = false;
 
         loop {
-            std::thread::sleep(std::time::Duration::from_millis(25));
+            let tucked = state.is_tucked.load(Ordering::Relaxed);
+            let hidden = state.is_hidden.load(Ordering::Relaxed);
+            let sleep_ms = if (tucked || hidden) && !allow_edge { 100 } else { 25 };
+            std::thread::sleep(std::time::Duration::from_millis(sleep_ms));
 
             let hwnd_val = *state.main_hwnd.lock().unwrap();
             let hwnd = match hwnd_val {
@@ -327,13 +354,22 @@ fn start_cursor_loop(app: AppHandle, state: Arc<AppState>) {
             // Cursor touching top 3 pixels near island activates edge unfold
             let at_top_edge = rel_y >= -2 && rel_y <= 3 && (rel_x >= (rect.x - 20) && rel_x <= (rect.x + rect.w + 20));
 
-            if rel_x > -150 && rel_x < 910 && rel_y > -100 && rel_y < 580 {
-                let canvas_center = (win_rect.right - win_rect.left) as f64 / scale / 2.0;
-                let _ = app.emit("cursor:near", [rel_x as f64 - canvas_center, rel_y as f64]);
+            if !tucked && !hidden && rel_x > -150 && rel_x < 910 && rel_y > -100 && rel_y < 580 {
+                if last_near != Some((rel_x, rel_y)) {
+                    last_near = Some((rel_x, rel_y));
+                    let canvas_center = (win_rect.right - win_rect.left) as f64 / scale / 2.0;
+                    let _ = app.emit("cursor:near", [rel_x as f64 - canvas_center, rel_y as f64]);
+                }
+            } else {
+                last_near = None;
             }
-            let down = unsafe { windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(0x01) < 0 };
-            if down && !mouse_down && !inside_pill && rect.expanded { let _ = app.emit("outside-click", ()); }
-            mouse_down = down;
+            if rect.expanded {
+                let down = unsafe { windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(0x01) < 0 };
+                if down && !mouse_down && !inside_pill { let _ = app.emit("outside-click", ()); }
+                mouse_down = down;
+            } else {
+                mouse_down = false;
+            }
 
             if inside_pill != is_hovered {
                 is_hovered = inside_pill;
@@ -345,10 +381,22 @@ fn start_cursor_loop(app: AppHandle, state: Arc<AppState>) {
                 is_edge = at_top_edge;
                 let _ = app.emit("island:edge", is_edge);
             }
-            if last_check.elapsed() >= std::time::Duration::from_millis(500) {
+            let check_interval = if (tucked || hidden) && ISLAND_FULLSCREEN.load(Ordering::Relaxed) {
+                std::time::Duration::from_millis(800)
+            } else {
+                std::time::Duration::from_millis(500)
+            };
+            if last_check.elapsed() >= check_interval {
                 last_check = std::time::Instant::now();
+                let current_ver = SETTINGS_VERSION.load(Ordering::Relaxed);
+                let settings_changed = current_ver != cached_settings_ver;
+                if settings_changed {
+                    cached_settings = state.settings.lock().unwrap().clone();
+                    cached_settings_ver = current_ver;
+                }
+                let settings = &cached_settings;
                 if !win::WindowManager::passive_qa()
-                    && !state.is_hidden.load(Ordering::Relaxed)
+                    && !hidden
                     && !capture::is_capturing()
                     && !unsafe { windows::Win32::UI::WindowsAndMessaging::IsWindowVisible(hwnd) }.as_bool()
                 {
@@ -358,17 +406,19 @@ fn start_cursor_loop(app: AppHandle, state: Arc<AppState>) {
                     }
                 }
                 let mut context = win::WindowManager::system_context(hwnd);
-                let settings = state.settings.lock().unwrap().clone();
                 let recording_until=HOTKEY_RECORDING_UNTIL.load(Ordering::Relaxed);
                 if recording_until>0 && (media::now_ms()>=recording_until || !settings_is_foreground(&app)) {
-                    HOTKEY_RECORDING_UNTIL.store(0,Ordering::Relaxed);let errors=register_hotkeys(&app,&settings);*state.hotkey_errors.lock().unwrap()=errors;
+                    HOTKEY_RECORDING_UNTIL.store(0,Ordering::Relaxed);let errors=register_hotkeys(&app,settings);*state.hotkey_errors.lock().unwrap()=errors;
                 }
                 let anchor=visibility::Bounds {left:win_rect.left+(rect.x as f64*scale).round() as i32,top:win_rect.top+((if settings["style"]=="capsule" {8}else{0}) as f64*scale).round() as i32,right:win_rect.left+((rect.x+rect.w) as f64*scale).round() as i32,bottom:win_rect.top+((rect.h.clamp(1,64)+if settings["style"]=="capsule" {8}else{0}) as f64*scale).round() as i32};
                 context["under"]=json!(visibility::Bounds::from_json(&context["bounds"]).is_some_and(|window|anchor.intersects(window)));
-                let policy=visibility::resolve(&settings,&context);
+                let policy=visibility::resolve(settings,&context);
                 allow_edge=policy.edge;
-                let suspend=context["fullscreen"].as_bool().unwrap_or(false)&&settings["releaseHotkeysInFullscreen"].as_bool().unwrap_or(false);
-                if FULLSCREEN_SHORTCUTS.swap(suspend,Ordering::Relaxed)!=suspend {let errors=register_hotkeys(&app,&settings);*state.hotkey_errors.lock().unwrap()=errors;}
+                let fs_now = context["fullscreen"].as_bool().unwrap_or(false);
+                ISLAND_FULLSCREEN.store(fs_now, Ordering::Relaxed);
+                update_low_power(tucked, hidden, fs_now && policy.fullscreen);
+                let suspend=fs_now&&settings["releaseHotkeysInFullscreen"].as_bool().unwrap_or(false);
+                if FULLSCREEN_SHORTCUTS.swap(suspend,Ordering::Relaxed)!=suspend {let errors=register_hotkeys(&app,settings);*state.hotkey_errors.lock().unwrap()=errors;}
                 let context_key = json!([context,settings["hideInFullscreen"],settings["hideForApps"],settings["keepForApps"],settings["hideOnlyUnder"],settings["fullscreenEdge"]]);
                 if context_key != last_context {
                     let _ = app.emit("fullscreen", policy.fullscreen);
@@ -377,15 +427,18 @@ fn start_cursor_loop(app: AppHandle, state: Arc<AppState>) {
                     let _ = app.emit("island:desktop", policy.desktop);
                     last_context = context_key;
                 }
-                let monitors = app.available_monitors().unwrap_or_default();
-                let name = settings["monitor"].as_str().unwrap_or("");
-                let chosen = monitors.iter().find(|m|m.name().map(|n|n==name).unwrap_or(false));
-                let primary = app.primary_monitor().ok().flatten();
-                if let Some(monitor) = chosen.or(primary.as_ref()).or(monitors.first()) {
-                    let key = format!("{}|{}|{}|{}|{:?}|{:?}|{}", settings["scale"], settings["monitor"], settings["offsetX"], settings["underTaskbar"], monitor.position(), monitor.size(), monitor.scale_factor());
-                    if key != geometry_key {
-                        geometry_key = key;
-                        if let Err(e) = apply_island_geometry(&app, &state) { app_log(&format!("Island geometry: {e}")); }
+                if settings_changed || last_monitor_check.elapsed() >= std::time::Duration::from_secs(3) {
+                    last_monitor_check = std::time::Instant::now();
+                    let monitors = app.available_monitors().unwrap_or_default();
+                    let name = settings["monitor"].as_str().unwrap_or("");
+                    let chosen = monitors.iter().find(|m|m.name().map(|n|n==name).unwrap_or(false));
+                    let primary = app.primary_monitor().ok().flatten();
+                    if let Some(monitor) = chosen.or(primary.as_ref()).or(monitors.first()) {
+                        let key = format!("{}|{}|{}|{}|{:?}|{:?}|{}", settings["scale"], settings["monitor"], settings["offsetX"], settings["underTaskbar"], monitor.position(), monitor.size(), monitor.scale_factor());
+                        if key != geometry_key {
+                            geometry_key = key;
+                            if let Err(e) = apply_island_geometry(&app, &state) { app_log(&format!("Island geometry: {e}")); }
+                        }
                     }
                 }
             }
@@ -446,7 +499,10 @@ fn report_island_rect(
     rect.h = h.ceil() as i32;
     rect.expanded = expanded;
     let actually_tucked=tucked&&rect.y+rect.h<=0;
-    if state.is_tucked.swap(actually_tucked,Ordering::Relaxed)!=actually_tucked{snow_surface::set_island_visible(!actually_tucked);}
+    if state.is_tucked.swap(actually_tucked,Ordering::Relaxed)!=actually_tucked{
+        snow_surface::set_island_visible(!actually_tucked);
+        update_low_power(actually_tucked, state.is_hidden.load(Ordering::Relaxed), ISLAND_FULLSCREEN.load(Ordering::Relaxed));
+    }
     state.is_expanded.store(expanded, Ordering::Relaxed);
     state.click_through.store(through, Ordering::Relaxed);
     win::WindowManager::set_click_through(through);
@@ -562,7 +618,7 @@ fn settings_set(settings:Option<Value>,app:AppHandle,state:tauri::State<'_, Arc<
    let mut saved=state.settings.lock().unwrap();let before=saved.clone();let mut updated=before.clone();
    merge_settings(&mut updated,&patch);weather_places::remember(&before,&mut updated);
    if let Err(e)=storage::save_json_file("settings.json",&updated){return vec![e];}
-   *saved=updated.clone();(before,updated)
+   *saved=updated.clone();SETTINGS_VERSION.fetch_add(1,Ordering::Relaxed);(before,updated)
  };
  if patch["audioOutput"].is_string() || patch["audioInput"].is_string() {audio::configure(&updated);}
  if patch["mediaHidden"].is_array() {media::configure(&updated);}
@@ -784,7 +840,7 @@ async fn media_sources()->Vec<Value>{tauri::async_runtime::spawn_blocking(move||
 async fn media_pick(id:Option<String>)->Result<bool,String>{tauri::async_runtime::spawn_blocking(move||{let id=id.filter(|s|!s.is_empty());if let Some(id)=id.as_ref(){if !media::get_media_sources().iter().any(|source|source["id"].as_str()==Some(id)&&source["hidden"]!=true){return Err("Media source is hidden or no longer exists".into());}}media::set_picked_source(id);Ok(true)}).await.map_err(|e|e.to_string())?}
 
 #[tauri::command]
-fn media_rename(app_id:Option<String>,name:Option<String>)->Result<bool,String>{let id=app_id.ok_or("Media source ID is required")?;let name=name.unwrap_or_default();let mut names=storage::load_json_file("media_names.json").unwrap_or(json!({}));let map=names.as_object_mut().ok_or("Invalid media name store")?;if name.trim().is_empty(){map.remove(&id);}else{map.insert(id,json!(name.trim()));}storage::save_json_file("media_names.json",&names).map(|_|true)}
+fn media_rename(app_id:Option<String>,name:Option<String>)->Result<bool,String>{let id=app_id.ok_or("Media source ID is required")?;let name=name.unwrap_or_default();let mut names=storage::load_json_file("media_names.json").unwrap_or(json!({}));let map=names.as_object_mut().ok_or("Invalid media name store")?;if name.trim().is_empty(){map.remove(&id);}else{map.insert(id,json!(name.trim()));}storage::save_json_file("media_names.json",&names)?;media::invalidate_names_cache();Ok(true)}
 
 #[tauri::command]
 async fn media_seek(ms:Option<u64>)->Result<bool,String>{tauri::async_runtime::spawn_blocking(move||{if media::media_seek(ms.ok_or("Playback position is required")?){Ok(true)}else{Err("The active player does not allow seeking".into())}}).await.map_err(|e|e.to_string())?}

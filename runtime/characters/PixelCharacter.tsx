@@ -1,7 +1,7 @@
 import { React } from '../react';
 import type { CharacterMood } from './types';
 import { pixelLayout, pixelHop, pixelPath, PIXEL_COLORS, PIXEL_INTERVALS, PIXEL_EXTRA_COLORS } from './pixel-layout';
-import { isCharacterMotionReduced, onCharacterMotionChange } from './scheduler';
+import { isCharacterMotionReduced, onCharacterMotionChange, isCharacterAnimationSuspended, onCharacterSuspendChange } from './scheduler';
 
 const pageHidden = () => document.hidden;
 const onPageVisibility = (listener: () => void) => {
@@ -15,8 +15,9 @@ export interface PixelCharacterProps {
 }
 export function PixelCharacter({ mood, px = 2, color, level = 0, look = 0, still = false, className = '' }: PixelCharacterProps) {
   const reducedMotion = React.useSyncExternalStore(onCharacterMotionChange, isCharacterMotionReduced);
+  const suspended = React.useSyncExternalStore(onCharacterSuspendChange, isCharacterAnimationSuspended);
   const hidden = React.useSyncExternalStore(onPageVisibility, pageHidden);
-  still = still || reducedMotion || hidden;
+  still = still || reducedMotion || suspended || hidden;
   const [blink, setBlink] = React.useState(false);
   const [step, setStep] = React.useState(0);
   React.useEffect(() => {

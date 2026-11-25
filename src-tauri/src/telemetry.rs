@@ -127,14 +127,21 @@ fn partial_name(name:&str)->Option<String>{
 const PARTIAL_SUFFIXES: [&str;7] = [".crdownload",".part",".partial",".download",".!qb",".!ut",".!bt"];
 #[derive(Clone,Debug)]
 struct FileState{size:u64,modified:Option<SystemTime>,created:Option<SystemTime>,stable:u8,done:bool,moved_at:Option<Instant>,owner:crate::file_owners::FileOwner}
-struct Downloads{folder:Option<PathBuf>,rules:Value,files:HashMap<PathBuf,FileState>,last:Instant,owners:crate::file_owners::Queue}
+struct Downloads{folder:Option<PathBuf>,rules:Value,files:HashMap<PathBuf,FileState>,last:Instant,owners:crate::file_owners::Queue,cached_clients:(Instant,bool)}
 impl Downloads{
-    fn new()->Self{Self{folder:None,rules:Value::Null,files:HashMap::new(),last:Instant::now(),owners:crate::file_owners::Queue::new()}}
+    fn new()->Self{Self{folder:None,rules:Value::Null,files:HashMap::new(),last:Instant::now(),owners:crate::file_owners::Queue::new(),cached_clients:(Instant::now()-Duration::from_secs(60),false)}}
     fn poll(&mut self,settings:&Value)->(Vec<Value>,Vec<Value>){
         self.poll_at(settings,Instant::now())
     }
     fn poll_at(&mut self,settings:&Value,now:Instant)->(Vec<Value>,Vec<Value>){
-        self.poll_at_with_clients(settings,now,running_processes().iter().any(|name|crate::file_owners::torrent_client(name)))
+        let clients_running = if now.saturating_duration_since(self.cached_clients.0) >= Duration::from_secs(4) {
+            let found = running_processes().iter().any(|name|crate::file_owners::torrent_client(name));
+            self.cached_clients = (now, found);
+            found
+        } else {
+            self.cached_clients.1
+        };
+        self.poll_at_with_clients(settings,now,clients_running)
     }
     fn poll_at_with_clients(&mut self,settings:&Value,now:Instant,clients_running:bool)->(Vec<Value>,Vec<Value>){
         let folder=downloads_folder(settings);let first=folder!=self.folder||self.rules!=settings["downloadsIgnore"];
@@ -193,28 +200,53 @@ pub fn downloads_snapshot() -> Value { DOWNLOAD_SNAPSHOT.lock().unwrap_or_else(|
 
 pub fn start(app:tauri::AppHandle,state:Arc<crate::AppState>){
     let downloads_app=app.clone();let downloads_state=state.clone();
-    std::thread::spawn(move||{
+    let _ = std::thread::Builder::new().name("woods-downloads".into()).spawn(move||{
         let mut tracker=Downloads::new();let mut steam=crate::steam::Downloads::default();
         loop{
-            let settings=downloads_state.settings.lock().unwrap().clone();let (mut active,mut completed)=tracker.poll(&settings);
-            let (steam_active,steam_done)=steam.poll(settings["steamDownloads"].as_bool().unwrap_or(true));active.extend(steam_active);completed.extend(steam_done);let active=Value::Array(active);
+            let (show_dl, show_steam, dl_settings) = {
+                let s = downloads_state.settings.lock().unwrap();
+                (
+                    s["showDownloads"].as_bool().unwrap_or(true),
+                    s["steamDownloads"].as_bool().unwrap_or(true),
+                    json!({
+                        "downloadsDir": s["downloadsDir"],
+                        "downloadsIgnore": s["downloadsIgnore"],
+                        "downloadsTorrents": s["downloadsTorrents"]
+                    })
+                )
+            };
+            let (mut active, mut completed) = if show_dl { tracker.poll(&dl_settings) } else { (vec![], vec![]) };
+            if show_steam {
+                let (steam_active,steam_done)=steam.poll(true);
+                active.extend(steam_active);completed.extend(steam_done);
+            }
+            let active=Value::Array(active);
             let changed = { let mut saved = DOWNLOAD_SNAPSHOT.lock().unwrap_or_else(|e|e.into_inner()); let changed=saved.as_ref()!=Some(&active); if changed { *saved=Some(active.clone()); } changed };
             if changed { let _=downloads_app.emit("downloads:update",&active); }
             for file in completed{let _=downloads_app.emit("downloads:done",file);}
-            std::thread::sleep(std::time::Duration::from_secs(1));
+            let sleep_ms = if crate::is_low_power() { 3000 } else { 1000 };
+            std::thread::sleep(std::time::Duration::from_millis(sleep_ms));
         }
     });
-    std::thread::spawn(move||{
+    let telem_state = state.clone();
+    let _ = std::thread::Builder::new().name("woods-telemetry".into()).spawn(move||{
         let mut previous=snapshot();let mut slow=Instant::now();let mut desktop=Value::Null;
         loop{
+            let low_power = crate::is_low_power();
             let code=layout();if previous["layout"].as_str()!=Some(&code){let _=app.emit("input:lang",&code);let _=app.emit("input:layout",&code);previous["layout"]=json!(code);}
             let on=caps();if previous["capsLock"].as_bool()!=Some(on){let _=app.emit("input:caps",on);previous["capsLock"]=json!(on);}
-            if slow.elapsed()>=std::time::Duration::from_secs(2){
+            let slow_interval = if low_power { Duration::from_secs(6) } else { Duration::from_secs(3) };
+            if slow.elapsed()>=slow_interval{
                 let current=json!(virtual_desktop());if current!=desktop{let _=app.emit("desktop:virtual",&current);desktop=current;}
                 let power=json!(battery());if power!=previous["battery"]{let _=app.emit("power:update",&power);previous["battery"]=power;}
-                let active=privacy();if active!=previous["privacy"]{let _=app.emit("privacy:update",&active);previous["privacy"]=active;}slow=Instant::now();
+                let show_privacy = telem_state.settings.lock().map(|s| s["showPrivacy"].as_bool().unwrap_or(true)).unwrap_or(true);
+                if show_privacy {
+                    let active=privacy();if active!=previous["privacy"]{let _=app.emit("privacy:update",&active);previous["privacy"]=active;}
+                }
+                slow=Instant::now();
             }
-            std::thread::sleep(std::time::Duration::from_millis(250));
+            let sleep_ms = if low_power { 1000 } else { 300 };
+            std::thread::sleep(std::time::Duration::from_millis(sleep_ms));
         }
     });
 }

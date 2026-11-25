@@ -87,7 +87,31 @@ fn handle(mut stream: TcpStream) -> Result<(), String> {
         ("OPTIONS",_) => (200,json!({})),
         ("POST","/track") => {
             match serde_json::from_slice::<Value>(&bytes[header_end..header_end+length]).map_err(|e|e.to_string()).and_then(|input|normalize(&input,crate::media::now_ms())) {
-                Ok(track) => { *TRACK.lock().unwrap() = Some(track); *STATUS.lock().unwrap() = None; (200,json!({})) },
+                Ok(track) => {
+                    let changed = {
+                        let mut guard = TRACK.lock().unwrap();
+                        let diff = guard.as_ref().map(|prev| {
+                            if prev["key"] != track["key"] || prev["playing"] != track["playing"] {
+                                return true;
+                            }
+                            let prev_pos = prev["positionMs"].as_u64().unwrap_or(0);
+                            let next_pos = track["positionMs"].as_u64().unwrap_or(0);
+                            let prev_at = prev["updatedAt"].as_u64().unwrap_or(0);
+                            let next_at = track["updatedAt"].as_u64().unwrap_or(0);
+                            let expected = if prev["playing"] == true {
+                                prev_pos.saturating_add(next_at.saturating_sub(prev_at))
+                            } else {
+                                prev_pos
+                            };
+                            next_pos.abs_diff(expected) > 400
+                        }).unwrap_or(true);
+                        *guard = Some(track);
+                        diff
+                    };
+                    *STATUS.lock().unwrap() = None;
+                    if changed { crate::media::notify_wake(); }
+                    (200,json!({}))
+                },
                 Err(error) => (400,json!({"error":error})),
             }
         },

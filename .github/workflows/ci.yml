@@ -74,9 +74,9 @@ jobs:
           workspaces: src-tauri -> target
           cache-on-failure: true
       - name: Rust regression tests
-        run: cargo +1.98.1 test --release --locked -j 1 --manifest-path src-tauri/Cargo.toml
+        run: cargo +1.98.1 test --release --locked -j 4 --manifest-path src-tauri/Cargo.toml
       - name: Build Windows executable
-        run: cargo +1.98.1 build --release --locked -j 1 --manifest-path src-tauri/Cargo.toml
+        run: cargo +1.98.1 build --release --locked -j 4 --manifest-path src-tauri/Cargo.toml
       - name: Verify native feature integration and bundled runtime
         shell: pwsh
         env:
@@ -140,7 +140,7 @@ jobs:
           node scripts/package-updater.mjs $setup[0].FullName
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $manifest=Join-Path $setup[0].DirectoryName 'latest.json'
-          cargo +1.98.1 run --release --locked -j 1 --manifest-path src-tauri/Cargo.toml --example verify-update-package -- $manifest $setup[0].FullName
+          cargo +1.98.1 run --release --locked -j 4 --manifest-path src-tauri/Cargo.toml --example verify-update-package -- $manifest $setup[0].FullName
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Upload installer payload
         if: github.event_name == 'workflow_dispatch'

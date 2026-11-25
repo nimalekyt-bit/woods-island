@@ -37,6 +37,8 @@ export function BitmapSprite({definition,mood='idle',width,height,look=0,still=f
     const element = root.current, body = art.current, overlay = face.current;
     if (!element || !body || !sheet || !visible) return;
     let gazeX=0,gazeY=0;
+    let lastBodyBg='',lastBodyPos='',lastOverlayBg='',lastOverlayPos='',lastOverlayLeft='',lastOverlayTop='';
+    let lastOverlayHidden:boolean|null=null,lastPetFrame='',lastPetState='',lastPetAnim='',lastPetLook='';
     const timeline=createBitmapTimeline(spec);
     const custom=spec.source==='woods'?bitmapAssets[definition.id]:null;
     const paint=(time:number)=>{
@@ -44,27 +46,42 @@ export function BitmapSprite({definition,mood='idle',width,height,look=0,still=f
       const result=timeline.frame(time,current.mood,current.still),state=result.state;
       const dt=result.delta;
       let frame=result.frame;
-      const point=getCursor(),rect=element.getBoundingClientRect();
-      const desired=current.mood==='sleep'||current.still?[0,0]:point?normalizedLook(point.x-rect.left-rect.width/2,point.y-rect.top-rect.height/2):[current.look*4,0];
+      const awake=current.mood!=='sleep'&&!current.still;
+      const point=awake?getCursor():null;
+      const desired=!awake?[0,0]:point?(()=>{const rect=element.getBoundingClientRect();return normalizedLook(point.x-rect.left-rect.width/2,point.y-rect.top-rect.height/2);})():[current.look*4,0];
       const ease=current.still?1:1-Math.exp(-dt/75);
       gazeX+=(desired[0]/4-gazeX)*ease;gazeY+=(desired[1]/3-gazeY)*ease;
-      const awake=current.mood!=='sleep'&&!current.still;
       const useOverlay=!!custom&&!!spec.look&&!!frame.lookGroup&&spec.look.states.includes(result.renderState);
-      body.style.backgroundImage=`url("${useOverlay?custom!.body:sheet}")`;
+      const nextBodyBg=useOverlay?custom!.body:sheet;
+      if (nextBodyBg!==lastBodyBg) {
+        body.style.backgroundImage=`url("${nextBodyBg}")`;
+        lastBodyBg=nextBodyBg;
+      }
       if (spec.source==='codex'&&current.mood==='idle'&&awake&&Math.hypot(gazeX,gazeY)>.04) frame={...frame,...codexLookCell(gazeX,gazeY)};
-      body.style.backgroundPosition=spritePosition(frame,spec);
-      element.dataset.petFrame=`${frame.rowIndex}:${frame.columnIndex}`;element.dataset.petState=state;
-      element.dataset.petAnimation=result.renderState;
-      element.dataset.petLook=awake?`${gazeX.toFixed(3)},${gazeY.toFixed(3)}`:'off';
+      const nextBodyPos=spritePosition(frame,spec);
+      if (nextBodyPos!==lastBodyPos) { body.style.backgroundPosition=nextBodyPos; lastBodyPos=nextBodyPos; }
+      const nextPetFrame=`${frame.rowIndex}:${frame.columnIndex}`;
+      if (nextPetFrame!==lastPetFrame) { element.dataset.petFrame=nextPetFrame; lastPetFrame=nextPetFrame; }
+      if (state!==lastPetState) { element.dataset.petState=state; lastPetState=state; }
+      if (result.renderState!==lastPetAnim) { element.dataset.petAnimation=result.renderState; lastPetAnim=result.renderState; }
+      const nextPetLook=awake?`${gazeX.toFixed(3)},${gazeY.toFixed(3)}`:'off';
+      if (nextPetLook!==lastPetLook) { element.dataset.petLook=nextPetLook; lastPetLook=nextPetLook; }
       if (overlay) {
-        overlay.hidden=!useOverlay;
+        const nextHidden=!useOverlay;
+        if (nextHidden!==lastOverlayHidden) { overlay.hidden=nextHidden; lastOverlayHidden=nextHidden; }
         if (useOverlay) {
           const cell=lookCell(awake?gazeX:0,awake?gazeY:0,spec.look!.groups[frame.lookGroup!].rowOffset);
-          overlay.style.backgroundImage=`url("${custom!.look}")`;
-          overlay.style.backgroundPosition=spritePosition(cell,spec.look!);
-          overlay.style.left=`${(frame.lookOffset?.x??0)/spec.frameWidth*100}%`;overlay.style.top=`${(frame.lookOffset?.y??0)/spec.frameHeight*100}%`;
-          overlay.dataset.petLookFrame=`${cell.rowIndex}:${cell.columnIndex}`;
-        } else { delete overlay.dataset.petLookFrame; }
+          const nextOverlayBg=custom!.look;
+          if (nextOverlayBg!==lastOverlayBg) { overlay.style.backgroundImage=`url("${nextOverlayBg}")`; lastOverlayBg=nextOverlayBg; }
+          const nextOverlayPos=spritePosition(cell,spec.look!);
+          if (nextOverlayPos!==lastOverlayPos) { overlay.style.backgroundPosition=nextOverlayPos; lastOverlayPos=nextOverlayPos; }
+          const nextLeft=`${(frame.lookOffset?.x??0)/spec.frameWidth*100}%`;
+          const nextTop=`${(frame.lookOffset?.y??0)/spec.frameHeight*100}%`;
+          if (nextLeft!==lastOverlayLeft) { overlay.style.left=nextLeft; lastOverlayLeft=nextLeft; }
+          if (nextTop!==lastOverlayTop) { overlay.style.top=nextTop; lastOverlayTop=nextTop; }
+          const nextLookFrame=`${cell.rowIndex}:${cell.columnIndex}`;
+          if (overlay.dataset.petLookFrame!==nextLookFrame) overlay.dataset.petLookFrame=nextLookFrame;
+        } else if (overlay.dataset.petLookFrame!==undefined) { delete overlay.dataset.petLookFrame; }
       }
     };
     repaint.current=paint;paint(performance.now());

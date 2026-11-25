@@ -11010,12 +11010,18 @@ function IslandApp() {
     }),
     (0, ReactRuntime.useEffect)(() => {
       let e = [],
-        t = () => void u.reportPageScale(window.innerWidth).catch(() => {}),
+        lastScaleKey = "",
+        t = (force = false) => {
+          const scaleKey = `${window.innerWidth}@${window.devicePixelRatio}`;
+          if (!force && scaleKey === lastScaleKey) return;
+          lastScaleKey = scaleKey;
+          void u.reportPageScale(window.innerWidth).catch(() => {});
+        },
         n = () => {
-          (e.forEach(clearTimeout), (e = [0, 250, 700].map((e) => window.setTimeout(t, e))));
+          (e.forEach(clearTimeout), (e = [0, 250, 700].map((ms, idx) => window.setTimeout(() => t(idx === 0), ms))));
         };
       (n(), window.addEventListener(`resize`, n));
-      let r = window.setInterval(t, 3e3);
+      let r = window.setInterval(() => t(false), 3e3);
       return () => {
         (e.forEach(clearTimeout), window.removeEventListener(`resize`, n), clearInterval(r));
       };
@@ -11024,19 +11030,24 @@ function IslandApp() {
       let e = 0,
         t = "",
         reportSequence = 0,
-        disposed = false;
+        disposed = false,
+        activeUntil = performance.now() + 800;
       const n = () => {
-        const r = document.querySelector("[data-island]")?.getBoundingClientRect();
+        e = 0;
+        if (disposed) return;
+        const islandEl = document.querySelector("[data-island]");
+        const r = islandEl?.getBoundingClientRect();
         if (r) {
-          const attachment = document.querySelector("[data-island] > [data-attached-character]");
+          const attachment = islandEl.querySelector(":scope > [data-attached-character]");
           const inset = name => Math.max(0, Math.min(128, Number(attachment?.dataset[name]) || 0));
-          const snow=document.querySelector('[data-island] > [data-holiday-effects]');
-          const snowBottom=Math.max(0,Math.min(128,Number(snow?.dataset.snowBottom)||0));
+          const snow = islandEl.querySelector(":scope > [data-holiday-effects]");
+          const snowBottom = Math.max(0, Math.min(128, Number(snow?.dataset.snowBottom) || 0));
           const args = [Math.floor(r.x), Math.floor(r.y), Math.ceil(r.width), Math.ceil(r.height), k, te, re,
-            inset('attachmentRight'), Math.max(inset('attachmentBottom'),snowBottom)];
+            inset('attachmentRight'), Math.max(inset('attachmentBottom'), snowBottom)];
           const key = [...args, window.innerWidth, window.innerHeight].join(",");
           if (key !== t) {
             t = key;
+            activeUntil = Math.max(activeUntil, performance.now() + 650);
             const sequence = ++reportSequence;
             void u.reportRect(...args).then(result => {
               if (disposed || sequence !== reportSequence) return;
@@ -11052,10 +11063,38 @@ function IslandApp() {
             }).catch(() => {});
           }
         }
-        e = requestAnimationFrame(n);
+        if (performance.now() < activeUntil) {
+          e = requestAnimationFrame(n);
+        }
       };
-      e = requestAnimationFrame(n);
-      return () => { disposed = true; cancelAnimationFrame(e); };
+      const wake = (ms = 650) => {
+        if (disposed) return;
+        activeUntil = Math.max(activeUntil, performance.now() + ms);
+        if (!e) e = requestAnimationFrame(n);
+      };
+      wake(800);
+      const islandEl = document.querySelector("[data-island]");
+      const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => wake(650)) : null;
+      if (ro && islandEl) ro.observe(islandEl);
+      const mo = typeof MutationObserver === 'function' && islandEl
+        ? new MutationObserver(() => wake(450))
+        : null;
+      if (mo && islandEl) {
+        mo.observe(islandEl, {
+          childList: true,
+          attributes: true,
+          attributeFilter: ['style', 'data-attachment-right', 'data-attachment-bottom', 'data-snow-bottom'],
+        });
+      }
+      const onResize = () => wake(700);
+      window.addEventListener('resize', onResize);
+      return () => {
+        disposed = true;
+        if (e) cancelAnimationFrame(e);
+        ro?.disconnect();
+        mo?.disconnect();
+        window.removeEventListener('resize', onResize);
+      };
     }, [s, c, D, k, te, re]));
   let A = useIslandStore(qj),
     me = useIslandStore((e) => e.settings?.lyrics === !0 && e.settings.lyricsInPlayer !== !1),

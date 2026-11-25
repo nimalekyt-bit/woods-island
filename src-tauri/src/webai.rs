@@ -1,12 +1,21 @@
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, PhysicalPosition, PhysicalSize, Rect};
 use std::sync::{Mutex,atomic::{AtomicBool,AtomicU64,Ordering},mpsc};
 use std::collections::BTreeMap;
-use webview2_com::{Microsoft::Web::WebView2::Win32::{ICoreWebView2_3, COREWEBVIEW2_WEB_ERROR_STATUS}, TrySuspendCompletedHandler, NavigationStartingEventHandler, NavigationCompletedEventHandler};
+use webview2_com::{Microsoft::Web::WebView2::Win32::{ICoreWebView2_3, COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC, COREWEBVIEW2_WEB_ERROR_STATUS}, TrySuspendCompletedHandler, NavigationStartingEventHandler, NavigationCompletedEventHandler};
 use windows_core_webview::Interface;
 static POPPED:Mutex<Option<String>>=Mutex::new(None);
 static LAST_WORD:AtomicU64=AtomicU64::new(0);
 static VISIBLE_VIEWS:Mutex<BTreeMap<String,bool>>=Mutex::new(BTreeMap::new());
+static EMBEDDED_ACTIVE:AtomicBool=AtomicBool::new(false);
 static WINDOW_OPERATION:Mutex<()>=Mutex::new(());
+
+pub fn is_embedded_active()->bool{EMBEDDED_ACTIVE.load(Ordering::Relaxed)}
+
+fn focus_webview_controller(view:&tauri::Webview){
+    let _=view.with_webview(|platform|unsafe{
+        let _=platform.controller().MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
+    });
+}
 static VIEW_STATUS:Mutex<BTreeMap<String,ViewStatus>>=Mutex::new(BTreeMap::new());
 static VIEW_INSTANCE:AtomicU64=AtomicU64::new(0);
 static WINDOW_PRESENTED:AtomicBool=AtomicBool::new(false);
@@ -139,7 +148,18 @@ fn observe_navigation(app:&AppHandle,view:&tauri::Webview,service:&str,target:&s
                 publish_for(&completed_app,&completed_label,if success.as_bool(){"loaded"}else{"error"},if success.as_bool(){None}else{Some(code.0)},Some(id),Some(instance));
                 // Controller visibility alone cannot reveal a child HWND that
                 // was hidden while loading or reparenting.
-                if let Some(view)=completed_app.get_webview(&completed_label){let _=if success.as_bool()&&can_present&&wants_visible(&completed_label){view.show()}else{view.hide()};}
+                if let Some(view)=completed_app.get_webview(&completed_label){
+                    let reveal = success.as_bool()&&can_present&&wants_visible(&completed_label);
+                    let _=if reveal{view.show()}else{view.hide()};
+                    if reveal && !crate::win::WindowManager::passive_qa() {
+                        if let Ok(parent_hwnd) = view.window().hwnd() {
+                            let fg = windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow();
+                            if fg.0 as isize == parent_hwnd.0 as isize {
+                                let _ = controller.MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
+                            }
+                        }
+                    }
+                }
             }Ok(())
         }));
         let mut start_token=0;let mut completed_token=0;
@@ -229,7 +249,13 @@ fn hide_pop_views(app:&AppHandle,except:Option<&str>)->Result<(),String>{
 }
 pub fn hide(app:&AppHandle,word:u64)->Result<(),String>{
     if !accept_word(word){return Ok(());}
+    EMBEDDED_ACTIVE.store(false,Ordering::SeqCst);
     hide_views(app,None)?;
+    if let Some(main)=app.get_window("main"){
+        if let Ok(hwnd)=main.hwnd(){
+            crate::win::WindowManager::set_activatable(windows::Win32::Foundation::HWND(hwnd.0 as _),false);
+        }
+    }
     app.emit("webai:active",false).map_err(|e|e.to_string())
 }
 pub fn embed(app:&AppHandle,service:&str,x:f64,y:f64,width:f64,height:f64,focus:bool,word:u64)->Result<(),String>{
@@ -239,7 +265,11 @@ pub fn embed(app:&AppHandle,service:&str,x:f64,y:f64,width:f64,height:f64,focus:
     if !accept_word(word){return Ok(());}
     let is_popped=popped().as_deref()==Some(service);
     hide_views(app,if is_popped{None}else{Some(service)})?;
-    if is_popped{return Ok(());}
+    if is_popped{
+        EMBEDDED_ACTIVE.store(false,Ordering::SeqCst);
+        if let Some(main)=app.get_window("main"){if let Ok(hwnd)=main.hwnd(){crate::win::WindowManager::set_activatable(windows::Win32::Foundation::HWND(hwnd.0 as _),false);}}
+        return Ok(());
+    }
     let main=app.get_window("main").ok_or("Main window is unavailable")?;
     let bounds=css_bounds(&main,x,y,width,height)?;
     let label=format!("web-ai-{service}");
@@ -256,12 +286,21 @@ pub fn embed(app:&AppHandle,service:&str,x:f64,y:f64,width:f64,height:f64,focus:
     apply_surface(app,&webview,"embedded")?;
     if !accept_word(word){webview.hide().map_err(|e|e.to_string())?;return view_activity(app,&webview,false);}
     show_view(app,&webview)?;
-    if focus&&!crate::win::WindowManager::passive_qa(){
+    EMBEDDED_ACTIVE.store(true,Ordering::SeqCst);
+    if !crate::win::WindowManager::passive_qa(){
         let main=app.get_window("main").ok_or("Main window is unavailable")?;
         let hwnd=main.hwnd().map_err(|e|e.to_string())?;
-        crate::win::WindowManager::keyboard_focus(windows::Win32::Foundation::HWND(hwnd.0 as _),true);
-        main.set_focus().map_err(|e|e.to_string())?;
-        webview.set_focus().map_err(|e|e.to_string())?;
+        let raw_hwnd=windows::Win32::Foundation::HWND(hwnd.0 as _);
+        // Allow clicking inside the embedded child WebView2 to activate the
+        // parent island window so keyboard input works reliably even when the
+        // chat tab was opened via mouse click (focus == false).
+        crate::win::WindowManager::set_activatable(raw_hwnd,true);
+        if focus {
+            crate::win::WindowManager::keyboard_focus(raw_hwnd,true);
+            main.set_focus().map_err(|e|e.to_string())?;
+            webview.set_focus().map_err(|e|e.to_string())?;
+            focus_webview_controller(&webview);
+        }
     }
     app.emit("webai:active",true).map_err(|e|e.to_string())
 }
@@ -328,7 +367,9 @@ pub fn window(app:&AppHandle,service:&str)->Result<(),String>{
     if WINDOW_PRESENTED.load(Ordering::SeqCst)&&popped().as_deref()==Some(service){return window_show(app);}
     let operation=WINDOW_OPERATION.lock().unwrap();
     let request=WINDOW_REQUEST.fetch_add(1,Ordering::SeqCst)+1;
+    EMBEDDED_ACTIVE.store(false,Ordering::SeqCst);
     hide_views(app,None)?;hide_pop_views(app,Some(service))?;
+    if let Some(main)=app.get_window("main"){if let Ok(hwnd)=main.hwnd(){crate::win::WindowManager::set_activatable(windows::Win32::Foundation::HWND(hwnd.0 as _),false);}}
     let (sender,receiver)=mpsc::channel();
     if let Some((_,old))=WINDOW_READY.lock().unwrap().replace((service.into(),sender)){let _=old.send(Err("AI window request superseded".into()));}
     *POPPED.lock().unwrap()=Some(service.into());

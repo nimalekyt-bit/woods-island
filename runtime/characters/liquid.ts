@@ -80,18 +80,24 @@ export function mountLiquidIsland(svg: SVGSVGElement, ports: LiquidPorts, initia
     const drop: Drop = { x, y, vy, r, g: group, age: 0, mode: 'fall' };
     drops.push(drop); return drop;
   };
+  let svgWidthAttr = '', svgHeightAttr = '', svgViewBoxAttr = '';
   const measure = () => {
     const rect = parent.getBoundingClientRect();
     if (ports.options().scaled) {
       const style = getComputedStyle(parent); width = parseFloat(style.width); height = parseFloat(style.height);
     } else { width = rect.width; height = rect.height; }
-    svg.setAttribute('width', width.toFixed(2)); svg.setAttribute('height', (height + 120).toFixed(1));
-    svg.setAttribute('viewBox', `${(-width / 2).toFixed(2)} 0 ${width.toFixed(2)} ${(height + 120).toFixed(1)}`);
+    const nextW = width.toFixed(2);
+    const nextH = (height + 120).toFixed(1);
+    const nextVb = `${(-width / 2).toFixed(2)} 0 ${nextW} ${nextH}`;
+    if (nextW !== svgWidthAttr) { svg.setAttribute('width', nextW); svgWidthAttr = nextW; }
+    if (nextH !== svgHeightAttr) { svg.setAttribute('height', nextH); svgHeightAttr = nextH; }
+    if (nextVb !== svgViewBoxAttr) { svg.setAttribute('viewBox', nextVb); svgViewBoxAttr = nextVb; }
     return rect;
   };
   const clip = parent.querySelector<HTMLElement>(':scope > [data-liquid-clip]');
   const squash = clip?.querySelector<HTMLElement>(':scope > [data-liquid-squash]') ?? null;
   let clipApplied = false, squashApplied = false, gradientHeight = 30;
+  let lastBodyD = '', lastRimD = '', lastRimStroke = '', lastRimOpacity = '';
   const applyContentShape = (points: LiquidPoint[], halfWidth: number, sideHeight: number) => {
     if (!clip) return;
     let upward = 0, center = 0, count = 0;
@@ -123,7 +129,7 @@ export function mountLiquidIsland(svg: SVGSVGElement, ports: LiquidPorts, initia
     const ears = options.ears ? Math.min(14, sideHeight) : 0;
     const round = options.round && ears === 0 ? curveRadius : 0, top = options.ears ? -2 : 0;
     const format = (value: number) => value.toFixed(2);
-    body.setAttribute('d', `M${format(-halfWidth - ears + round)},${top} H${format(halfWidth + ears - round)}`
+    const nextBodyD = `M${format(-halfWidth - ears + round)},${top} H${format(halfWidth + ears - round)}`
       + (top < 0 ? ' V0' : '')
       + (ears > 0 ? ` A${format(ears)},${format(ears)} 0 0 0 ${format(halfWidth)},${format(ears)}` : '')
       + (round > 0 ? ` A${format(round)},${format(round)} 0 0 1 ${format(halfWidth)},${format(round)}` : '')
@@ -131,8 +137,10 @@ export function mountLiquidIsland(svg: SVGSVGElement, ports: LiquidPorts, initia
         ? ` L${format(halfWidth)},${format(sideHeight)} A${format(curveRadius)},${format(curveRadius)} 0 0 1 ${format(halfWidth - curveRadius)},${format(height)} L${smoothLiquidPath(points.slice().reverse())} A${format(curveRadius)},${format(curveRadius)} 0 0 1 ${format(-halfWidth)},${format(sideHeight)}`
         : ` L${format(halfWidth)},${format(sideHeight)} L${smoothLiquidPath(points.slice().reverse())} L${format(-halfWidth)},${format(sideHeight)}`)
       + (ears > 0 ? ` L${format(-halfWidth)},${format(ears)} A${format(ears)},${format(ears)} 0 0 0 ${format(-halfWidth - ears)},0` : '')
-      + (round > 0 ? ` L${format(-halfWidth)},${format(round)} A${format(round)},${format(round)} 0 0 1 ${format(-halfWidth + round)},0` : '') + ' Z');
-    rim.setAttribute('d', 'M' + smoothLiquidPath(points.slice(4, 86).map(([x, y]): LiquidPoint => [x, y - 2.2])));
+      + (round > 0 ? ` L${format(-halfWidth)},${format(round)} A${format(round)},${format(round)} 0 0 1 ${format(-halfWidth + round)},0` : '') + ' Z';
+    if (nextBodyD !== lastBodyD) { body.setAttribute('d', nextBodyD); lastBodyD = nextBodyD; }
+    const nextRimD = 'M' + smoothLiquidPath(points.slice(4, 86).map(([x, y]): LiquidPoint => [x, y - 2.2]));
+    if (nextRimD !== lastRimD) { rim.setAttribute('d', nextRimD); lastRimD = nextRimD; }
     if (height !== gradientHeight) { gradient.setAttribute('y2', format(height)); gradientHeight = height; }
     applyContentShape(points, halfWidth, sideHeight);
   };
@@ -227,8 +235,10 @@ export function mountLiquidIsland(svg: SVGSVGElement, ports: LiquidPorts, initia
       drop.g.setAttribute('transform', `translate(${drop.x.toFixed(1)},${drop.y.toFixed(1)})`); return true;
     });
     renderShape();
-    rim.style.stroke = mood === 'music' && options.accent ? options.accent : rimColors[mood];
-    rim.setAttribute('opacity', mood === 'sleep' ? '0.35' : mood === 'attn' ? (0.5 + 0.4 * Math.abs(Math.sin(timeMs / 120))).toFixed(2) : '0.75');
+    const nextStroke = mood === 'music' && options.accent ? options.accent : rimColors[mood];
+    if (nextStroke !== lastRimStroke) { rim.style.stroke = nextStroke; lastRimStroke = nextStroke; }
+    const nextOpacity = mood === 'sleep' ? '0.35' : mood === 'attn' ? (0.5 + 0.4 * Math.abs(Math.sin(timeMs / 120))).toFixed(2) : '0.75';
+    if (nextOpacity !== lastRimOpacity) { rim.setAttribute('opacity', nextOpacity); lastRimOpacity = nextOpacity; }
   };
   const measureChanged = () => { const beforeWidth = width, beforeHeight = height; measure(); if (width !== beforeWidth || height !== beforeHeight) renderShape(); };
   measuredIslands.add(measureChanged);

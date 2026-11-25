@@ -41,6 +41,7 @@ pub struct Monitor {
     native_at: u64,
     next_probe: u64,
     sequence: u64,
+    last_probe_at: u64,
     pending: Option<(u64, u64)>,
     ready: bool,
     navigated: bool,
@@ -56,6 +57,7 @@ impl Monitor {
             native_at: now,
             next_probe: now,
             sequence: 0,
+            last_probe_at: now,
             pending: None,
             ready: false,
             navigated: false,
@@ -79,6 +81,29 @@ impl Monitor {
             self.navigated = false;
         }
         true
+    }
+    /// Accepts a delayed `ready == true` reply for the latest issued probe when
+    /// the page was already ready and WebView2 was temporarily throttled under
+    /// heavy CPU load, preventing false restarts while still rejecting stale or
+    /// mismatched sequences.
+    pub fn reply_tolerant(&mut self, sequence: u64, ready: bool, now: u64, max_late_ms: u64) -> bool {
+        if self.reply(sequence, ready, now) {
+            return true;
+        }
+        if !self.stopped
+            && !self.blocked
+            && self.ready
+            && ready
+            && sequence != 0
+            && sequence == self.sequence
+            && now.saturating_sub(self.last_probe_at) <= max_late_ms
+        {
+            self.pending = None;
+            self.page_at = now;
+            self.navigated = false;
+            return true;
+        }
+        false
     }
     pub fn resume(&mut self, now: u64) {
         self.page_at = now;
@@ -176,6 +201,7 @@ impl Monitor {
         }
         if can_probe && self.pending.is_none() && now >= self.next_probe {
             self.sequence = self.sequence.wrapping_add(1).max(1);
+            self.last_probe_at = now;
             self.pending = Some((self.sequence, now));
             self.next_probe = now.saturating_add(PROBE_INTERVAL_MS);
             return Action::Probe(self.sequence);
@@ -342,5 +368,18 @@ mod tests {
         ));
         m.stop();
         assert_eq!(m.poll(1_000_000, false, false, true), Action::None);
+    }
+    #[test]
+    fn delayed_ready_pong_under_load_prevents_false_restart_while_rejecting_wrong_sequence() {
+        let mut m = Monitor::new(0);
+        reply(&mut m, 0);
+        let Action::Probe(seq) = m.poll(10_000, true, false, true) else {
+            panic!("Expected probe");
+        };
+        assert!(!m.reply_tolerant(seq + 1, true, 17_000, 15_000));
+        assert!(!m.reply_tolerant(seq, false, 17_000, 15_000));
+        assert!(m.reply_tolerant(seq, true, 17_000, 15_000));
+        assert_eq!(m.ages(17_000).0, 0);
+        assert_eq!(m.status(), "watching");
     }
 }

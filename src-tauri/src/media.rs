@@ -2,10 +2,14 @@ pub mod legacy;
 pub mod names;
 
 use std::collections::HashMap;
-use std::sync::{Mutex, OnceLock};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Condvar, Mutex, OnceLock,
+};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::Emitter;
 use serde_json::{json, Value};
+use windows::Foundation::TypedEventHandler;
 use windows::Media::Control::{
     GlobalSystemMediaTransportControlsSession,
     GlobalSystemMediaTransportControlsSessionManager,
@@ -22,6 +26,94 @@ static HIDDEN_APP_IDS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 static LAST_COVER_CACHE: Mutex<Option<(String, String)>> = Mutex::new(None); // (key, cover_url)
 static PLAYBACK_TRACKER: Mutex<Option<PlaybackProgress>> = Mutex::new(None);
 static APP_NAME_CACHE: OnceLock<Mutex<HashMap<String, Option<String>>>> = OnceLock::new();
+static MEDIA_NAMES_CACHE: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
+static CACHED_MEDIA: Mutex<Option<Value>> = Mutex::new(None);
+static MEDIA_LOOP_RUNNING: AtomicBool = AtomicBool::new(false);
+static MEDIA_WAKE: OnceLock<(Mutex<bool>, Condvar)> = OnceLock::new();
+static LAST_GSMTC_ERROR: Mutex<Option<(String, Instant)>> = Mutex::new(None);
+static LEGACY_CACHE: Mutex<Option<(Instant, Vec<Value>)>> = Mutex::new(None);
+
+fn wake_pair() -> &'static (Mutex<bool>, Condvar) {
+    MEDIA_WAKE.get_or_init(|| (Mutex::new(true), Condvar::new()))
+}
+
+pub fn notify_wake() {
+    let (lock, cvar) = wake_pair();
+    if let Ok(mut dirty) = lock.lock() {
+        *dirty = true;
+        cvar.notify_all();
+    }
+}
+
+pub fn invalidate_names_cache() {
+    if let Ok(mut guard) = MEDIA_NAMES_CACHE.lock() {
+        *guard = None;
+    }
+    notify_wake();
+}
+
+pub fn cached_media() -> Option<Value> {
+    CACHED_MEDIA.lock().ok().and_then(|g| g.clone())
+}
+
+fn custom_media_name(app_id: &str) -> Option<String> {
+    let mut guard = MEDIA_NAMES_CACHE.lock().ok()?;
+    if guard.is_none() {
+        let mut map = HashMap::new();
+        if let Some(obj) = crate::storage::load_json_file("media_names.json").and_then(|v| v.as_object().cloned()) {
+            for (k, v) in obj {
+                if let Some(s) = v.as_str() {
+                    map.insert(k, s.to_owned());
+                }
+            }
+        }
+        *guard = Some(map);
+    }
+    guard.as_ref().and_then(|m| m.get(app_id).cloned())
+}
+
+fn log_gsmtc_error_throttled(error: &str) {
+    let now = Instant::now();
+    let should_log = if let Ok(mut guard) = LAST_GSMTC_ERROR.lock() {
+        let repeat = guard
+            .as_ref()
+            .is_some_and(|(prev, at)| prev == error && now.duration_since(*at) < Duration::from_secs(60));
+        if repeat {
+            false
+        } else {
+            *guard = Some((error.to_owned(), now));
+            true
+        }
+    } else {
+        true
+    };
+    if should_log {
+        crate::app_log(&format!("GSMTC manager: {error}"));
+    }
+}
+
+fn cached_legacy_snapshots(force: bool) -> Vec<Value> {
+    let now = Instant::now();
+    if !force {
+        if let Ok(guard) = LEGACY_CACHE.lock() {
+            if let Some((at, ref cached)) = *guard {
+                let ttl = if cached.is_empty() {
+                    if crate::is_low_power() { Duration::from_secs(6) } else { Duration::from_secs(3) }
+                } else {
+                    Duration::from_millis(900)
+                };
+                if now.duration_since(at) < ttl {
+                    return cached.clone();
+                }
+            }
+        }
+    }
+    let fresh = legacy::snapshots();
+    if let Ok(mut guard) = LEGACY_CACHE.lock() {
+        *guard = Some((now, fresh.clone()));
+    }
+    fresh
+}
 
 fn cached_registered_app_name(app_id: &str) -> Option<String> {
     if app_id.is_empty() || app_id.starts_with("woods.") {
@@ -49,6 +141,7 @@ pub fn configure(settings: &Value) {
         *picked = None;
     }
     *HIDDEN_APP_IDS.lock().unwrap() = hidden;
+    notify_wake();
 }
 
 fn is_hidden(id: &str) -> bool {
@@ -97,7 +190,7 @@ pub fn now_ms() -> u64 {
 }
 
 pub fn format_app_name(app_id: &str) -> String {
-    if let Some(name)=crate::storage::load_json_file("media_names.json").and_then(|v|v[app_id].as_str().map(str::to_owned)) {return name;}
+    if let Some(name) = custom_media_name(app_id) { return name; }
     if let Some(kind) = legacy::LegacyKind::from_id(app_id) {
         return kind.name().to_string();
     }
@@ -140,12 +233,19 @@ pub fn format_app_name(app_id: &str) -> String {
     }
 }
 
+fn request_manager_no_com() -> Option<GlobalSystemMediaTransportControlsSessionManager> {
+    match GlobalSystemMediaTransportControlsSessionManager::RequestAsync().and_then(|operation| operation.get()) {
+        Ok(manager) => Some(manager),
+        Err(error) => {
+            log_gsmtc_error_throttled(&error.to_string());
+            None
+        }
+    }
+}
+
 pub fn get_manager() -> Option<GlobalSystemMediaTransportControlsSessionManager> {
     let _com = crate::audio::ComApartment::new().ok()?;
-    match GlobalSystemMediaTransportControlsSessionManager::RequestAsync().and_then(|operation|operation.get()) {
-        Ok(manager) => Some(manager),
-        Err(error) => { crate::app_log(&format!("GSMTC manager: {error}")); None },
-    }
+    request_manager_no_com()
 }
 
 pub fn get_active_session(
@@ -208,10 +308,10 @@ pub fn get_active_session(
     None
 }
 
-/// Attempts to read the thumbnail image from GSMTC stream
-fn read_stream_thumbnail(session: &GlobalSystemMediaTransportControlsSession) -> Option<String> {
-    let prop_op = session.TryGetMediaPropertiesAsync().ok()?;
-    let props = prop_op.get().ok()?;
+/// Attempts to read the thumbnail image from already-fetched GSMTC properties
+fn read_stream_thumbnail_from_props(
+    props: &windows::Media::Control::GlobalSystemMediaTransportControlsSessionMediaProperties,
+) -> Option<String> {
     let thumb_ref = props.Thumbnail().ok()?;
     let stream_op = thumb_ref.OpenReadAsync().ok()?;
     let stream = stream_op.get().ok()?;
@@ -268,9 +368,48 @@ async fn fetch_online_artwork(artist: &str, title: &str) -> Option<String> {
     None
 }
 
+fn advance_cached_media_position() -> Option<Value> {
+    let mut cached = CACHED_MEDIA.lock().ok()?.clone()?;
+    if cached["playing"] != true {
+        return Some(cached);
+    }
+    let key = cached["key"].as_str().unwrap_or_default();
+    let now = now_ms();
+    if let Ok(mut tracker_guard) = PLAYBACK_TRACKER.lock() {
+        if let Some(ref mut trk) = *tracker_guard {
+            if trk.key == key && trk.playing {
+                let delta = now.saturating_sub(trk.last_tick);
+                let mut pos = trk.base_pos_ms.saturating_add(delta);
+                if trk.duration_ms > 0 {
+                    pos = pos.min(trk.duration_ms);
+                }
+                trk.base_pos_ms = pos;
+                trk.last_tick = now;
+                cached["positionMs"] = json!(pos);
+                cached["updatedAt"] = json!(now);
+            }
+        }
+    }
+    if let Ok(mut guard) = CACHED_MEDIA.lock() {
+        *guard = Some(cached.clone());
+    }
+    Some(cached)
+}
+
 pub fn get_current_media() -> Option<Value> {
+    if MEDIA_LOOP_RUNNING.load(Ordering::Acquire) {
+        return advance_cached_media_position();
+    }
+    let mgr = get_manager();
+    poll_current_media_with_manager(mgr.as_ref(), true).0
+}
+
+fn poll_current_media_with_manager(
+    mgr: Option<&GlobalSystemMediaTransportControlsSessionManager>,
+    force_legacy: bool,
+) -> (Option<Value>, Option<GlobalSystemMediaTransportControlsSession>, bool) {
     let bridge = crate::music_bridge::current().filter(|_| !is_hidden(crate::music_bridge::APP_ID));
-    let legacy_visible: Vec<Value> = legacy::snapshots()
+    let legacy_visible: Vec<Value> = cached_legacy_snapshots(force_legacy)
         .into_iter()
         .filter(|m| m["app"].as_str().is_some_and(|id| !is_hidden(id)))
         .map(|mut m| {
@@ -281,19 +420,26 @@ pub fn get_current_media() -> Option<Value> {
         })
         .collect();
     let picked = PICKED_APP_ID.lock().unwrap().clone();
+    let mut rpc_ok = true;
+    let mut active_session: Option<GlobalSystemMediaTransportControlsSession> = None;
     let mut current = if let Some(ref picked_id) = picked {
         if picked_id == crate::music_bridge::APP_ID {
             bridge.clone()
         } else if let Some(found) = legacy_visible.iter().find(|m| m["app"].as_str() == Some(picked_id.as_str())) {
             Some(found.clone())
         } else {
-            read_current_media()
+            let (val, sess, ok) = read_current_media_from_manager(mgr);
+            rpc_ok = ok;
+            active_session = sess;
+            val
         }
     } else {
         None
     };
     if current.is_none() {
-        let gsmtc = read_current_media();
+        let (gsmtc, sess, ok) = read_current_media_from_manager(mgr);
+        rpc_ok = ok;
+        active_session = sess;
         let legacy_playing = legacy_visible.iter().find(|m| m["playing"] == true).cloned();
         let legacy_any = legacy_visible.first().cloned();
         current = if bridge.as_ref().is_some_and(|m| m["playing"] == true) {
@@ -316,25 +462,36 @@ pub fn get_current_media() -> Option<Value> {
         *PLAYBACK_TRACKER.lock().unwrap() = None;
         *LAST_COVER_CACHE.lock().unwrap() = None;
     }
-    current
+    (current, active_session, rpc_ok)
 }
 
-fn read_current_media() -> Option<Value> {
-    let _com = crate::audio::ComApartment::new().ok()?;
-    let mgr = get_manager()?;
-    let session = get_active_session(&mgr)?;
-    
+fn read_current_media_from_manager(
+    mgr: Option<&GlobalSystemMediaTransportControlsSessionManager>,
+) -> (Option<Value>, Option<GlobalSystemMediaTransportControlsSession>, bool) {
+    let Some(mgr) = mgr else { return (None, None, false); };
+    let Ok(all_sessions) = mgr.GetSessions() else {
+        return (None, None, false);
+    };
+    let sources_count = all_sessions.Size().unwrap_or(1);
+    let Some(session) = get_active_session(mgr) else {
+        return (None, None, true);
+    };
+
     let app_id = session.SourceAppUserModelId().unwrap_or_default().to_string();
     let app_name = format_app_name(&app_id);
 
-    let prop_op = session.TryGetMediaPropertiesAsync().ok()?;
-    let props = prop_op.get().ok()?;
-    
+    let Ok(prop_op) = session.TryGetMediaPropertiesAsync() else {
+        return (None, Some(session), true);
+    };
+    let Ok(props) = prop_op.get() else {
+        return (None, Some(session), true);
+    };
+
     let title = props.Title().unwrap_or_default().to_string();
     if title.is_empty() {
-        return None;
+        return (None, Some(session), true);
     }
-    
+
     let artist = props.Artist().unwrap_or_default().to_string();
     let album = props.AlbumTitle().unwrap_or_default().to_string();
 
@@ -360,7 +517,7 @@ fn read_current_media() -> Option<Value> {
     // Continuous time progression tracker
     let position_ms = {
         let mut tracker_guard = PLAYBACK_TRACKER.lock().unwrap();
-        if tracker_guard.as_ref().map(|t|t.key.as_str()) != Some(&key) {
+        if tracker_guard.as_ref().map(|t| t.key.as_str()) != Some(&key) {
             *tracker_guard = Some(PlaybackProgress {
                 key: key.clone(),
                 base_pos_ms: raw_pos_ms,
@@ -371,7 +528,10 @@ fn read_current_media() -> Option<Value> {
                 timeline_at,
             });
         }
-        tracker_guard.as_mut()?.advance(raw_pos_ms,duration_ms,timeline_at,now,is_playing)
+        match tracker_guard.as_mut() {
+            Some(t) => t.advance(raw_pos_ms, duration_ms, timeline_at, now, is_playing),
+            None => raw_pos_ms,
+        }
     };
 
     // Cover art retrieval with in-memory caching
@@ -386,30 +546,32 @@ fn read_current_media() -> Option<Value> {
     }
 
     if cover_url.is_none() {
-        // Try reading local thumbnail from WinRT stream
-        if let Some(stream_cover) = read_stream_thumbnail(&session) {
+        // Try reading local thumbnail from WinRT stream (reuse already-fetched props!)
+        if let Some(stream_cover) = read_stream_thumbnail_from_props(&props) {
             let mut cache_guard = LAST_COVER_CACHE.lock().unwrap();
             *cache_guard = Some((key.clone(), stream_cover.clone()));
             cover_url = Some(stream_cover);
         }
     }
 
-    let sources_count = mgr.GetSessions().map(|s| s.Size().unwrap_or(1)).unwrap_or(1);
-
-    Some(json!({
-        "key": key,
-        "title": title,
-        "artist": artist,
-        "album": album,
-        "app": app_id,
-        "appName": app_name,
-        "playing": is_playing,
-        "positionMs": position_ms,
-        "durationMs": duration_ms,
-        "cover": cover_url,
-        "updatedAt": now,
-        "sources": sources_count
-    }))
+    (
+        Some(json!({
+            "key": key,
+            "title": title,
+            "artist": artist,
+            "album": album,
+            "app": app_id,
+            "appName": app_name,
+            "playing": is_playing,
+            "positionMs": position_ms,
+            "durationMs": duration_ms,
+            "cover": cover_url,
+            "updatedAt": now,
+            "sources": sources_count
+        })),
+        Some(session),
+        true,
+    )
 }
 
 pub fn get_current_cover() -> Option<String> {
@@ -478,6 +640,7 @@ pub fn set_picked_source(id: Option<String>) {
     if let Ok(mut lock) = PICKED_APP_ID.lock() {
         *lock = id;
     }
+    notify_wake();
 }
 
 pub fn media_pick(id: &str) {
@@ -510,7 +673,7 @@ pub fn media_control(action: &str) -> bool {
                 "prev" => session.TrySkipPreviousAsync(),
                 _ => return false,
             };
-            if operation.and_then(|op|op.get()).unwrap_or(false) { return true; }
+            if operation.and_then(|op|op.get()).unwrap_or(false) { notify_wake(); return true; }
         }
     }
     match action {
@@ -519,6 +682,7 @@ pub fn media_control(action: &str) -> bool {
         "prev" => send_media_key(VK_MEDIA_PREV_TRACK.0 as u8),
         _ => return false,
     }
+    notify_wake();
     true
 }
 
@@ -598,6 +762,7 @@ pub fn media_seek_ms(ms: u64) -> bool {
             trk.last_tick = now_ms();
         }
     }
+    notify_wake();
     true
 }
 
@@ -620,87 +785,285 @@ fn media_event_snapshot(current: &Option<Value>) -> Value {
     value
 }
 
+struct ManagerBinding {
+    mgr: GlobalSystemMediaTransportControlsSessionManager,
+    sessions_token: Option<windows::Foundation::EventRegistrationToken>,
+    current_token: Option<windows::Foundation::EventRegistrationToken>,
+}
+
+impl ManagerBinding {
+    fn connect() -> Option<Self> {
+        let mgr = request_manager_no_com()?;
+        let sessions_token = mgr
+            .SessionsChanged(&TypedEventHandler::new(|_, _| {
+                notify_wake();
+                Ok(())
+            }))
+            .ok();
+        let current_token = mgr
+            .CurrentSessionChanged(&TypedEventHandler::new(|_, _| {
+                notify_wake();
+                Ok(())
+            }))
+            .ok();
+        Some(Self {
+            mgr,
+            sessions_token,
+            current_token,
+        })
+    }
+}
+
+impl Drop for ManagerBinding {
+    fn drop(&mut self) {
+        if let Some(t) = self.sessions_token.take() {
+            let _ = self.mgr.RemoveSessionsChanged(t);
+        }
+        if let Some(t) = self.current_token.take() {
+            let _ = self.mgr.RemoveCurrentSessionChanged(t);
+        }
+    }
+}
+
+struct SessionBinding {
+    session: GlobalSystemMediaTransportControlsSession,
+    app_id: String,
+    media_token: Option<windows::Foundation::EventRegistrationToken>,
+    playback_token: Option<windows::Foundation::EventRegistrationToken>,
+    timeline_token: Option<windows::Foundation::EventRegistrationToken>,
+}
+
+impl SessionBinding {
+    fn bind(session: GlobalSystemMediaTransportControlsSession, app_id: String) -> Self {
+        let media_token = session
+            .MediaPropertiesChanged(&TypedEventHandler::new(|_, _| {
+                notify_wake();
+                Ok(())
+            }))
+            .ok();
+        let playback_token = session
+            .PlaybackInfoChanged(&TypedEventHandler::new(|_, _| {
+                notify_wake();
+                Ok(())
+            }))
+            .ok();
+        let timeline_token = session
+            .TimelinePropertiesChanged(&TypedEventHandler::new(|_, _| {
+                notify_wake();
+                Ok(())
+            }))
+            .ok();
+        Self {
+            session,
+            app_id,
+            media_token,
+            playback_token,
+            timeline_token,
+        }
+    }
+}
+
+impl Drop for SessionBinding {
+    fn drop(&mut self) {
+        if let Some(t) = self.media_token.take() {
+            let _ = self.session.RemoveMediaPropertiesChanged(t);
+        }
+        if let Some(t) = self.playback_token.take() {
+            let _ = self.session.RemovePlaybackInfoChanged(t);
+        }
+        if let Some(t) = self.timeline_token.take() {
+            let _ = self.session.RemoveTimelinePropertiesChanged(t);
+        }
+    }
+}
+
 pub fn start_media_loop(app: tauri::AppHandle) {
     crate::music_bridge::start();
     crate::audio::start_loopback(app.clone());
     let app_clone = app.clone();
-    
-    // 1. GSMTC Media and Position Loop
-    std::thread::spawn(move || {
-        let _com = crate::audio::ComApartment::new().ok();
-        let mut last_key = String::new();
-        let mut last_playing = false;
-        let mut last_cover = None;
-        let mut last_payload = Value::Null;
 
-        loop {
-            std::thread::sleep(std::time::Duration::from_millis(350));
+    // 1. Event-driven GSMTC Media and Position Loop (zero 350ms RequestAsync polling!)
+    let _ = std::thread::Builder::new()
+        .name("woods-media-loop".into())
+        .spawn(move || {
+            let _com = crate::audio::ComApartment::new().ok();
+            MEDIA_LOOP_RUNNING.store(true, Ordering::Release);
 
-            let current = get_current_media();
-            let key = current.as_ref()
-                .and_then(|v| v.get("key"))
-                .and_then(|k| k.as_str())
-                .unwrap_or("")
-                .to_string();
-            let is_playing = current.as_ref()
-                .and_then(|v| v.get("playing"))
-                .and_then(|p| p.as_bool())
-                .unwrap_or(false);
-            crate::audio::set_spectrum_playing(is_playing);
+            let mut manager_binding: Option<ManagerBinding> = None;
+            let mut session_binding: Option<SessionBinding> = None;
+            let mut next_manager_retry = Instant::now();
+            let mut last_full_poll = Instant::now() - Duration::from_secs(60);
 
-            let key_changed = key != last_key;
-            let play_changed = is_playing != last_playing;
-            let cover = current.as_ref().and_then(|m|m["cover"].as_str()).map(str::to_owned);
-            if let Some(cover) = cover {
-                let pair = (key.clone(),cover.clone());
-                if last_cover.as_ref()!=Some(&pair) {
-                    let _=app_clone.emit("media:cover",json!({"key":key,"cover":cover}));
-                    last_cover=Some(pair);
-                }
-            } else if key_changed {last_cover=None;}
+            let mut last_key = String::new();
+            let mut last_playing = false;
+            let mut last_cover = None;
+            let mut last_payload = Value::Null;
 
-            // Trigger background online cover fetch if thumbnail missing
-            if key_changed && !key.is_empty() {
-                let cached_cover = LAST_COVER_CACHE.lock().unwrap().clone();
-                let has_cover = current.as_ref().and_then(|m|m["cover"].as_str()).is_some() || cached_cover.as_ref().map(|(k, _)| k == &key).unwrap_or(false);
-                if !has_cover {
-                    if let Some(ref cur) = current {
-                        let artist = cur.get("artist").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                        let title = cur.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                        let key_for_task = key.clone();
-                        let app_for_task = app_clone.clone();
+            loop {
+                let low_power = crate::is_low_power();
+                let (lock, cvar) = wake_pair();
+                let woken_by_event = {
+                    let mut dirty = lock.lock().unwrap_or_else(|e| e.into_inner());
+                    if *dirty {
+                        *dirty = false;
+                        true
+                    } else {
+                        let wait = if low_power {
+                            Duration::from_secs(5)
+                        } else if last_playing {
+                            Duration::from_millis(950)
+                        } else {
+                            Duration::from_secs(4)
+                        };
+                        let (mut guard, _) = cvar
+                            .wait_timeout(dirty, wait)
+                            .unwrap_or_else(|e| e.into_inner());
+                        let was_dirty = *guard;
+                        *guard = false;
+                        was_dirty
+                    }
+                };
 
-                        tauri::async_runtime::spawn(async move {
-                            if let Some(artwork) = fetch_online_artwork(&artist, &title).await {
-                                {
-                                    let mut cache_guard = LAST_COVER_CACHE.lock().unwrap();
-                                    if PLAYBACK_TRACKER.lock().unwrap().as_ref().map(|t| &t.key) == Some(&key_for_task) {
-                                        *cache_guard = Some((key_for_task.clone(), artwork.clone()));
-                                    }
+                let low_power = crate::is_low_power();
+                let safety_interval = if low_power {
+                    Duration::from_secs(10)
+                } else if last_playing {
+                    Duration::from_secs(4)
+                } else {
+                    Duration::from_secs(6)
+                };
+                let need_full_poll = woken_by_event
+                    || last_full_poll.elapsed() >= safety_interval
+                    || (manager_binding.is_none() && Instant::now() >= next_manager_retry);
+
+                let current = if need_full_poll {
+                    if manager_binding.is_none() && Instant::now() >= next_manager_retry {
+                        manager_binding = ManagerBinding::connect();
+                        if manager_binding.is_none() {
+                            next_manager_retry = Instant::now() + Duration::from_secs(5);
+                        }
+                    }
+
+                    let (polled, active_session, rpc_ok) = poll_current_media_with_manager(
+                        manager_binding.as_ref().map(|b| &b.mgr),
+                        woken_by_event,
+                    );
+                    last_full_poll = Instant::now();
+
+                    if !rpc_ok && manager_binding.is_some() {
+                        session_binding = None;
+                        manager_binding = None;
+                        next_manager_retry = Instant::now() + Duration::from_secs(5);
+                    } else {
+                        match active_session {
+                            Some(sess) => {
+                                let app_id = sess.SourceAppUserModelId().unwrap_or_default().to_string();
+                                let same = session_binding
+                                    .as_ref()
+                                    .is_some_and(|b| b.app_id == app_id);
+                                if !same {
+                                    session_binding = Some(SessionBinding::bind(sess, app_id));
                                 }
-                                let _ = app_for_task.emit("media:cover", json!({
-                                    "key": key_for_task,
-                                    "cover": artwork
-                                }));
                             }
-                        });
+                            None => {
+                                session_binding = None;
+                            }
+                        }
+                    }
+
+                    if let Ok(mut guard) = CACHED_MEDIA.lock() {
+                        *guard = polled.clone();
+                    }
+                    polled
+                } else if last_playing {
+                    // Pure in-memory progress tick: zero WinRT/NPSMSvc RPC!
+                    advance_cached_media_position()
+                } else {
+                    cached_media()
+                };
+
+                let key = current
+                    .as_ref()
+                    .and_then(|v| v.get("key"))
+                    .and_then(|k| k.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let is_playing = current
+                    .as_ref()
+                    .and_then(|v| v.get("playing"))
+                    .and_then(|p| p.as_bool())
+                    .unwrap_or(false);
+                crate::audio::set_spectrum_playing(is_playing);
+
+                let key_changed = key != last_key;
+                let play_changed = is_playing != last_playing;
+                let cover = current
+                    .as_ref()
+                    .and_then(|m| m["cover"].as_str())
+                    .map(str::to_owned);
+                if let Some(cover) = cover {
+                    let pair = (key.clone(), cover.clone());
+                    if last_cover.as_ref() != Some(&pair) {
+                        let _ = app_clone.emit("media:cover", json!({"key": key, "cover": cover}));
+                        last_cover = Some(pair);
+                    }
+                } else if key_changed {
+                    last_cover = None;
+                }
+
+                // Trigger background online cover fetch if thumbnail missing
+                if key_changed && !key.is_empty() {
+                    let cached_cover = LAST_COVER_CACHE.lock().unwrap().clone();
+                    let has_cover = current.as_ref().and_then(|m| m["cover"].as_str()).is_some()
+                        || cached_cover.as_ref().map(|(k, _)| k == &key).unwrap_or(false);
+                    if !has_cover {
+                        if let Some(ref cur) = current {
+                            let artist = cur.get("artist").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                            let title = cur.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                            let key_for_task = key.clone();
+                            let app_for_task = app_clone.clone();
+
+                            tauri::async_runtime::spawn(async move {
+                                if let Some(artwork) = fetch_online_artwork(&artist, &title).await {
+                                    {
+                                        let mut cache_guard = LAST_COVER_CACHE.lock().unwrap();
+                                        if PLAYBACK_TRACKER.lock().unwrap().as_ref().map(|t| &t.key) == Some(&key_for_task) {
+                                            *cache_guard = Some((key_for_task.clone(), artwork.clone()));
+                                        }
+                                    }
+                                    let _ = app_for_task.emit(
+                                        "media:cover",
+                                        json!({
+                                            "key": key_for_task,
+                                            "cover": artwork
+                                        }),
+                                    );
+                                }
+                            });
+                        }
                     }
                 }
-            }
 
-            let snapshot=media_event_snapshot(&current);
-            if key_changed || play_changed || snapshot != last_payload {
-                let payload = match current {
-                    Some(ref v) => v.clone(),
-                    None => Value::Null,
+                // When pill is hidden in a fullscreen game, only emit real track/play-state changes
+                // (skip pure positionMs ticks so WebView2 never wakes up unnecessarily during games).
+                let snapshot = media_event_snapshot(&current);
+                let should_emit = if low_power {
+                    key_changed || play_changed
+                } else {
+                    key_changed || play_changed || snapshot != last_payload
                 };
-                let _ = app_clone.emit("media:update", &payload);
-                last_key = key;
-                last_playing = is_playing;
-                last_payload = snapshot;
+                if should_emit {
+                    let payload = match current {
+                        Some(ref v) => v.clone(),
+                        None => Value::Null,
+                    };
+                    let _ = app_clone.emit("media:update", &payload);
+                    last_key = key;
+                    last_playing = is_playing;
+                    last_payload = snapshot;
+                }
             }
-        }
-    });
+        });
 }
 
 #[cfg(test)]

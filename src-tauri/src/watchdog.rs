@@ -365,10 +365,13 @@ pub fn start(app: AppHandle, hwnd: isize) -> bool {
                 previous_wall = wall;
                 previous_active = now;
                 let responsive = native_responsive(hwnd);
+                let fullscreen_occluded = responsive
+                    && lock_monitor(&service).is_ready()
+                    && crate::is_fullscreen_active();
                 let action = lock_monitor(&service).poll(
                     now,
                     responsive,
-                    is_protected(),
+                    is_protected() || fullscreen_occluded,
                     !service.worker_busy.load(Ordering::SeqCst),
                 );
                 match action {
@@ -464,7 +467,7 @@ pub fn page_pong(webview: &tauri::Webview, sequence: u64, ready: bool) -> bool {
     if !service.enabled || service.stopped.load(Ordering::SeqCst) {
         return false;
     }
-    let accepted = lock_monitor(&service).reply(sequence, ready, active_ms());
+    let accepted = lock_monitor(&service).reply_tolerant(sequence, ready, active_ms(), 15_000);
     if accepted && ready {
         release_recovery();
     }
