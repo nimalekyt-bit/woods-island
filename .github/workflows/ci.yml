@@ -17,13 +17,10 @@ concurrency:
   group: windows-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  windows:
+  checks:
     if: github.event_name != 'workflow_dispatch' || inputs.artifact_run_id == ''
     runs-on: windows-latest
-    timeout-minutes: 60
-    env:
-      RUSTC_WRAPPER: sccache
-      SCCACHE_GHA_ENABLED: 'true'
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -42,50 +39,99 @@ jobs:
         env:
           WOODS_OWNER_HISTORY_REF: ${{ github.event.pull_request.head.sha || github.sha }}
         run: node scripts/check-commit-owners.mjs $env:WOODS_OWNER_HISTORY_REF
-      - name: Verify runtime and hooks
+      - name: Build runtime and run unit tests
         run: |
           pnpm build
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          pnpm test:hooks
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          pnpm test:runtime-state
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          pnpm test:ipc
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          pnpm test:characters
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          node --test scripts/reliability-ui.test.cjs
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          node --test scripts/weather-places.test.cjs
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          node --test scripts/shortcuts.test.cjs
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          node --test scripts/reminders-calendar.test.cjs scripts/reminder-parser.test.cjs scripts/voice-command.test.cjs scripts/release-history.test.cjs scripts/quick-commands.test.cjs scripts/timer-label.test.cjs scripts/holiday-contour.test.cjs scripts/upstream-controls.test.cjs
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          node --test scripts/peripherals.test.cjs
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          node --test scripts/mini-spectrum.test.cjs scripts/spectrum-state.test.cjs scripts/publish-contract.test.mjs scripts/release-acceptance.test.mjs
+          pnpm test:unit
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node --check scripts/publish-accepted.mjs
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify reliability, reminders, and Web AI UI
+        run: |
           node scripts/verify-reliability-ui.cjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node scripts/verify-reminders-ui.cjs
-      - name: Verify Web AI first paint and recovery
-        run: node scripts/verify-web-ai-ui.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/verify-web-ai-ui.cjs
+  rust-tests:
+    if: github.event_name != 'workflow_dispatch' || inputs.artifact_run_id == ''
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: 'true'
+      CARGO_INCREMENTAL: '0'
+      CARGO_PROFILE_TEST_INCREMENTAL: 'false'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Build bundled frontend for Tauri context
+        run: |
+          pnpm install --frozen-lockfile
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm build
       - name: Install verified Rust toolchain
         run: rustup toolchain install 1.98.1 --profile minimal
       - name: Cache compiler outputs
         uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad # v0.0.9
         with:
           version: v0.20.1
-      - name: Cache Rust dependencies
+      - name: Cache Rust test dependencies
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
+          key: rust-test
           workspaces: src-tauri -> target
           cache-on-failure: true
       - name: Rust regression tests
-        run: cargo +1.98.1 test --release --locked -j 4 --manifest-path src-tauri/Cargo.toml
+        run: cargo +1.98.1 test --lib --locked -j 4 --manifest-path src-tauri/Cargo.toml
+      - name: Report compiler cache statistics
+        if: always()
+        run: sccache --show-stats
+  windows:
+    if: github.event_name != 'workflow_dispatch' || inputs.artifact_run_id == ''
+    runs-on: windows-latest
+    timeout-minutes: 50
+    env:
+      RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: 'true'
+      CARGO_INCREMENTAL: '0'
+      CARGO_PROFILE_RELEASE_INCREMENTAL: 'false'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Build bundled frontend runtime
+        run: |
+          pnpm install --frozen-lockfile
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm build
+      - name: Install verified Rust toolchain
+        run: rustup toolchain install 1.98.1 --profile minimal
+      - name: Cache compiler outputs
+        uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad # v0.0.9
+        with:
+          version: v0.20.1
+      - name: Cache Rust release dependencies
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          key: rust-release
+          workspaces: src-tauri -> target
+          cache-on-failure: true
       - name: Build Windows executable
         run: cargo +1.98.1 build --release --locked -j 4 --manifest-path src-tauri/Cargo.toml
       - name: Report compiler cache statistics
@@ -165,8 +211,8 @@ jobs:
           if-no-files-found: error
           retention-days: 7
   installer:
-    if: always() && github.event_name == 'workflow_dispatch' && (needs.windows.result == 'success' || inputs.artifact_run_id != '')
-    needs: windows
+    if: always() && github.event_name == 'workflow_dispatch' && ((needs.checks.result == 'success' && needs.rust-tests.result == 'success' && needs.windows.result == 'success') || inputs.artifact_run_id != '')
+    needs: [checks, rust-tests, windows]
     runs-on: windows-latest
     timeout-minutes: 20
     strategy:

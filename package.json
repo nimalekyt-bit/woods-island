@@ -16,6 +16,7 @@
     "release:notes": "node scripts/write-release-notes.mjs",
     "release:website": "node scripts/finalize-release.mjs",
     "check:runtime": "node scripts/generate-ipc.mjs --check && tsc -p tsconfig.runtime.json && node scripts/build-runtime.mjs --check",
+    "test:unit": "node scripts/run-unit-tests.mjs",
     "test:hooks": "node --test scripts/island-notify.test.cjs",
     "test:runtime-state": "node --test scripts/runtime-state.test.cjs scripts/island-events.test.cjs scripts/island-geometry.test.cjs",
     "test:ipc": "node --test scripts/ipc-generation.test.cjs",

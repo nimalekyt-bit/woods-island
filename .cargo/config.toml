@@ -1,9 +1,11 @@
-# Keep this Windows build usable beside the user's desktop apps.
+# Balance build speed and RAM headroom beside desktop apps on Windows.
 [build]
-jobs = 1
+jobs = 4
 
 [profile.dev]
 debug = 0
+codegen-units = 16
 
 [profile.test]
 debug = 0
+codegen-units = 16
