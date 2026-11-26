@@ -3,6 +3,7 @@ import { freeLicense } from '../free';
 import { creatures } from '../characters/drawings/creatures';
 import { focusInputAfterActivation } from '../island/input-focus';
 import { peripheralEventEnabled, samePeripheralNotice } from '../peripherals/model';
+import { appendRecentEvent, summarizePeekEvent } from '../events/recent-events';
 import { things } from '../characters/drawings/things';
 import { genericDrawings } from '../characters/drawings/generic';
 import { CharacterSprite } from '../characters/CharacterSprite';
@@ -333,6 +334,8 @@ var useIslandStore = ce((e, t) => ({
     webAiWantsKeys: !1,
     webAiPopped: null,
     headerMin: 0,
+    recentEvents: [],
+    clearRecentEvents: () => e({ recentEvents: [] }),
     open: (t, n) => {
       (clearTimeout(N),
         e((e) => ({
@@ -355,6 +358,10 @@ var useIslandStore = ce((e, t) => ({
     pushPeek: (n) => {
       let r = t();
       if (n.kind === 'peripheralEvent' && !peripheralEventEnabled(n, r.settings ?? {})) return;
+      const recorded = summarizePeekEvent(n, ++M, Date.now(), r.settings?.language === 'en');
+      if (recorded) {
+        e((state) => ({ recentEvents: appendRecentEvent(state.recentEvents ?? [], recorded, 10) }));
+      }
       if (n.kind === `agentAsk`) {
         let i = { ...n, id: ++M };
         if (r.peek?.kind === `agentAsk`) {

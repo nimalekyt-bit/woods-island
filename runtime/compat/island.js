@@ -1,4 +1,5 @@
 import { useTimerLabelCharacters } from './home.js';
+import { RecentEventsButton } from '../events/RecentEventsButton';
 import { AnimatedWeatherValue, useWeatherTween } from '../weather/AnimatedWeatherValue';
 import { WEATHER_GAUGE_TWEEN } from '../weather/animation';
 import { webChatProviders } from '../web-ai/providers';
@@ -8162,6 +8163,7 @@ function jA() {
               className: `mr-1 flex shrink-0 items-center gap-1.5`,
               children: [(0, jsxRuntime.jsx)(kA, {}), (0, jsxRuntime.jsx)(AA, {})],
             }),
+            (0, jsxRuntime.jsx)(RecentEventsButton, {}),
             (0, jsxRuntime.jsx)(be, {
               className: `shrink-0`,
               "data-dictate": !0,
