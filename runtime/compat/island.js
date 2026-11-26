@@ -1,5 +1,6 @@
 import { useTimerLabelCharacters } from './home.js';
 import { RecentEventsButton } from '../events/RecentEventsButton';
+import { MultiTimerSection } from '../timer/MultiTimerSection';
 import { AnimatedWeatherValue, useWeatherTween } from '../weather/AnimatedWeatherValue';
 import { WEATHER_GAUGE_TWEEN } from '../weather/animation';
 import { webChatProviders } from '../web-ai/providers';
@@ -4775,6 +4776,13 @@ function rk() {
                           children: o(`+1 мин`, `+1 min`),
                         }),
                         (0, jsxRuntime.jsx)(`button`, {
+                          "data-timer-add5": !0,
+                          className: C,
+                          title: o(`Добавить 5 минут`, `Add 5 minutes`),
+                          onClick: () => d(5 * tk),
+                          children: o(`+5 мин`, `+5 min`),
+                        }),
+                        (0, jsxRuntime.jsx)(`button`, {
                           "data-timer-reset": !0,
                           className: C,
                           title: o(`Сбросить таймер`, `Reset the timer`),
@@ -4863,6 +4871,7 @@ function rk() {
               }),
             ],
           }),
+      (0, jsxRuntime.jsx)(MultiTimerSection, {}),
     ],
   });
 }

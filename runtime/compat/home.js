@@ -4,6 +4,7 @@ import { AudioMixer } from '../controls/AudioMixer';
 import { CompactIndicators } from '../controls/CompactIndicators';
 import { compactIndicatorWidth } from '../controls/indicator-model';
 import { emptyTimer as bd, startTimer as Cd, readTimer as kd, timerLabel, parseTimerCommand } from '../timer/model';
+import { useMultiTimerStore, timerRemainingMs, formatClockMs } from '../timer/multi';
 import { MediaSourcePicker } from '../media/MediaSources';
 import { invoke as typedInvoke } from '../ipc/client';
 import { CollapsedTrack, MediaTitle } from '../components/CollapsedTrack';
@@ -1962,17 +1963,42 @@ function sm() {
 }
 function cm() {
   let e = Hd((e) => e.timer),
-    n = xd(e);
-  if ((Mp(n === `running`, 250), n !== `running` && n !== `paused`)) return null;
-  let r = Date.now(),
-    i = T(Od(e, r)),
-    a = e.total > 0 ? Math.min(1, Sd(e, r) / e.total) : 0,
-    o = 2 * Math.PI * 5.4;
+    extras = useMultiTimerStore((s) => s.extras),
+    pomodoro = useMultiTimerStore((s) => s.pomodoro),
+    n = xd(e),
+    primaryActive = n === `running` || n === `paused`,
+    activeExtras = extras.filter((x) => x.endsAt !== null || x.left !== null),
+    pomActive = pomodoro.active,
+    anyRunning = n === `running` || activeExtras.some((x) => x.endsAt !== null) || (pomActive && pomodoro.endsAt !== null);
+  if ((Mp(anyRunning, 250), !primaryActive && activeExtras.length === 0 && !pomActive)) return null;
+  let r = Date.now();
+  let extraCount = (primaryActive ? 1 : 0) + activeExtras.length + (pomActive ? 1 : 0) - 1;
+  let displayLabel = primaryActive
+    ? e.label?.trim() || ``
+    : pomActive
+      ? (pomodoro.phase === `work` ? `Фокус` : `Перерыв`)
+      : activeExtras[0]?.label?.trim() || ``;
+  let i = primaryActive
+    ? T(Od(e, r))
+    : pomActive
+      ? formatClockMs(timerRemainingMs(pomodoro, r))
+      : formatClockMs(timerRemainingMs(activeExtras[0], r));
+  let a = primaryActive
+    ? (e.total > 0 ? Math.min(1, Sd(e, r) / e.total) : 0)
+    : pomActive
+      ? (() => {
+          let tot = pomodoro.phase === `work` ? pomodoro.workMs : pomodoro.breakMs;
+          return tot > 0 ? Math.min(1, timerRemainingMs(pomodoro, r) / tot) : 0;
+        })()
+      : (activeExtras[0].total > 0 ? Math.min(1, timerRemainingMs(activeExtras[0], r) / activeExtras[0].total) : 0);
+  let paused = primaryActive ? n === `paused` : pomActive ? pomodoro.endsAt === null : activeExtras[0].endsAt === null;
+  let ringColor = !primaryActive && pomActive ? (pomodoro.phase === `work` ? `#8ea2ff` : `#6be2a8`) : `var(--color-timer)`;
+  let o = 2 * Math.PI * 5.4;
   return (0, jsxRuntime.jsxs)(`span`, {
     "data-pill-timer": !0,
-    className: `pop-in flex shrink-0 items-center gap-[5px] transition-opacity ${n === `paused` ? `opacity-55` : ``}`,
+    className: `pop-in flex shrink-0 items-center gap-[5px] transition-opacity ${paused ? `opacity-55` : ``}`,
     children: [
-      e.label?.trim() && (0,jsxRuntime.jsx)(`span`,{"data-pill-timer-label":true,title:e.label,className:`truncate text-[12px] font-medium text-timer/75`,style:{maxWidth:96},children:e.label.trim()}),
+      displayLabel && (0,jsxRuntime.jsx)(`span`,{"data-pill-timer-label":true,title:displayLabel,className:`truncate text-[12px] font-medium text-timer/75`,style:{maxWidth:96},children:displayLabel}),
       (0, jsxRuntime.jsxs)(`svg`, {
         width: `14`,
         height: `14`,
@@ -1984,7 +2010,7 @@ function cm() {
             cy: `7`,
             r: `5.4`,
             fill: `none`,
-            stroke: `color-mix(in srgb, var(--color-timer) 28%, transparent)`,
+            stroke: `color-mix(in srgb, ${ringColor} 28%, transparent)`,
             strokeWidth: `2.4`,
           }),
           (0, jsxRuntime.jsx)(`circle`, {
@@ -1992,7 +2018,7 @@ function cm() {
             cy: `7`,
             r: `5.4`,
             fill: `none`,
-            stroke: `var(--color-timer)`,
+            stroke: ringColor,
             strokeWidth: `2.4`,
             strokeLinecap: `round`,
             strokeDasharray: o,
@@ -2003,17 +2029,25 @@ function cm() {
       }),
       (0, jsxRuntime.jsx)(`span`, {
         className: `tabular text-[12.5px] font-semibold text-timer`,
-        style: { width: t(i.length) },
+        style: { width: t(i.length), color: !primaryActive && pomActive ? ringColor : void 0 },
         children: i,
       }),
+      extraCount > 0 &&
+        (0, jsxRuntime.jsx)(`span`, {
+          "data-pill-timer-extra": `+${extraCount}`,
+          className: `rounded-full bg-white/14 px-1.5 text-[10px] leading-4 font-semibold text-ink`,
+          children: `+${extraCount}`,
+        }),
     ],
   });
 }
 function lm() {
-  return Hd((e) => {
+  let primary = Hd((e) => {
     let t = xd(e.timer);
     return t === `running` || t === `paused`;
   });
+  let multi = useMultiTimerStore((s) => s.pomodoro.active || s.extras.some((x) => x.endsAt !== null || x.left !== null));
+  return primary || multi;
 }
 var um = (e) => (e.settings?.desktopInPill === !0 && e.vdesk && e.vdesk.count > 1 ? l(e.vdesk) : ``);
 function dm() {
