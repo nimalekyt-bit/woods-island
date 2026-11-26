@@ -283,10 +283,23 @@ function Ud() {
     a.pushPeek({ kind: `timer`, length: r.base, at: r.doneAt, label:r.label.trim() });
 }
 function Wd() {
+  let unlistenPromise = null;
+  if (typeof window !== `undefined` && window.__TAURI_INTERNALS__) {
+    import(`./shared.js`).then(({ k: listen }) => {
+      unlistenPromise = listen(`timer:remote`, (raw) => {
+        try {
+          let next = kd(typeof raw === `string` ? raw : JSON.stringify(raw));
+          Hd.setState({ loaded: !0, timer: next });
+          Bd();
+          Ud();
+        } catch {}
+      });
+    }).catch(() => {});
+  }
   return (
     Hd.getState().load().then(Ud),
     () => {
-      (clearTimeout(Ld), clearTimeout(Rd));
+      (clearTimeout(Ld), clearTimeout(Rd), unlistenPromise?.then((fn) => fn?.()));
     }
   );
 }

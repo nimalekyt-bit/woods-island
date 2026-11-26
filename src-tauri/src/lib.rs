@@ -1697,6 +1697,10 @@ async fn palette_recent()->Vec<Value>{tauri::async_runtime::spawn_blocking(syste
 #[tauri::command]
 async fn palette_icon(path:Option<String>)->Option<String>{let path=path?;tauri::async_runtime::spawn_blocking(move||system::icon(&path)).await.ok().flatten()}
 
+pub(crate) fn run_power_action(action: &str) -> bool {
+    power_action(Some(action.to_owned()))
+}
+
 #[tauri::command]
 fn power_action(action: Option<String>) -> bool {
     let act = action.unwrap_or_default().to_lowercase();

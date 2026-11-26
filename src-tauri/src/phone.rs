@@ -866,6 +866,165 @@ impl PhoneService {
                 let state = self.state();
                 return json_response(&mut stream,&json!({"device":state.device,"offered":state.offered,"expiresAt":state.expires_at,"maxFileBytes":MAX_FILE})).map_err(|_|("connection_closed",400));
             }
+            if route == "/remote/state" && request.method == "GET" {
+                let media = crate::media::get_current_media();
+                let cover = crate::media::get_current_cover();
+                let audio = crate::audio::state().ok();
+                let timer_raw = self.state.timer_data.lock().map(|g| g.clone()).unwrap_or_default();
+                let timer: Value = serde_json::from_str(&timer_raw).unwrap_or(Value::Null);
+                return json_response(
+                    &mut stream,
+                    &json!({
+                        "media": media,
+                        "cover": cover,
+                        "audio": audio,
+                        "timer": timer,
+                    }),
+                )
+                .map_err(|_| ("connection_closed", 400));
+            }
+            if route == "/remote/action" && request.method == "POST" {
+                let body = read_body(&mut stream, &request, prefix, 8192).map_err(|e| (e, 400))?;
+                let data: Value = serde_json::from_slice(&body).map_err(|_| ("invalid_json", 400))?;
+                let action = data["action"].as_str().unwrap_or("");
+                self.authorize(cap, &run, Some(epoch), true)
+                    .map_err(|e| (e, 403))?;
+                match action {
+                    "media_toggle" => {
+                        let ok = crate::media::media_control("toggle");
+                        return json_response(&mut stream, &json!({ "ok": ok }))
+                            .map_err(|_| ("connection_closed", 400));
+                    }
+                    "media_prev" => {
+                        let ok = crate::media::media_control("prev");
+                        return json_response(&mut stream, &json!({ "ok": ok }))
+                            .map_err(|_| ("connection_closed", 400));
+                    }
+                    "media_next" => {
+                        let ok = crate::media::media_control("next");
+                        return json_response(&mut stream, &json!({ "ok": ok }))
+                            .map_err(|_| ("connection_closed", 400));
+                    }
+                    "volume_set" => {
+                        let level = data["level"].as_f64().ok_or(("invalid_level", 400))?.clamp(0.0, 1.0);
+                        let ok = crate::audio::set_volume(level).is_ok();
+                        return json_response(&mut stream, &json!({ "ok": ok }))
+                            .map_err(|_| ("connection_closed", 400));
+                    }
+                    "volume_mute" => {
+                        let ok = crate::audio::toggle_mute(false).is_ok();
+                        return json_response(&mut stream, &json!({ "ok": ok }))
+                            .map_err(|_| ("connection_closed", 400));
+                    }
+                    "mic_mute" => {
+                        let ok = crate::audio::toggle_mute(true).is_ok();
+                        return json_response(&mut stream, &json!({ "ok": ok }))
+                            .map_err(|_| ("connection_closed", 400));
+                    }
+                    "lock" => {
+                        let ok = crate::run_power_action("lock");
+                        return json_response(&mut stream, &json!({ "ok": ok }))
+                            .map_err(|_| ("connection_closed", 400));
+                    }
+                    "sleep" => {
+                        let ok = crate::run_power_action("sleep");
+                        return json_response(&mut stream, &json!({ "ok": ok }))
+                            .map_err(|_| ("connection_closed", 400));
+                    }
+                    "open_url" => {
+                        let raw = data["url"].as_str().unwrap_or("").trim();
+                        let parsed = reqwest::Url::parse(raw).map_err(|_| ("invalid_url", 400))?;
+                        if !["http", "https"].contains(&parsed.scheme()) {
+                            return Err(("invalid_url", 400));
+                        }
+                        crate::system::open_path(parsed.as_str(), false, false)
+                            .map_err(|_| ("open_failed", 500))?;
+                        let _ = self.app.emit(
+                            "phone:got",
+                            json!({"kind": "link", "text": parsed.as_str(), "added": now_ms()}),
+                        );
+                        return json_response(&mut stream, &json!({ "ok": true }))
+                            .map_err(|_| ("connection_closed", 400));
+                    }
+                    "screenshot" => {
+                        let img = crate::capture::screenshot(crate::capture::screen_rect())
+                            .map_err(|_| ("capture_failed", 500))?;
+                        let preview = if img.width() > 1440 {
+                            let h = ((img.height() as f64) * (1440.0 / img.width() as f64)).round().max(1.0) as u32;
+                            image::imageops::thumbnail(&img, 1440, h)
+                        } else {
+                            img
+                        };
+                        let mut out = std::io::Cursor::new(Vec::new());
+                        let rgb = image::DynamicImage::ImageRgba8(preview).to_rgb8();
+                        image::write_buffer_with_format(
+                            &mut out,
+                            rgb.as_raw(),
+                            rgb.width(),
+                            rgb.height(),
+                            image::ExtendedColorType::Rgb8,
+                            image::ImageFormat::Jpeg,
+                        )
+                        .map_err(|_| ("encode_failed", 500))?;
+                        let b64 = base64::Engine::encode(
+                            &base64::engine::general_purpose::STANDARD,
+                            out.into_inner(),
+                        );
+                        return json_response(
+                            &mut stream,
+                            &json!({ "ok": true, "image": format!("data:image/jpeg;base64,{b64}") }),
+                        )
+                        .map_err(|_| ("connection_closed", 400));
+                    }
+                    "timer_start" => {
+                        let mins = data["minutes"].as_f64().unwrap_or(5.0).clamp(0.5, 180.0);
+                        let base_ms = (mins * 60_000.0).round() as u64;
+                        let label: String = data["label"]
+                            .as_str()
+                            .unwrap_or("")
+                            .chars()
+                            .filter(|c| !c.is_control())
+                            .take(40)
+                            .collect();
+                        let now = now_ms();
+                        let timer_json = json!({
+                            "base": base_ms,
+                            "total": base_ms,
+                            "endsAt": now.saturating_add(base_ms),
+                            "left": null,
+                            "doneAt": null,
+                            "label": label,
+                        });
+                        let serialized = timer_json.to_string();
+                        let _ = crate::storage::save_string_file("timer.json", &serialized);
+                        if let Ok(mut g) = self.state.timer_data.lock() {
+                            *g = serialized.clone();
+                        }
+                        let _ = self.app.emit("timer:remote", serialized);
+                        return json_response(&mut stream, &json!({ "ok": true, "timer": timer_json }))
+                            .map_err(|_| ("connection_closed", 400));
+                    }
+                    "timer_reset" => {
+                        let timer_json = json!({
+                            "base": 300_000u64,
+                            "total": 300_000u64,
+                            "endsAt": null,
+                            "left": null,
+                            "doneAt": null,
+                            "label": "",
+                        });
+                        let serialized = timer_json.to_string();
+                        let _ = crate::storage::save_string_file("timer.json", &serialized);
+                        if let Ok(mut g) = self.state.timer_data.lock() {
+                            *g = serialized.clone();
+                        }
+                        let _ = self.app.emit("timer:remote", serialized);
+                        return json_response(&mut stream, &json!({ "ok": true, "timer": timer_json }))
+                            .map_err(|_| ("connection_closed", 400));
+                    }
+                    _ => return Err(("unknown_action", 400)),
+                }
+            }
             if route == "/text" && request.method == "POST" {
                 let body =
                     read_body(&mut stream, &request, prefix, MAX_TEXT).map_err(|e| (e, 400))?;

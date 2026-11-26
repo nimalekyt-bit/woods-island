@@ -37,6 +37,12 @@
             </div>
           </section>
 
+          <nav class="mode-tabs" role="tablist" aria-label="Mode">
+            <button id="tab-files" class="mode-tab" role="tab" aria-selected="true" data-mode="files" data-i18n="tabFiles"></button>
+            <button id="tab-remote" class="mode-tab" role="tab" aria-selected="false" data-mode="remote" data-i18n="tabRemote"></button>
+          </nav>
+
+          <div id="files-view">
           <section class="send-section">
             <p class="sr-only" data-i18n="localHint"></p>
             <div class="actions">
@@ -124,6 +130,61 @@
                 </svg>
                 <span class="sr-only" data-i18n="sendText"></span>
               </button>
+            </div>
+          </section>
+          </div>
+
+          <section id="remote-view" class="remote-view" hidden>
+            <div class="remote-card">
+              <div class="remote-media">
+                <img id="remote-cover" class="remote-cover" alt="" hidden />
+                <div class="remote-media-info">
+                  <strong id="remote-track"></strong>
+                  <span id="remote-artist"></span>
+                </div>
+              </div>
+              <div class="remote-controls">
+                <button id="remote-prev" class="remote-btn" disabled aria-label="Previous">⏮</button>
+                <button id="remote-play" class="remote-btn primary" disabled aria-label="Play / Pause">⏯</button>
+                <button id="remote-next" class="remote-btn" disabled aria-label="Next">⏭</button>
+              </div>
+              <div class="remote-vol-row">
+                <button id="remote-mute" class="remote-chip" disabled data-i18n="remoteMute"></button>
+                <input id="remote-vol" class="remote-slider" type="range" min="0" max="100" value="50" disabled />
+                <span id="remote-vol-val" class="remote-vol-val">50%</span>
+              </div>
+              <div class="remote-quick-row">
+                <button id="remote-mic" class="remote-chip" disabled data-i18n="remoteMic"></button>
+                <button id="remote-shot" class="remote-chip" disabled data-i18n="remoteShot"></button>
+                <button id="remote-lock" class="remote-chip" disabled data-i18n="remoteLock"></button>
+                <button id="remote-sleep" class="remote-chip danger" disabled data-i18n="remoteSleep"></button>
+              </div>
+            </div>
+
+            <div class="remote-card">
+              <div class="remote-card-title" data-i18n="remoteLinkTitle"></div>
+              <div class="compose">
+                <input id="remote-url" type="url" class="remote-input" disabled />
+                <button id="remote-open-url" class="send-btn" disabled aria-label="Open">↗</button>
+              </div>
+            </div>
+
+            <div class="remote-card">
+              <div class="remote-timer-head">
+                <span class="remote-card-title" data-i18n="remoteTimerTitle"></span>
+                <span id="remote-timer-status" class="remote-timer-status"></span>
+              </div>
+              <div class="remote-quick-row">
+                <button id="remote-t5" class="remote-chip" disabled>5 мин</button>
+                <button id="remote-t15" class="remote-chip" disabled>15 мин</button>
+                <button id="remote-t25" class="remote-chip" disabled>25 мин</button>
+                <button id="remote-treset" class="remote-chip" disabled data-i18n="remoteTimerReset"></button>
+              </div>
+            </div>
+
+            <div id="remote-shot-box" class="remote-card" hidden>
+              <img id="remote-shot-img" class="remote-shot-img" alt="PC screenshot" />
+              <a id="remote-shot-save" class="remote-chip primary" download="pc-screenshot.jpg" data-i18n="remoteSaveShot"></a>
             </div>
           </section>
 

@@ -113,6 +113,23 @@
       "This session’s limit was reached. Create a new code on the computer.",
     ],
     error: ["Нужно проверить связь", "Connection needs attention"],
+    tabFiles: ["Файлы", "Files"],
+    tabRemote: ["Пульт ПК", "PC Remote"],
+    remoteNothing: ["Музыка на паузе", "Nothing playing"],
+    remoteMute: ["🔇 Звук", "🔇 Mute"],
+    remoteMic: ["🎤 Микрофон", "🎤 Mic"],
+    remoteShot: ["📸 Скриншот", "📸 Screen"],
+    remoteLock: ["🔒 Блок", "🔒 Lock"],
+    remoteSleep: ["🌙 Сон", "🌙 Sleep"],
+    remoteLinkTitle: ["Открыть ссылку в браузере ПК", "Open link in PC browser"],
+    remoteUrlPlaceholder: ["https://youtube.com/…", "https://example.com/…"],
+    remoteTimerTitle: ["Таймер на ПК", "PC Timer"],
+    remoteTimerIdle: ["Не запущен", "Idle"],
+    remoteTimerReset: ["Сброс", "Reset"],
+    remoteSaveShot: ["Скачать скриншот", "Save screenshot"],
+    remoteOpened: ["Ссылка открыта на ПК.", "Link opened on PC."],
+    remoteDone: ["Команда выполнена.", "Done."],
+    remoteSleepConfirm: ["Перевести компьютер в сон?", "Put the PC to sleep?"],
   };
   const t = (key) => strings[key]?.[lang === "ru" ? 0 : 1] || key;
   const element = (id) => document.getElementById(id);
@@ -247,8 +264,23 @@
       "text",
       "send-text",
       "disconnect",
+      "remote-prev",
+      "remote-play",
+      "remote-next",
+      "remote-mute",
+      "remote-vol",
+      "remote-mic",
+      "remote-shot",
+      "remote-lock",
+      "remote-sleep",
+      "remote-url",
+      "remote-open-url",
+      "remote-t5",
+      "remote-t15",
+      "remote-t25",
+      "remote-treset",
     ])
-      element(id).disabled = !state;
+      if (element(id)) element(id).disabled = !state;
     if (!state) element("gallery-menu").hidden = true;
     document.querySelector(".connection").dataset.state = state
       ? "connected"
@@ -598,9 +630,126 @@
     connection("disconnected", "disconnectedDetail", "pending");
   });
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) void poll();
+    if (!document.hidden) {
+      void poll();
+      if (activeMode === "remote") void pollRemote();
+    }
   });
   setInterval(() => void poll(), 2000);
+
+  // Phone QR 2.0 — PC Remote Control tab logic
+  let activeMode = "files";
+  let volTimer = null;
+  if (element("remote-url")) element("remote-url").placeholder = t("remoteUrlPlaceholder");
+  function switchMode(mode) {
+    activeMode = mode;
+    element("tab-files")?.setAttribute("aria-selected", String(mode === "files"));
+    element("tab-remote")?.setAttribute("aria-selected", String(mode === "remote"));
+    if (element("files-view")) element("files-view").hidden = mode !== "files";
+    if (element("remote-view")) element("remote-view").hidden = mode !== "remote";
+    if (mode === "remote" && linked) void pollRemote();
+  }
+  element("tab-files")?.addEventListener("click", () => switchMode("files"));
+  element("tab-remote")?.addEventListener("click", () => switchMode("remote"));
+
+  async function remoteAction(payload) {
+    if (!linked) return null;
+    try {
+      const res = await api("/remote/action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      void pollRemote();
+      return res;
+    } catch (error) {
+      message(errorMessage(error), true);
+      return null;
+    }
+  }
+
+  async function pollRemote() {
+    if (!linked || activeMode !== "remote" || document.hidden) return;
+    try {
+      const st = await api("/remote/state");
+      const m = st.media;
+      const trackEl = element("remote-track");
+      const artistEl = element("remote-artist");
+      const coverEl = element("remote-cover");
+      if (trackEl) trackEl.textContent = m?.title || t("remoteNothing");
+      if (artistEl) artistEl.textContent = m ? [m.artist, m.appName].filter(Boolean).join(" · ") : "";
+      if (coverEl) {
+        if (st.cover) {
+          coverEl.src = st.cover;
+          coverEl.hidden = false;
+        } else {
+          coverEl.hidden = true;
+        }
+      }
+      if (element("remote-play")) element("remote-play").textContent = m?.playing ? "⏸" : "▶";
+      if (st.audio && typeof st.audio.level === "number") {
+        const pct = Math.round(st.audio.level * 100);
+        if (element("remote-vol") && document.activeElement !== element("remote-vol")) {
+          element("remote-vol").value = String(pct);
+        }
+        if (element("remote-vol-val")) {
+          element("remote-vol-val").textContent = st.audio.muted ? "🔇" : pct + "%";
+        }
+      }
+      const tm = st.timer;
+      const tmEl = element("remote-timer-status");
+      if (tmEl) {
+        if (tm && tm.endsAt && tm.endsAt > Date.now()) {
+          const sec = Math.max(0, Math.ceil((tm.endsAt - Date.now()) / 1000));
+          const mm = Math.floor(sec / 60);
+          const ss = String(sec % 60).padStart(2, "0");
+          tmEl.textContent = (tm.label ? tm.label + " · " : "") + mm + ":" + ss;
+        } else {
+          tmEl.textContent = t("remoteTimerIdle");
+        }
+      }
+    } catch {}
+  }
+  setInterval(() => void pollRemote(), 1500);
+
+  element("remote-prev")?.addEventListener("click", () => void remoteAction({ action: "media_prev" }));
+  element("remote-play")?.addEventListener("click", () => void remoteAction({ action: "media_toggle" }));
+  element("remote-next")?.addEventListener("click", () => void remoteAction({ action: "media_next" }));
+  element("remote-mute")?.addEventListener("click", () => void remoteAction({ action: "volume_mute" }));
+  element("remote-mic")?.addEventListener("click", () => void remoteAction({ action: "mic_mute" }));
+  element("remote-vol")?.addEventListener("input", (ev) => {
+    const val = Number(ev.target.value);
+    if (element("remote-vol-val")) element("remote-vol-val").textContent = val + "%";
+    clearTimeout(volTimer);
+    volTimer = setTimeout(() => void remoteAction({ action: "volume_set", level: val / 100 }), 80);
+  });
+  element("remote-lock")?.addEventListener("click", () => void remoteAction({ action: "lock" }));
+  element("remote-sleep")?.addEventListener("click", () => {
+    if (confirm(t("remoteSleepConfirm"))) void remoteAction({ action: "sleep" });
+  });
+  element("remote-shot")?.addEventListener("click", async () => {
+    const res = await remoteAction({ action: "screenshot" });
+    if (res?.image) {
+      element("remote-shot-img").src = res.image;
+      element("remote-shot-save").href = res.image;
+      element("remote-shot-box").hidden = false;
+      message(t("remoteDone"));
+    }
+  });
+  element("remote-open-url")?.addEventListener("click", async () => {
+    const raw = (element("remote-url").value || "").trim();
+    if (!raw) return;
+    const url = /^https?:\/\//i.test(raw) ? raw : "https://" + raw;
+    const res = await remoteAction({ action: "open_url", url });
+    if (res?.ok) {
+      element("remote-url").value = "";
+      message(t("remoteOpened"));
+    }
+  });
+  element("remote-t5")?.addEventListener("click", () => void remoteAction({ action: "timer_start", minutes: 5 }));
+  element("remote-t15")?.addEventListener("click", () => void remoteAction({ action: "timer_start", minutes: 15 }));
+  element("remote-t25")?.addEventListener("click", () => void remoteAction({ action: "timer_start", minutes: 25, label: "Фокус" }));
+  element("remote-treset")?.addEventListener("click", () => void remoteAction({ action: "timer_reset" }));
   async function start() {
     setConnected(false);
     connection("connecting", "pendingDetail", "pending");
