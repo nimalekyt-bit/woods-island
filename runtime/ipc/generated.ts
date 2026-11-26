@@ -2,6 +2,7 @@
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 export interface Settings {
   autostart: boolean;
+  hideTrayIcon: boolean;
   hoverDelayMs: number;
   openOnHover: boolean;
   collapseDelayMs: number;
@@ -37,6 +38,8 @@ export interface Settings {
   opacityRest: number;
   opacityOpen: number;
   scale: number;
+  islandRadius: number;
+  dropZoneOrder: string;
   theme: string;
   islandColor: string;
   shotDraw: boolean;
@@ -231,6 +234,7 @@ export interface RustCommands {
   launcher_add_link: { args: { link?: string | null; name?: string | null; icon?: JsonValue | null }; result: Array<JsonValue> };
   launcher_edit_link: { args: { id?: string | null; link?: string | null; name?: string | null; icon?: JsonValue | null }; result: Array<JsonValue> };
   launcher_remove: { args: { id?: string | null }; result: Array<JsonValue> };
+  launcher_reorder: { args: { ids?: Array<string> | null }; result: Array<JsonValue> };
   launcher_launch: { args: { id?: string | null }; result: boolean };
   launcher_link_icon: { args: { link?: string | null }; result: string | null };
   launcher_pick_icon: { args: {  }; result: string | null };

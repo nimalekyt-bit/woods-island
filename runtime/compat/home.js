@@ -3743,8 +3743,16 @@ function Launcher() {
     w = te && te.kind === `group` ? te : null,
     ne = (e, t, n) => {
       for (let r of document.elementsFromPoint(e, t)) {
-        let e = r.dataset?.launcherSlot;
-        if (e && e !== `item:${n}`) return e;
+        let slot = r.dataset?.launcherSlot;
+        if (slot && slot !== `item:${n}`) {
+          if (slot.startsWith(`item:`)) {
+            let box = r.getBoundingClientRect();
+            let ratio = box.width > 0 ? (e - box.left) / box.width : 0.5;
+            if (ratio < 0.32) return `${slot}:before`;
+            if (ratio > 0.68) return `${slot}:after`;
+          }
+          return slot;
+        }
       }
       return null;
     },
@@ -3770,9 +3778,25 @@ function Launcher() {
       let n = h.current;
       if (((h.current = null), !n || !g.current)) return;
       (useIslandStore.getState().setHoldOpen(!1), c(null));
-      let i = ne(e.clientX, e.clientY, n.item.id);
-      if (!i) return;
-      let [a, o] = [i.slice(0, i.indexOf(`:`)), i.slice(i.indexOf(`:`) + 1)];
+      let hit = ne(e.clientX, e.clientY, n.item.id);
+      if (!hit) return;
+      let parts = hit.split(`:`);
+      let a = parts[0],
+        o = parts[1],
+        edge = parts[2];
+      if (a === `item` && (edge === `before` || edge === `after`)) {
+        let current = useIslandStore.getState().launcher;
+        let draggedId = String(n.item.id);
+        let without = current.filter((x) => String(x.id) !== draggedId);
+        let targetIdx = without.findIndex((x) => String(x.id) === String(o));
+        if (targetIdx >= 0) {
+          let insertAt = edge === `after` ? targetIdx + 1 : targetIdx;
+          without.splice(insertAt, 0, n.item);
+          useIslandStore.setState({ launcher: without });
+          void i.launcherReorder(without.map((x) => String(x.id))).catch(() => {});
+        }
+        return;
+      }
       a === `group`
         ? C(Tm(t, o, n.item.id))
         : a === `item`
@@ -4100,6 +4124,14 @@ function Launcher() {
                     onMouseEnter: () => u(e.item.id),
                     onMouseLeave: () => u(null),
                     children: [
+                      s?.over === `item:${e.item.id}:before` &&
+                        (0, jsxRuntime.jsx)(`span`, {
+                          className: `pointer-events-none absolute top-1 bottom-1 -left-1 z-10 w-[3px] rounded-full bg-[#8ea2ff] shadow-[0_0_8px_rgba(142,162,255,0.8)]`,
+                        }),
+                      s?.over === `item:${e.item.id}:after` &&
+                        (0, jsxRuntime.jsx)(`span`, {
+                          className: `pointer-events-none absolute top-1 -right-1 bottom-1 z-10 w-[3px] rounded-full bg-[#8ea2ff] shadow-[0_0_8px_rgba(142,162,255,0.8)]`,
+                        }),
                       (0, jsxRuntime.jsx)(`button`, {
                         "data-launcher-slot": `item:${e.item.id}`,
                         title: e.item.name,

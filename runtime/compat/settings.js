@@ -2420,6 +2420,33 @@ function zt() {
                           }),
                           (0, U.jsx)(J, {
                             preview: `idle`,
+                            title: n(`Скругление углов`, `Corner roundness`),
+                            hint: n(
+                              `100% — мягкая капсула, меньше — более строгий прямоугольный стиль`,
+                              `100% is a smooth pill; lower values give a crisper squircle shape`,
+                            ),
+                            children: (0, U.jsxs)(`div`, {
+                              className: `flex items-center gap-2`,
+                              children: [
+                                (0, U.jsx)(QuickResetButton, {
+                                  visible: (e.islandRadius ?? 100) !== 100,
+                                  label: `100%`,
+                                  title: n(`Сбросить скругление до 100%`, `Reset roundness to 100%`),
+                                  onClick: () => H({ islandRadius: 100 }),
+                                }),
+                                (0, U.jsx)(Q, {
+                                  value: e.islandRadius ?? 100,
+                                  min: 40,
+                                  max: 100,
+                                  step: 5,
+                                  unit: `%`,
+                                  onChange: (v) => H({ islandRadius: v }),
+                                }),
+                              ],
+                            }),
+                          }),
+                          (0, U.jsx)(J, {
+                            preview: `idle`,
                             title: n(`Прозрачность свёрнутого острова`, `Transparency of the folded island`),
                             hint: n(`Пилюля и её карточки`, `The pill and its cards`),
                             children: (0, U.jsx)(Q, {
@@ -2637,6 +2664,36 @@ function zt() {
                       (0, U.jsx)(J, {
                         title: n(`Запускать вместе с Windows`, `Start with Windows`),
                         children: (0, U.jsx)(Y, { value: e.autostart, onChange: (e) => H({ autostart: e }) }),
+                      }),
+                      (0, U.jsx)(J, {
+                        since: `1.5.0`,
+                        title: n(`Скрыть иконку в трее`, `Hide system tray icon`),
+                        hint: n(
+                          `Настройки и выход останутся доступны через шестерёнку на острове и команду «настройки» в Alt+Space`,
+                          `Settings and Quit remain available via the gear icon on the island and Alt+Space`,
+                        ),
+                        children: (0, U.jsx)(Y, {
+                          value: e.hideTrayIcon === !0,
+                          onChange: (v) => H({ hideTrayIcon: v }),
+                        }),
+                      }),
+                      (0, U.jsx)(J, {
+                        since: `1.5.0`,
+                        stacked: !0,
+                        title: n(`Порядок зон при перетаскивании файлов`, `File drop zone priority`),
+                        hint: n(
+                          `Какая зона будет первой слева, когда ты тянешь файл или ярлык на остров`,
+                          `Which drop target appears first on the left when dragging a file or shortcut onto the island`,
+                        ),
+                        children: (0, U.jsx)(X, {
+                          value: e.dropZoneOrder || `shelf_first`,
+                          onChange: (v) => H({ dropZoneOrder: v }),
+                          options: [
+                            { value: `shelf_first`, label: n(`Сначала Полка`, `Shelf first`) },
+                            { value: `launcher_first`, label: n(`Сначала Лаунчер`, `Launcher first`) },
+                            { value: `chat_first`, label: n(`Сначала Чат ИИ`, `AI Chat first`) },
+                          ],
+                        }),
                       }),
                       (0, U.jsx)(J, {
                         title: n(`Движение и анимации`, `Motion and animations`),
@@ -3023,9 +3080,29 @@ function zt() {
                     onAnchor: jumpAnchor,
                     children: [
                       d.length > 0 &&
-                        (0, U.jsx)(`div`, {
-                          className: `rounded-2xl border border-[#ff6b6b]/25 bg-[#ff6b6b]/10 px-4 py-3 text-[12px] leading-relaxed text-[#ff9b9b]`,
-                          children: d.map((e) => (0, U.jsx)(`div`, { children: e }, e)),
+                        (0, U.jsxs)(`div`, {
+                          "data-hotkey-conflicts": !0,
+                          className: `flex flex-col gap-1.5 rounded-2xl border border-[#ff6b6b]/30 bg-[#ff6b6b]/10 px-4 py-3 text-[12px] leading-relaxed text-[#ffb0b0]`,
+                          children: [
+                            (0, U.jsx)(`div`, {
+                              className: `font-semibold text-[#ffd1d1]`,
+                              children: n(
+                                `Конфликт горячих клавиш (${d.length})`,
+                                `Shortcut conflict (${d.length})`,
+                              ),
+                            }),
+                            d.map((raw) => {
+                              let combo = raw.split(`:`)[0]?.trim() || raw;
+                              let occupied = /already|register|in use|occupied|duplicate/i.test(raw);
+                              let text = occupied
+                                ? n(
+                                    `${combo} — занято другой программой в Windows (часто NVIDIA App, Discord, PowerToys или Punto Switcher). Нажми на поле ниже и задай другое сочетание.`,
+                                    `${combo} — already taken by another Windows app (often NVIDIA App, Discord, or PowerToys). Click the field below to pick another combo.`,
+                                  )
+                                : raw;
+                              return (0, U.jsx)(`div`, { children: text }, raw);
+                            }),
+                          ],
                         }),
                       De &&
                         he([

@@ -136,6 +136,7 @@ pub struct AppState {
 fn default_settings() -> Value {
     serde_json::from_str(r###"{
     "autostart": true,
+    "hideTrayIcon": false,
     "hoverDelayMs": 150,
     "openOnHover": false,
     "collapseDelayMs": 350,
@@ -171,6 +172,8 @@ fn default_settings() -> Value {
     "opacityRest": 100,
     "opacityOpen": 100,
     "scale": 100,
+    "islandRadius": 100,
+    "dropZoneOrder": "shelf_first",
     "theme": "dark",
     "islandColor": "",
     "shotDraw": false,
@@ -744,6 +747,7 @@ fn settings_set(settings:Option<Value>,app:AppHandle,state:tauri::State<'_, Arc<
  if patch.as_object().unwrap().keys().any(|key|key.starts_with("snow")||["garland","reducedMotion","monitor"].contains(&key.as_str())){snow_surface::refresh();}
  if patch.as_object().unwrap().keys().any(|key|["notchBar","notchLook","monitor","scale","style","underTaskbar","offsetX"].contains(&key.as_str())){appbar::refresh();}
  if let Some(on)=patch["autostart"].as_bool(){if std::env::var_os("WOODS_ISLAND_DATA_DIR").is_none(){if let Err(e)=system::autostart(on){warnings.push(e);}}}
+ if let Some(hide_tray)=patch["hideTrayIcon"].as_bool(){if let Some(tray)=app.tray_by_id("woods-tray"){let _=tray.set_visible(!hide_tray);}}
  if patch.as_object().unwrap().keys().any(|k|k.starts_with("hotkey")||k=="showVpn"){warnings.extend(register_hotkeys(&app,&updated));}
  if patch["through"].is_boolean(){let on=updated["through"].as_bool().unwrap_or(false);state.click_through.store(on,Ordering::Relaxed);win::WindowManager::set_click_through(on);}
  if ["weatherCity","weatherLat","weatherLon","weatherUnits","weatherUtcOffset","weatherTimezone"].iter().any(|key|before[*key]!=updated[*key]){
@@ -867,6 +871,35 @@ fn launcher_edit_link(id:Option<String>,link:Option<String>,name:Option<String>,
 
 #[tauri::command]
 fn launcher_remove(id:Option<String>,app:AppHandle,state:tauri::State<'_, Arc<AppState>>)->Result<Vec<Value>,String>{let target=id.ok_or("Item ID is required")?;let mut items=state.launcher_items.lock().unwrap();items.retain(|item|item["id"].as_str()!=Some(&target));storage::save_json_file("launcher.json",&json!(*items))?;let _=app.emit("launcher:changed",items.clone());Ok(items.clone())}
+
+fn reorder_launcher_vec(items: &[Value], ids: &[String]) -> Vec<Value> {
+    let mut reordered = Vec::with_capacity(items.len());
+    let mut used = std::collections::HashSet::new();
+    for id in ids {
+        if let Some(idx) = items.iter().position(|item| item["id"].as_str() == Some(id.as_str()) || item["id"].as_i64().map(|n| n.to_string()) == Some(id.clone())) {
+            if used.insert(idx) {
+                reordered.push(items[idx].clone());
+            }
+        }
+    }
+    for (idx, item) in items.iter().enumerate() {
+        if used.insert(idx) {
+            reordered.push(item.clone());
+        }
+    }
+    reordered
+}
+
+#[tauri::command]
+fn launcher_reorder(ids:Option<Vec<String>>,app:AppHandle,state:tauri::State<'_, Arc<AppState>>)->Result<Vec<Value>,String>{
+    let order = ids.ok_or("Order list is required")?;
+    let mut items = state.launcher_items.lock().unwrap();
+    let updated = reorder_launcher_vec(&items, &order);
+    storage::save_json_file("launcher.json", &json!(updated))?;
+    *items = updated;
+    let _ = app.emit("launcher:changed", items.clone());
+    Ok(items.clone())
+}
 
 #[tauri::command]
 fn launcher_launch(id:Option<String>,state:tauri::State<'_, Arc<AppState>>)->Result<bool,String>{let id=id.ok_or("Item ID is required")?;let item=state.launcher_items.lock().unwrap().iter().find(|i|i["id"]==json!(id)).cloned().ok_or("Launcher item no longer exists")?;system::open_path(item["path"].as_str().ok_or("Invalid launcher path")?,false,false).map(|_|true)}
@@ -1299,8 +1332,9 @@ fn setup_tray(app: &AppHandle, state: Arc<AppState>) {
         builder = builder.icon(icon);
     }
     let click_state = state.clone();
+    let hide_tray = state.settings.lock().unwrap()["hideTrayIcon"].as_bool().unwrap_or(false);
     let menu_state = state;
-    let _ = builder
+    if let Ok(tray) = builder
         .on_tray_icon_event(move |tray, event| {
             if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
                 restore_island_visible(tray.app_handle(), &click_state, true);
@@ -1335,7 +1369,11 @@ fn setup_tray(app: &AppHandle, state: Arc<AppState>) {
             "quit" => { finalize_background(app); app.exit(0); }
             _ => {}
         })
-        .build(app);
+        .build(app) {
+        if hide_tray {
+            let _ = tray.set_visible(false);
+        }
+    }
 }
 
 fn finalize_background(app:&AppHandle){
@@ -2112,6 +2150,7 @@ pub fn run() {
             launcher_add_link,
             launcher_edit_link,
             launcher_remove,
+            launcher_reorder,
             launcher_launch,
             launcher_link_icon,
             launcher_pick_icon,

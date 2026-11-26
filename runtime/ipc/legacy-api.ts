@@ -90,6 +90,7 @@ export const api: {
   shelfClear: () => Promise<Commands["shelf_clear"]["result"]>;
   launcherAdd: (e: Array<string> | null) => Promise<Commands["launcher_add"]["result"]>;
   launcherRemove: (e: string | null) => Promise<Commands["launcher_remove"]["result"]>;
+  launcherReorder: (ids: string[]) => Promise<Commands["launcher_reorder"]["result"]>;
   launcherLaunch: (e: string | null) => Promise<Commands["launcher_launch"]["result"]>;
   launcherAddLink: (
     e: string | null,
@@ -280,6 +281,7 @@ export const api: {
   shelfClear: () => T(`shelf_clear`),
   launcherAdd: (e) => T(`launcher_add`, { paths: e }),
   launcherRemove: (e) => T(`launcher_remove`, { id: e }),
+  launcherReorder: (ids) => T(`launcher_reorder`, { ids }),
   launcherLaunch: (e) => T(`launcher_launch`, { id: e }),
   launcherAddLink: (e, t, n) => T(`launcher_add_link`, { link: e, name: t, icon: n }),
   launcherEditLink: (e, t, n, r) => T(`launcher_edit_link`, { id: e, link: t, name: n, icon: r }),

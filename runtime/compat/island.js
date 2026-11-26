@@ -1100,8 +1100,16 @@ function Ni(e = {}) {
 var Pi = Object.assign(Ni(), { addEffect: jr, removeEffect: Mr });
 function Fi(e) {
   if (e.onChat && e.chat) return [`chat`];
-  let t = [`shelf`];
-  return (e.phone && t.push(`phone`), e.launcher && t.push(`launcher`), e.chat && t.push(`chat`), t);
+  let available = [`shelf`];
+  if (e.phone) available.push(`phone`);
+  if (e.launcher) available.push(`launcher`);
+  if (e.chat) available.push(`chat`);
+  let order = e.order === `launcher_first`
+    ? [`launcher`, `shelf`, `phone`, `chat`]
+    : e.order === `chat_first`
+      ? [`chat`, `shelf`, `phone`, `launcher`]
+      : [`shelf`, `phone`, `launcher`, `chat`];
+  return order.filter((zone) => available.includes(zone));
 }
 
 var Ri = 6e4,
@@ -2342,6 +2350,7 @@ function Os() {
       launcher: useIslandStore((e) => e.settings?.moduleLauncher !== !1),
       chat: useIslandStore((e) => e.license.pro),
       phone: useIslandStore((e) => phoneLinked(e.phone)),
+      order: useIslandStore((e) => e.settings?.dropZoneOrder),
     }),
     n = Dn(),
     r =
@@ -10859,6 +10868,7 @@ function useRuntimeEvents() {
               launcher: c()?.moduleLauncher !== !1,
               chat: i.license.pro,
               phone: phoneLinked(i.phone),
+              order: c()?.dropZoneOrder,
             }),
             o = (e) => {
               let t = window.devicePixelRatio,
@@ -11034,7 +11044,8 @@ function IslandApp() {
         }),
       (ce.current = oe));
   }, [oe, se]);
-  let le = Math.min(c / 2, k ? 32 : 26),
+  let radiusScale = Math.max(40, Math.min(100, useIslandStore((e) => e.settings?.islandRadius ?? 100))) / 100,
+    le = Math.min(c / 2, Math.round((k ? 32 : 26) * radiusScale)),
     ue = (0, ReactRuntime.useRef)({ w: s, h: c, fold: LIQUID_FOLDED });
   ue.current = updateSizeHistory(ue.current, s, c);
   let de = selectSizeTransition(a, useIslandStore.getState().settings?.mediaPill === 'lyrics', g, ue.current.fold, useIslandStore.getState().tab === 'home' && useIslandStore.getState().peripheralPanelHeight > 0),
