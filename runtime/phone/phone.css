@@ -167,17 +167,25 @@
 .wi-phone-pair [data-phone-qr] {
   display: grid;
   place-items: center;
+  box-sizing: border-box;
   width: clamp(76px, calc(100cqh - 122px), 94px);
+  height: clamp(76px, calc(100cqh - 122px), 94px);
+  min-width: 76px;
+  max-width: 94px;
   aspect-ratio: 1;
   padding: 4px;
   border-radius: 12px;
   background: #ffffff;
   color: #70757e;
   flex-shrink: 0;
+  overflow: hidden;
 }
 .wi-phone-pair [data-phone-qr] > img {
+  display: block;
   width: 100%;
   height: 100%;
+  min-width: 0;
+  min-height: 0;
   object-fit: contain;
 }
 .wi-phone-url-btn {

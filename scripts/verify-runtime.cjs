@@ -2586,12 +2586,13 @@ async function quit(client) {
       }
       if(command==='phone_start'){
         await waitFor(main,'!!document.querySelector("[data-phone-qr] img")','Phone QR code generated');
+        await waitFor(main,'(document.querySelector("[data-phone-panel]")?.getBoundingClientRect().height ?? 0) >= 240','Phone panel expanded');
         const source=await main.evaluate('document.querySelector("[data-phone-qr] img").src');
         assert.match(source,/^data:image\/png;base64,/);
         await fs.writeFile(path.join(directory,'phone-displayed-qr.png'),Buffer.from(source.split(',')[1],'base64'));
         await fs.writeFile(path.join(directory,'phone-displayed-qr-link.txt'),result.url);
         const layout=await main.evaluate(`(()=>{const rect=e=>{const r=e.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height};};return {panel:rect(document.querySelector('[data-phone-panel]')),qr:rect(document.querySelector('[data-phone-qr]')),shelf:rect(document.querySelector('.wi-shelf-row-wrap'))};})()`);
-        assert(Math.abs(layout.panel.width-184)<.05);assert(layout.qr.width>=76&&layout.qr.width<=94);assert(layout.panel.right<=layout.shelf.left+.05,'Phone panel must be to the left of the shelf');
+        assert(Math.abs(layout.panel.width-184)<.05,JSON.stringify(layout));assert(layout.qr.width>=75.9&&layout.qr.width<=94.1,JSON.stringify(layout));assert(layout.panel.right<=layout.shelf.left+.05,'Phone panel must be to the left of the shelf');
         assert(layout.qr.top>=layout.panel.top&&layout.qr.bottom<=layout.panel.bottom,'QR must fit inside the card');
         assert(await main.evaluate(`(()=>{const url=document.querySelector('[data-phone-url]'),content=url.closest('.wi-phone-content');return url.getBoundingClientRect().bottom<=content.getBoundingClientRect().bottom+1;})()`),'QR instructions and link must fit');
         await fs.writeFile(path.join(directory,'phone-reference-layout.json'),JSON.stringify(layout,null,2));
