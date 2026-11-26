@@ -55,9 +55,9 @@ export const SECTION_META: Record<
     descEn: 'Pop-up cards: volume, downloads, Steam, OBS, AI agents, VPN and Windows notifications',
   },
   sound: {
-    ru: 'Звук',
-    en: 'Sound',
-    descRu: 'Устройство вывода для громкости, микрофон для диктовки и быстрый доступ к плееру',
+    ru: 'Звук и музыка',
+    en: 'Sound & Music',
+    descRu: 'Устройство вывода для громкости, микрофон для диктовки и оформление плеера',
     descEn: 'Output device for volume controls, microphone for dictation and player styling',
   },
   weather: {
@@ -131,7 +131,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'general', groupId: 'general-clock', ru: 'Часы и батарея в свёрнутом острове', en: 'Clock and battery on the folded island', hintRu: 'Время, секунды, формат 12/24 и заряд ноутбука', hintEn: 'Time, seconds, 12/24h format and laptop battery', keywords: 'часы время секунды формат батарея заряд clock time battery' },
   { section: 'general', groupId: 'general-clock', ru: 'Открывать при наведении и задержки', en: 'Open on hover and delays', hintRu: 'Открытие по клику или наведению курсора', hintEn: 'Click vs cursor hover open/close delays', keywords: 'наведение курсор задержка открытие закрытие hover delay' },
   { section: 'general', groupId: 'general-media', ru: 'Видимость плееров и браузеров', en: 'Visible media players and browsers', hintRu: 'Скрыть или показать Яндекс Браузер, Spotify, Chrome и др.', hintEn: 'Hide or restore Yandex Browser, Spotify, Chrome etc.', keywords: 'музыка плеер яндекс браузер chrome spotify скрыть источник media source' },
-  { section: 'general', groupId: 'general-media', ru: 'Пилюля во время музыки и текст песни', en: 'Music pill style and lyrics', hintRu: 'Обычная, с названием, мини-плеер, с текстом LRCLIB и жидкий спектр', hintEn: 'Normal, title, mini player, LRCLIB lyrics and liquid spectrum', keywords: 'музыка плеер текст песни лирика эквалайзер спектр lyrics music player' },
+  { section: 'sound', groupId: 'sound-player', ru: 'Пилюля во время музыки и текст песни', en: 'Music pill style and lyrics', hintRu: 'Обычная, с названием, мини-плеер, с текстом LRCLIB и жидкий спектр', hintEn: 'Normal, title, mini player, LRCLIB lyrics and liquid spectrum', keywords: 'музыка плеер текст песни лирика эквалайзер спектр lyrics music player' },
 
   // Character & Holidays
   { section: 'character', ru: 'Персонаж и питомцы', en: 'Character & pets', hintRu: 'Выбор персонажа, размер, питомец для музыки и жидкий остров', hintEn: 'Pick companion, size, music pet and liquid island', keywords: 'персонаж питомец кот медуза жидкий маскот codex pet character' },
@@ -156,8 +156,8 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'events', groupId: 'events-integrations', ru: 'OBS Studio и ИИ-агенты (Claude Code / Codex)', en: 'OBS Studio & terminal AI agents', hintRu: 'Индикатор REC/LIVE в OBS и карточки агентов в терминале', hintEn: 'OBS REC/LIVE badge and Claude Code / Codex cards', keywords: 'obs стрим запись websocket claude codex opencode агент' },
   { section: 'events', groupId: 'events-notifications', ru: 'Уведомления Windows и VPN-карточки', en: 'Windows notifications & VPN cards', hintRu: 'Telegram/Discord на острове, список тихих программ и IP', hintEn: 'App notifications on the island, mute list and VPN IP', keywords: 'уведомления windows telegram discord vpn ip notifications' },
 
-  // Sound
-  { section: 'sound', ru: 'Устройства вывода и микрофон', en: 'Audio output & microphone', hintRu: 'Чью громкость крутит остров и какой микрофон глушит/пишет', hintEn: 'Target speaker for volume and microphone for mute/dictation', keywords: 'звук наушники колонки микрофон громкость audio output input mic' },
+  // Sound & Music
+  { section: 'sound', groupId: 'sound-devices', ru: 'Устройства вывода и микрофон', en: 'Audio output & microphone', hintRu: 'Чью громкость крутит остров и какой микрофон глушит/пишет', hintEn: 'Target speaker for volume and microphone for mute/dictation', keywords: 'звук наушники колонки микрофон громкость audio output input mic' },
 
   // Weather
   { section: 'weather', ru: 'Город, часовой пояс и прогноз погоды', en: 'City, timezone & weather forecast', hintRu: 'Выбор города, °C/°F, температура в пилюле и осадки', hintEn: 'City search, °C/°F, pill temperature and rain/snow alerts', keywords: 'погода город температура дождь снег пояс weather city celsius' },

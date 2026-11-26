@@ -1,23 +1,36 @@
 /* Woods Island Settings 2.0 visual polish */
+:root {
+  color-scheme: dark;
+}
+
 .wi-settings-shell {
-  background: radial-gradient(900px 420px at 72% -10%, rgba(142, 162, 255, 0.06), transparent 62%), #101013;
+  background: radial-gradient(900px 420px at 72% -10%, rgba(142, 162, 255, 0.065), transparent 62%), #101013;
 }
 
 .wi-settings-nav {
   background: linear-gradient(180deg, #0b0b0e 0%, #0d0d11 100%);
 }
 
-.wi-logo-pill {
+/* Official Woods Island brand badge in sidebar header */
+.wi-logo-badge {
   display: grid;
   place-items: center;
-  width: 56px;
-  height: 32px;
+  width: 38px;
+  height: 38px;
   flex-shrink: 0;
-  border-radius: 0 0 14px 14px;
-  background: #000;
+  border-radius: 11px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-top: none;
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.wi-logo-badge img {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+  border-radius: 7px;
+  display: block;
 }
 
 .wi-nav-group-label {
@@ -26,12 +39,12 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.34);
-  padding: 9px 10px 3px;
+  padding: 7px 10px 2px;
   user-select: none;
 }
 
 .wi-nav-group-label:first-child {
-  padding-top: 2px;
+  padding-top: 1px;
 }
 
 .wi-nav-item {
@@ -39,7 +52,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 31px;
+  height: 29px;
   flex-shrink: 0;
   border-radius: 8px;
   padding: 0 10px 0 11px;
@@ -112,9 +125,10 @@
   transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
 }
 
-.wi-anchor-pill:hover {
-  background: rgba(142, 162, 255, 0.14);
-  border-color: rgba(142, 162, 255, 0.35);
+.wi-anchor-pill:hover,
+.wi-anchor-pill[data-active="true"] {
+  background: rgba(142, 162, 255, 0.16);
+  border-color: rgba(142, 162, 255, 0.36);
   color: #fff;
 }
 
@@ -122,6 +136,7 @@
   display: flex;
   flex-direction: column;
   gap: 7px;
+  scroll-margin-top: 215px;
 }
 
 .wi-group-head {
@@ -183,7 +198,7 @@
   animation: wi-setting-flash 2s ease-out forwards;
 }
 
-/* Search bar in sidebar */
+/* Search bar in sidebar — single clean outer focus ring, zero inner outline */
 .wi-search-wrap {
   padding: 0 10px 10px;
 }
@@ -200,27 +215,34 @@
   transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
 }
 
+.wi-search-input:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
 .wi-search-input:focus-within {
-  background: rgba(255, 255, 255, 0.075);
-  border-color: rgba(142, 162, 255, 0.55);
-  box-shadow: 0 0 0 2px rgba(142, 162, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(142, 162, 255, 0.65);
+  box-shadow: 0 0 0 3px rgba(142, 162, 255, 0.16);
 }
 
 .wi-search-field {
   min-width: 0;
   flex: 1;
   background: transparent;
-  border: 0;
-  box-shadow: none;
+  border: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
   font-size: 12px;
   color: #fff;
-  outline: none;
+  caret-color: #9bb0ff;
 }
 
 .wi-search-field:focus,
 .wi-search-field:focus-visible {
-  outline: none;
-  box-shadow: none;
+  outline: none !important;
+  box-shadow: none !important;
+  border: 0 !important;
 }
 
 .wi-search-field::placeholder {
@@ -273,29 +295,32 @@
   color: #b8c7ff;
 }
 
-/* Live preview scene switcher */
-.wi-stage-bar {
-  margin-top: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 0 4px;
+/* Integrated glass scene switcher inside the bottom-right of live preview */
+.wi-stage-wrap {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  padding-top: 10px;
+  margin-top: -10px;
+  padding-bottom: 12px;
+  margin-bottom: -12px;
+  background: linear-gradient(180deg, #101013 0%, #101013 84%, rgba(16, 16, 19, 0) 100%);
 }
 
-.wi-stage-label {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.42);
-}
-
-.wi-stage-tabs {
+.wi-stage-overlay-tabs {
+  position: absolute;
+  right: 10px;
+  bottom: 20px;
+  z-index: 10;
   display: inline-flex;
   align-items: center;
   gap: 2px;
   border-radius: 9px;
-  background: rgba(255, 255, 255, 0.055);
+  background: rgba(12, 12, 16, 0.72);
+  backdrop-filter: blur(10px);
   padding: 3px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
 }
 
 .wi-stage-tab {
@@ -303,19 +328,239 @@
   padding: 3px 9px;
   font-size: 11px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.54);
+  color: rgba(255, 255, 255, 0.58);
   transition: background-color 140ms ease, color 140ms ease;
 }
 
 .wi-stage-tab:hover {
-  color: rgba(255, 255, 255, 0.9);
-  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .wi-stage-tab[aria-pressed="true"] {
-  background: rgba(142, 162, 255, 0.24);
+  background: rgba(142, 162, 255, 0.28);
   color: #fff;
-  box-shadow: inset 0 0 0 1px rgba(142, 162, 255, 0.32);
+  box-shadow: inset 0 0 0 1px rgba(142, 162, 255, 0.36);
+}
+
+/* Custom precision range slider */
+.wi-slider-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wi-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 154px;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    #6e85ff 0%,
+    #a5b6ff var(--wi-pct, 50%),
+    rgba(255, 255, 255, 0.12) var(--wi-pct, 50%)
+  );
+  outline: none !important;
+  cursor: pointer;
+  transition: filter 140ms ease;
+}
+
+.wi-slider:hover {
+  filter: brightness(1.08);
+}
+
+.wi-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 2px solid #8ea2ff;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.5), 0 0 0 0 rgba(142, 162, 255, 0);
+  cursor: grab;
+  transition: transform 140ms cubic-bezier(0.2, 0.9, 0.3, 1.3), box-shadow 140ms ease;
+}
+
+.wi-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.12);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55), 0 0 0 4px rgba(142, 162, 255, 0.22);
+}
+
+.wi-slider:active::-webkit-slider-thumb {
+  cursor: grabbing;
+  transform: scale(1.18);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.6), 0 0 0 5px rgba(142, 162, 255, 0.3);
+}
+
+.wi-slider:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px rgba(142, 162, 255, 0.45);
+}
+
+.wi-slider-value {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 58px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* Tactile segmented controls */
+.wi-choice-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.32);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  padding: 3px;
+}
+
+.wi-choice-btn {
+  border-radius: 7px;
+  padding: 4px 11px;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.56);
+  transition: background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+.wi-choice-btn:hover {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.wi-choice-btn[aria-pressed="true"] {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+/* Styled native selects in settings */
+.wi-settings-shell select {
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background-color: rgba(0, 0, 0, 0.36);
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+.wi-settings-shell select:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  background-color: rgba(0, 0, 0, 0.48);
+}
+
+/* Quick style presets in Appearance */
+.wi-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+@media (max-width: 720px) {
+  .wi-preset-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.wi-preset-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 10px 11px;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.035);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  text-align: left;
+  transition: background-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+.wi-preset-card:hover {
+  background: rgba(255, 255, 255, 0.065);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+
+.wi-preset-card[aria-pressed="true"] {
+  background: rgba(142, 162, 255, 0.14);
+  box-shadow: inset 0 0 0 1.5px rgba(142, 162, 255, 0.6);
+}
+
+.wi-preset-preview {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  width: 100%;
+  height: 24px;
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  padding-top: 0;
+}
+
+.wi-preset-notch {
+  width: 44px;
+  height: 11px;
+  border-radius: 0 0 7px 7px;
+  background: #0a0a0c;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-top: none;
+}
+
+.wi-preset-capsule {
+  margin-top: 5px;
+  width: 48px;
+  height: 11px;
+  border-radius: 999px;
+  background: #0a0a0c;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.wi-preset-macbook {
+  width: 100%;
+  height: 10px;
+  background: #08080a;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+  display: flex;
+  justify-content: center;
+}
+
+.wi-preset-macbook::after {
+  content: "";
+  width: 22px;
+  height: 3px;
+  margin-top: 3px;
+  border-radius: 999px;
+  background: rgba(142, 162, 255, 0.65);
+}
+
+.wi-preset-4k {
+  margin-top: 4px;
+  width: 60px;
+  height: 13px;
+  border-radius: 999px;
+  background: #0a0a0c;
+  border: 1px solid rgba(142, 162, 255, 0.45);
+}
+
+.wi-preset-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  line-height: 1.2;
+}
+
+.wi-preset-sub {
+  font-size: 10.5px;
+  color: rgba(255, 255, 255, 0.45);
+  line-height: 1.25;
 }
 
 /* Quick reset pill next to sliders */

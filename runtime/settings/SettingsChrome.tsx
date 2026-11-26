@@ -60,7 +60,7 @@ export function SettingsSearchBar({
           placeholder={en ? 'Search settings…' : 'Поиск настроек…'}
           aria-label={en ? 'Search settings' : 'Поиск настроек'}
           spellCheck={false}
-          className="wi-search-field"
+          className="wi-search-field outline-none"
         />
         {value ? (
           <button
@@ -169,6 +169,7 @@ export function SectionHeader({
   anchors?: AnchorItem[];
   onAnchor?: (groupId: string) => void;
 }) {
+  const [activeAnchor, setActiveAnchor] = React.useState<string | null>(null);
   return (
     <div className="wi-section-header">
       <div>
@@ -181,7 +182,11 @@ export function SectionHeader({
             <button
               key={anchor.id}
               type="button"
-              onClick={() => onAnchor(anchor.id)}
+              data-active={activeAnchor === anchor.id ? 'true' : undefined}
+              onClick={() => {
+                setActiveAnchor(anchor.id);
+                onAnchor(anchor.id);
+              }}
               className="wi-anchor-pill"
             >
               {anchor.label}
@@ -233,20 +238,90 @@ export function StageSceneBar({
     { id: 'through', label: en ? 'Through' : 'Сквозной' },
   ];
   return (
-    <div data-stage-scene-bar="true" className="wi-stage-bar">
-      <span className="wi-stage-label">
-        {en ? 'Live preview — hover a setting or pick a view:' : 'Живой предпросмотр — наведи на пункт или выбери вид:'}
-      </span>
-      <div className="wi-stage-tabs">
-        {scenes.map((item) => (
+    <div data-stage-scene-bar="true" className="wi-stage-overlay-tabs">
+      {scenes.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          aria-pressed={scene === item.id}
+          onClick={() => onSelect(item.id)}
+          className="wi-stage-tab"
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function AppearancePresets({
+  settings,
+  onApply,
+  en,
+}: {
+  settings: { style?: string; scale?: number; notchBar?: boolean; theme?: string };
+  onApply: (patch: Record<string, unknown>) => void;
+  en: boolean;
+}) {
+  const scale = settings.scale ?? 100;
+  const presets = [
+    {
+      id: 'notch',
+      active: settings.style !== 'capsule' && settings.notchBar !== true && scale === 100,
+      title: en ? 'Classic notch' : 'Классика',
+      sub: en ? 'Notch · 100%' : 'Вырез · 100%',
+      visual: 'wi-preset-notch',
+      patch: { style: 'notch', notchBar: false, scale: 100 },
+    },
+    {
+      id: 'capsule',
+      active: settings.style === 'capsule' && settings.notchBar !== true && scale === 100,
+      title: en ? 'Floating pill' : 'Капсула',
+      sub: en ? 'Capsule · 100%' : 'Парящая · 100%',
+      visual: 'wi-preset-capsule',
+      patch: { style: 'capsule', notchBar: false, scale: 100 },
+    },
+    {
+      id: 'macbook',
+      active: settings.notchBar === true,
+      title: 'MacBook',
+      sub: en ? 'Top bar reserve' : 'Полоса выреза',
+      visual: 'wi-preset-macbook',
+      patch: { style: 'notch', notchBar: true },
+    },
+    {
+      id: '4k',
+      active: settings.style === 'capsule' && settings.notchBar !== true && scale >= 125,
+      title: en ? '4K / Large' : 'Для 4K',
+      sub: en ? 'Capsule · 125%' : 'Капсула · 125%',
+      visual: 'wi-preset-4k',
+      patch: { style: 'capsule', notchBar: false, scale: 125 },
+    },
+  ];
+  return (
+    <div className="wi-group-wrap">
+      <div className="wi-group-head">
+        <h3 className="wi-group-title">{en ? 'Quick styles' : 'Быстрые стили'}</h3>
+        <span className="wi-group-hint">
+          {en ? 'Apply in one click' : 'Применяются в 1 клик'}
+        </span>
+      </div>
+      <div className="wi-preset-grid">
+        {presets.map((preset) => (
           <button
-            key={item.id}
+            key={preset.id}
             type="button"
-            aria-pressed={scene === item.id}
-            onClick={() => onSelect(item.id)}
-            className="wi-stage-tab"
+            aria-pressed={preset.active}
+            onClick={() => onApply(preset.patch)}
+            className="wi-preset-card"
           >
-            {item.label}
+            <div className="wi-preset-preview">
+              <div className={preset.visual} />
+            </div>
+            <div>
+              <div className="wi-preset-title">{preset.title}</div>
+              <div className="wi-preset-sub">{preset.sub}</div>
+            </div>
           </button>
         ))}
       </div>
@@ -282,7 +357,7 @@ export function focusSettingGroup(container: HTMLElement | null, groupId?: strin
   window.requestAnimationFrame(() => {
     const target = document.getElementById(groupId);
     if (!target) return;
-    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
     const card = target.querySelector('.wi-setting-card') ?? target;
     card.classList.remove('wi-setting-highlight');
     void (card as HTMLElement).offsetWidth;

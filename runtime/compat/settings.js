@@ -26,12 +26,14 @@ import {
   Bell as WoodsBell,
   Link2 as WoodsLink,
 } from '../components/settings-icons';
+import woodsLogo from "../../src-tauri/icons/icon.png";
 import {
   SettingsSearchBar,
   SettingsSearchResults,
   SectionHeader,
   SettingGroup,
   StageSceneBar,
+  AppearancePresets,
   QuickResetButton,
   focusSettingGroup,
 } from '../settings/SettingsChrome';
@@ -815,16 +817,19 @@ function n_is_en() {
   return n(`ru`, `en`) === `en`;
 }
 function mt({ onScene, showBar = true, ...e }) {
-  return (0, U.jsxs)(`div`, {
+  return (0, U.jsx)(`div`, {
     "data-stage-slot": !0,
     className: `sticky top-0 z-20 -mx-2 bg-[#101013]/95 px-2 pt-1 pb-2 backdrop-blur-md`,
-    children: [
-      (0, U.jsx)(F.Suspense, {
-        fallback: (0, U.jsx)(`div`, { className: `h-[180px] rounded-2xl bg-[#1c1d22]` }),
-        children: (0, U.jsx)(dt, { ...e }),
-      }),
-      showBar && onScene && (0, U.jsx)(StageSceneBar, { scene: e.scene, onSelect: onScene, en: n_is_en() }),
-    ],
+    children: (0, U.jsxs)(`div`, {
+      className: `wi-stage-wrap`,
+      children: [
+        (0, U.jsx)(F.Suspense, {
+          fallback: (0, U.jsx)(`div`, { className: `h-[180px] rounded-2xl bg-[#1c1d22]` }),
+          children: (0, U.jsx)(dt, { ...e }),
+        }),
+        showBar && onScene && (0, U.jsx)(StageSceneBar, { scene: e.scene, onSelect: onScene, en: n_is_en() }),
+      ],
+    }),
   });
 }
 function ht({ className: e, children: t }) {
@@ -899,14 +904,14 @@ function X({ value: e, options: t, onChange: n }) {
   return (0, U.jsx)(`div`, {
     role: `group`,
     "aria-label": settingLabel || undefined,
-    className: `flex rounded-lg bg-white/[0.07] p-0.5`,
+    className: `wi-choice-group`,
     children: t.map((t) =>
       (0, U.jsx)(
         `button`,
         {
           onClick: () => n(t.value),
           "aria-pressed": e === t.value,
-          className: `rounded-md px-3 py-1 text-[12.5px] ${e === t.value ? `bg-white/15 text-white` : `text-white/55 hover:text-white`}`,
+          className: `wi-choice-btn`,
           children: t.label,
         },
         t.value,
@@ -1086,7 +1091,7 @@ var xt = () => [
   { id: `modules`, label: n(`Модули`, `Modules`), icon: N },
   { id: `clipboard`, label: n(`Захват и буфер`, `Capture & Clip`), icon: WoodsCamera, group: n(`Функции`, `Features`) },
   { id: `events`, label: n(`События`, `Events`), icon: WoodsBell },
-  { id: `sound`, label: n(`Звук`, `Sound`), icon: _ },
+  { id: `sound`, label: n(`Звук и музыка`, `Sound & Music`), icon: _ },
   { id: `weather`, label: n(`Погода`, `Weather`), icon: A },
   { id: `ai`, label: n(`ИИ`, `AI`), icon: de },
   { id: `voice`, label: n(`Голос в текст`, `Voice to text`), icon: se },
@@ -1112,8 +1117,8 @@ function St({ version: e, search, onSearch }) {
           className: `flex items-center gap-3 px-4 pt-4 pb-3`,
           children: [
             (0, U.jsx)(`div`, {
-              className: `wi-logo-pill`,
-              children: (0, U.jsx)(`span`, { className: `h-1.5 w-5 rounded-full bg-white/25` }),
+              className: `wi-logo-badge`,
+              children: (0, U.jsx)(`img`, { src: woodsLogo, alt: ``, width: 30, height: 30 }),
             }),
             (0, U.jsxs)(`div`, {
               className: `min-w-0`,
@@ -1559,9 +1564,11 @@ function Q({ value: e, min: t, max: n, step: r, onChange: i, unit: a, lazy: o })
       (window.clearTimeout(l.current), c(null), t !== e && i(t));
     };
   (0, F.useEffect)(() => () => window.clearTimeout(l.current), []);
-  let d = s ?? e;
+  let d = s ?? e,
+    span = n - t,
+    pct = span > 0 ? Math.max(0, Math.min(100, ((d - t) / span) * 100)) : 0;
   return (0, U.jsxs)(`div`, {
-    className: `flex items-center gap-3`,
+    className: `wi-slider-wrap`,
     children: [
       (0, U.jsx)(`input`, {
         type: `range`,
@@ -1569,6 +1576,7 @@ function Q({ value: e, min: t, max: n, step: r, onChange: i, unit: a, lazy: o })
         max: n,
         step: r,
         value: d,
+        style: { "--wi-pct": `${pct.toFixed(1)}%` },
         onChange: (e) => {
           let t = Number(e.target.value);
           if (!o) return i(t);
@@ -1576,10 +1584,10 @@ function Q({ value: e, min: t, max: n, step: r, onChange: i, unit: a, lazy: o })
         },
         onPointerUp: (e) => o && s !== null && u(Number(e.currentTarget.value)),
         onBlur: (e) => o && s !== null && u(Number(e.currentTarget.value)),
-        className: `w-36 accent-[#8ea2ff]`,
+        className: `wi-slider outline-none`,
       }),
       (0, U.jsxs)(`span`, {
-        className: `tabular w-16 text-right text-[12.5px] text-white/60`,
+        className: `wi-slider-value`,
         children: [d, ` `, a],
       }),
     ],
@@ -2293,6 +2301,7 @@ function zt() {
                     onAnchor: jumpAnchor,
                     stage: (0, U.jsx)(mt, { scene: oe, live: ce, s: e, license: l, onScene: pickScene }),
                     children: [
+                      (0, U.jsx)(AppearancePresets, { settings: e, onApply: H, en: n_is_en() }),
                       (0, U.jsxs)(SettingGroup, {
                         id: `appearance-style`,
                         title: n(`Стиль, тема и масштаб`, `Style, theme & size`),
@@ -3540,11 +3549,17 @@ function zt() {
                   }),
                   (0, U.jsxs)(K, {
                     id: `sound`,
-                    title: n(`Звук`, `Sound`),
+                    title: n(`Звук и музыка`, `Sound & Music`),
                     grouped: true,
+                    anchors: [
+                      { id: `sound-devices`, label: n(`Устройства`, `Devices`) },
+                      { id: `sound-player`, label: n(`Плеер и текст`, `Player & lyrics`) },
+                    ],
+                    onAnchor: jumpAnchor,
                     stage: (0, U.jsx)(mt, { scene: ce ? oe : `music`, live: ce, s: e, license: l, onScene: pickScene }),
                     children: [
                       (0, U.jsxs)(SettingGroup, {
+                        id: `sound-devices`,
                         title: n(`Устройства вывода и микрофон`, `Output & microphone`),
                         children: [
                       (0, U.jsx)(J, {
@@ -3576,21 +3591,66 @@ function zt() {
                       }),
                         ],
                       }),
-                      (0, U.jsx)(SettingGroup, {
-                        title: n(`Музыка в острове`, `Music on the island`),
-                        children: (0, U.jsx)(J, {
-                          title: n(`Вид плеера, текст песни и скрытые плееры`, `Player style, lyrics & hidden players`),
-                          hint: n(
-                            `Настройка музыкальной пилюли, LRCLIB-текстов, жидкого спектра и видимости Яндекс Браузера / Spotify`,
-                            `Configure music pill layout, LRCLIB lyrics, liquid spectrum and visible browsers/players`,
-                          ),
-                          children: (0, U.jsx)(`button`, {
-                            type: `button`,
-                            onClick: () => jumpTo(`general`, `general-media`),
-                            className: `h-8 shrink-0 rounded-lg bg-white/[0.08] px-3 text-[12.5px] text-white hover:bg-white/[0.14]`,
-                            children: n(`Открыть`, `Open`),
+                      (0, U.jsxs)(SettingGroup, {
+                        id: `sound-player`,
+                        title: n(`Оформление плеера и текст песни`, `Player style & lyrics`),
+                        children: [
+                          (0, U.jsx)(J, {
+                            stacked: !0,
+                            preview: `music`,
+                            title: n(`Пилюля во время музыки`, `The pill while music plays`),
+                            hint: n(
+                              `Обычная, с названием, мини-плеер или строка текста песни в реальном времени`,
+                              `Usual, with track name, mini player or live synced lyrics`,
+                            ),
+                            children: (0, U.jsx)(X, {
+                              value: e.mediaPill || `normal`,
+                              onChange: (val) => H({ mediaPill: val }),
+                              options: [
+                                { value: `normal`, label: n(`Обычная`, `Usual`) },
+                                { value: `title`, label: n(`С названием`, `With the name`) },
+                                { value: `player`, label: n(`Мини-плеер`, `Mini player`) },
+                                { value: `lyrics`, label: n(`С текстом`, `With the words`) },
+                              ],
+                            }),
                           }),
-                        }),
+                          (0, U.jsx)(J, {
+                            stacked: !0,
+                            preview: `home`,
+                            title: n(`Плеер на «Главной»`, `The player on Home`),
+                            children: (0, U.jsx)(X, {
+                              value: e.homePlayer || `soft`,
+                              onChange: (val) => H({ homePlayer: val }),
+                              options: [
+                                { value: `soft`, label: n(`Мягкое зеркало`, `Soft mirror`) },
+                                { value: `fill`, label: n(`Заливка`, `Fill`) },
+                                { value: `compact`, label: n(`Компактный`, `Compact`) },
+                              ],
+                            }),
+                          }),
+                          (0, U.jsx)(J, {
+                            preview: `music`,
+                            title: n(`Текст песни`, `The song's words`),
+                            hint: n(`Синхронные строки из открытой базы LRCLIB`, `Synced lyrics from LRCLIB`),
+                            children: (0, U.jsx)(Y, { value: e.lyrics === !0, onChange: (val) => H({ lyrics: val }) }),
+                          }),
+                          (0, U.jsx)(J, {
+                            preview: `music`,
+                            title: n(`Жидкий край по частотам`, `The liquid edge by frequency`),
+                            hint: n(`Работает с персонажем «Жидкий остров»`, `Works with the “Liquid island” character`),
+                            children: (0, U.jsx)(Y, { value: e.liquidSpectrum === !0, onChange: (val) => H({ liquidSpectrum: val }) }),
+                          }),
+                          (0, U.jsx)(J, {
+                            title: n(`Скрытые плееры и браузеры`, `Hidden players & browsers`),
+                            hint: n(`Выбор плееров, которые остров отслеживает или игнорирует`, `Choose which players and browsers the island tracks`),
+                            children: (0, U.jsx)(`button`, {
+                              type: `button`,
+                              onClick: () => jumpTo(`general`, `general-media`),
+                              className: `h-8 shrink-0 rounded-lg bg-white/[0.08] px-3 text-[12.5px] text-white hover:bg-white/[0.14]`,
+                              children: n(`Настроить`, `Configure`),
+                            }),
+                          }),
+                        ],
                       }),
                     ],
                   }),
