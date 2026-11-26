@@ -16,7 +16,8 @@ const args=process.argv.slice(2);
 assert(args.length===1&&['--inspect','--prepare','--publish'].includes(args[0]),'Choose inspect, prepare or publish');
 const git=(...args)=>execFileSync('git',args,{cwd:root,encoding:'utf8'}).trim();
 const gh=(...args)=>execFileSync(process.env.WOODS_GH_PATH||'gh',args,{cwd:root,encoding:'utf8',windowsHide:true,env:{...process.env,GH_TOKEN:process.env.GITHUB_TOKEN}});
-async function optional(path){try{return await github(path);}catch(error){if(/HTTP 404$/.test(error.message))return null;throw error;}}
+async function optional(path){try{return await github(path);}catch(error){if(/HTTP (404|422)$/.test(error.message))return null;throw error;}}
+async function findRelease(tag){const published=await optional('releases/tags/'+encodeURIComponent(tag));if(published)return published;const list=await github('releases?per_page=30');return list.find(item=>item.tag_name===tag)||null;}
 const run=await github(`actions/runs/${runId}`),jobs=await github(`actions/runs/${runId}/jobs?filter=latest&per_page=100`);
 acceptedBuild(run,jobs,run.head_sha);
 if(args[0]==='--inspect'){
@@ -63,7 +64,7 @@ await writeFile(join(directory,'publication-proof.json'),JSON.stringify({version
 const initialLatest=await optional('releases/latest');releaseCanAdvance(version,initialLatest);
 const tag=`v${version}`,existingCommit=await optional('commits/'+encodeURIComponent(tag));
 if(existingCommit)assert.equal(existingCommit.sha,run.head_sha,'Existing tag points to another source');
-let release=await optional('releases/tags/'+encodeURIComponent(tag));
+let release=await findRelease(tag);
 function validateExisting(value){
   assert.equal(value.tag_name,tag);assert.equal(value.prerelease,false);
   assert.equal((value.body||'').replaceAll('\r\n','\n').trimEnd(),content.githubNotes.replaceAll('\r\n','\n').trimEnd(),'Existing release notes differ from the accepted source');
@@ -77,11 +78,12 @@ if(args[0]!=='--publish')process.exit(0);
 assert(process.env.GITHUB_ACTIONS==='true'&&process.env.RUNNER_ENVIRONMENT==='github-hosted'&&process.env.GITHUB_REPOSITORY===repository,'Publication runs only in the manually requested hosted workflow');
 if(!release){
   gh('release','create',tag,'--repo',repository,'--draft','--target',run.head_sha,'--title',`Woods Island ${version}`,'--notes-file',join(directory,'github-notes.md'));
-  release=await github('releases/tags/'+encodeURIComponent(tag));
+  release=await findRelease(tag);
+  assert(release,'Draft release was not found after creation');
 }
 validateExisting(release);
 for(const file of missingAssets(release,payloads))gh('release','upload',tag,file.path,'--repo',repository);
-release=await github('releases/tags/'+encodeURIComponent(tag));assert.equal(missingAssets(release,payloads).length,0);
+release=await findRelease(tag);assert(release,'Release not found after upload');assert.equal(missingAssets(release,payloads).length,0);
 if(release.draft){
   assert.equal((await optional('releases/latest'))?.id,initialLatest?.id,'Stable release changed during publication');
   gh('release','edit',tag,'--repo',repository,'--draft=false','--latest');

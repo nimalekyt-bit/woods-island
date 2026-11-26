@@ -38,12 +38,18 @@ jobs:
           node-version: 22
       - name: Validate full accepted source
         id: accepted
-        run: node scripts/publish-accepted.mjs --inspect
+        shell: pwsh
+        run: |
+          Copy-Item -LiteralPath scripts/publish-accepted.mjs -Destination (Join-Path $env:RUNNER_TEMP 'publish-accepted-main.mjs') -Force
+          node scripts/publish-accepted.mjs --inspect
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ steps.accepted.outputs.source_revision }}
           fetch-depth: 0
           persist-credentials: false
+      - name: Use current publication runner script
+        shell: pwsh
+        run: Copy-Item -LiteralPath (Join-Path $env:RUNNER_TEMP 'publish-accepted-main.mjs') -Destination scripts/publish-accepted.mjs -Force
       - name: Verify publication contracts
         run: node --test scripts/publish-contract.test.mjs scripts/release-acceptance.test.mjs
       - name: Download accepted installer and portable
