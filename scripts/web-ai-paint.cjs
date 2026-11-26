@@ -29,13 +29,13 @@ function rgbaPng(bytes) {
 
 // Self-contained so the same measurement runs inside Chromium and WebView2.
 function readWebAiPaintRects() {
-  const selectors = ['.webai-eyebrow', '.webai-service-title', '.webai-state-copy>p', '.webai-resume>span', '.webai-mode-current', '.webai-provider-mark>img'];
+  const selectors = ['.webai-eyebrow', '.webai-service-title', '.webai-state-copy>p', '.webai-resume>span', '.webai-mode-current', '.webai-provider-mark>[data-provider-icon]'];
   const base = getComputedStyle(document.querySelector('[data-web-ai-content]')).backgroundColor.match(/[\d.]+/g).slice(0, 3).map(Number);
   return { width: innerWidth, height: innerHeight, theme: document.documentElement.dataset.theme, rects: selectors.map(selector => {
     const node = document.querySelector(selector), rect = node.getBoundingClientRect(), style = getComputedStyle(node);
     const channels = style.color.match(/[\d.]+/g).map(Number), alpha = channels[3] ?? 1;
     return { selector, x: rect.x, y: rect.y, width: rect.width, height: rect.height, text: node.textContent,
-      color: channels.slice(0, 3).map((c, i) => c * alpha + base[i] * (1 - alpha)), image: node.tagName === 'IMG',
+      color: channels.slice(0, 3).map((c, i) => c * alpha + base[i] * (1 - alpha)), image: node.tagName === 'IMG', graphic: node.hasAttribute('data-provider-icon'),
       visibility: style.visibility, opacity: style.opacity,
       ancestors: (()=>{const result=[];for(let p=node;p;p=p.parentElement)result.push({tag:p.tagName,class:p.className,ready:p.dataset.preferencesReady,visibility:getComputedStyle(p).visibility});return result;})() };
   }) };
@@ -52,7 +52,7 @@ function assertWebAiPaint(bytes, geometry, label) {
         if (match && shot.pixels[p + 3] > 240) ink++;
       }
     }
-    const minimum = Math.ceil((rect.image ? 80 : Math.max(12, rect.text.trim().length * 2)) * sx * sy);
+    const minimum = Math.ceil((rect.image || rect.graphic ? 80 : Math.max(12, rect.text.trim().length * 2)) * sx * sy);
     assert(ink >= minimum, `${label} ${rect.selector}: missing rendered ink (${ink} < ${minimum}); visibility=${rect.visibility}, opacity=${rect.opacity}`);
     return { selector: rect.selector, ink, minimum };
   });

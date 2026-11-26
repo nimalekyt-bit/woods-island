@@ -3,10 +3,6 @@
   "use strict";
   const lang = navigator.language.toLowerCase().startsWith("ru") ? "ru" : "en";
   const strings = {
-    tagline: [
-      "Прямая передача без облака",
-      "Direct local transfer, no cloud",
-    ],
     localBadge: ["Локально", "Local"],
     toComputer: ["На компьютер", "To the computer"],
     localHint: [
@@ -14,6 +10,8 @@
       "Photos, videos and files appear right on the Woods Island shelf.",
     ],
     photos: ["Фото и видео", "Photos & video"],
+    photosFiles: ["Фото и файлы", "Photos and files"],
+    gallery: ["Выбрать из галереи", "Choose from gallery"],
     files: ["Файлы", "Files"],
     fileLimit: [
       "До 256 МиБ на файл · передаётся напрямую по Wi-Fi.",
@@ -23,10 +21,7 @@
     saving: ["Сохраняем на полку…", "Saving to shelf…"],
     sentMark: ["Отправлено", "Sent"],
     textTitle: ["Текст или ссылка", "Text or a link"],
-    textPlaceholder: [
-      "Вставь ссылку или заметку…",
-      "Paste a link or note…",
-    ],
+    textPlaceholder: ["Вставь ссылку или заметку…", "Paste a link or note…"],
     sendText: [
       "Отправить в буфер компьютера",
       "Send to the computer’s clipboard",
@@ -36,10 +31,7 @@
       "Файлы появятся здесь, когда отправишь их из Woods Island.",
       "Files appear here when you send them from Woods Island.",
     ],
-    footer: [
-      "Прямая связь с Woods Island. Без приложения, подписки и чужого сервера.",
-      "A direct link to Woods Island. No app, subscription or third-party server.",
-    ],
+    footer: ["Woods Island", "Woods Island"],
     disconnect: ["Отключить", "Disconnect"],
     pending: [
       "Подтверди телефон на компьютере",
@@ -55,7 +47,7 @@
       "Ждём, пока Woods Island снова выйдет на связь.",
       "Waiting for Woods Island to come back online.",
     ],
-    connected: ["Телефон подключён", "Phone connected"],
+    connected: ["Подключено к Woods Island", "Connected to Woods Island"],
     connectedDetail: [
       "Можно отправлять фото, файлы и текст. Сессия сохраняется при перезапуске.",
       "Ready for photos, files and text. Session stays active across restarts.",
@@ -130,6 +122,18 @@
   for (const node of document.querySelectorAll("[data-i18n]"))
     node.textContent = t(node.dataset.i18n);
   if (element("text")) element("text").placeholder = t("textPlaceholder");
+  element("send-text").setAttribute("aria-label", t("sendText"));
+  element("pick-options").setAttribute("aria-label", t("gallery"));
+  element("pick-options").addEventListener("click", () => {
+    const menu = element("gallery-menu");
+    menu.hidden = !menu.hidden;
+    element("pick-options").setAttribute("aria-expanded", String(!menu.hidden));
+  });
+  element("text").addEventListener("input", () => {
+    const field = element("text");
+    field.style.height = "38px";
+    field.style.height = Math.min(132, field.scrollHeight) + "px";
+  });
 
   const storageKey = "woods-phone-capability:" + location.host;
   const legacyKey = "woods-phone-capability";
@@ -139,7 +143,11 @@
       if (fromLocal) return fromLocal;
     } catch {}
     try {
-      return sessionStorage.getItem(storageKey) || sessionStorage.getItem(legacyKey) || "";
+      return (
+        sessionStorage.getItem(storageKey) ||
+        sessionStorage.getItem(legacyKey) ||
+        ""
+      );
     } catch {
       return "";
     }
@@ -179,6 +187,46 @@
       : amount >= 1024
         ? (amount / 1024).toFixed(1) + (lang === "ru" ? " КБ" : " KB")
         : amount + (lang === "ru" ? " Б" : " B");
+  function fileTile(name) {
+    const tile = document.createElement("span");
+    tile.className = "file-tile";
+    tile.setAttribute("aria-hidden", "true");
+    const extension = name.split(".").slice(1).at(-1)?.toLowerCase() || "";
+    tile.textContent = extension.toUpperCase().slice(0, 4);
+    const colors = {
+      pdf: "#e5484d",
+      doc: "#3e63dd",
+      docx: "#3e63dd",
+      xlsx: "#2f9e5b",
+      xls: "#2f9e5b",
+      pptx: "#f76b15",
+      png: "#6e56cf",
+      jpg: "#6e56cf",
+      jpeg: "#6e56cf",
+      webp: "#6e56cf",
+      zip: "#8b8d98",
+      mp3: "#c27a12",
+    };
+    tile.style.background = colors[extension] || "#596078";
+    return tile;
+  }
+  function waveTransfer(up) {
+    if (
+      document.hidden ||
+      matchMedia("(prefers-reduced-motion: reduce)").matches
+    )
+      return;
+    document
+      .querySelector(".phone-edge svg")
+      .animate(
+        [
+          { translate: "0 0" },
+          { translate: `0 ${up ? -10 : 8}px`, offset: 0.35 },
+          { translate: "0 0" },
+        ],
+        { duration: 1100, easing: "cubic-bezier(.3,.7,.2,1)" },
+      );
+  }
   const speedText = (bps) =>
     bps >= 1048576
       ? (bps / 1048576).toFixed(1) + (lang === "ru" ? " МБ/с" : " MB/s")
@@ -191,14 +239,17 @@
   };
   const setConnected = (state) => {
     linked = state;
+    element("phone-eyes").dataset.awake = String(state);
     for (const id of [
       "pick-photos",
       "pick-files",
+      "pick-options",
       "text",
       "send-text",
       "disconnect",
     ])
       element(id).disabled = !state;
+    if (!state) element("gallery-menu").hidden = true;
     document.querySelector(".connection").dataset.state = state
       ? "connected"
       : "pending";
@@ -207,11 +258,15 @@
     element("connection-title").textContent = t(title);
     element("connection-detail").textContent = t(detail);
     document.querySelector(".connection").dataset.state = state;
+    element("connection-detail").hidden = state === "connected";
   };
   const isRevoked = (codeValue) =>
-    ["invalid_link", "pairing_expired", "not_approved", "disconnected"].includes(
-      codeValue,
-    );
+    [
+      "invalid_link",
+      "pairing_expired",
+      "not_approved",
+      "disconnected",
+    ].includes(codeValue);
   const errorMessage = (error) => {
     const key = {
       invalid_link: "expired",
@@ -269,7 +324,7 @@
       const meta = document.createElement("span");
       name.textContent = item.name;
       meta.textContent = "✓ " + bytes(item.size);
-      row.append(name, meta);
+      row.append(fileTile(item.name), name, meta);
       host.append(row);
     }
   }
@@ -293,7 +348,7 @@
       info.append(name, detail);
       button.textContent = t("download");
       button.addEventListener("click", () => download(file, button));
-      row.append(info, button);
+      row.append(fileTile(file.name), info, button);
       list.append(row);
     }
   }
@@ -333,10 +388,13 @@
           break;
         } catch (error) {
           if (error.code !== "missing_file" || attempt >= 5) throw error;
-          await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)));
+          await new Promise((resolve) =>
+            setTimeout(resolve, 50 * (attempt + 1)),
+          );
         }
       }
       message(t("downloaded") + file.name);
+      waveTransfer(false);
       await poll();
     } catch (error) {
       message(errorMessage(error), true);
@@ -346,7 +404,13 @@
     }
   }
   async function poll() {
-    if ((!linked && !reconnecting) || polling || stopped || document.hidden || upload)
+    if (
+      (!linked && !reconnecting) ||
+      polling ||
+      stopped ||
+      document.hidden ||
+      upload
+    )
       return;
     if (!ticket) return;
     polling = true;
@@ -389,18 +453,25 @@
       xhr.setRequestHeader("Content-Type", "application/octet-stream");
       xhr.timeout = 300000;
       xhr.upload.onprogress = (event) => {
-        const total = event.lengthComputable && event.total > 0 ? event.total : file.size;
-        const progress = total > 0 ? Math.min(100, Math.round((event.loaded / total) * 100)) : 0;
+        const total =
+          event.lengthComputable && event.total > 0 ? event.total : file.size;
+        const progress =
+          total > 0
+            ? Math.min(100, Math.round((event.loaded / total) * 100))
+            : 0;
         element("progress").value = progress;
         if (progress >= 100) {
-          element("progress-label").textContent = prefix + file.name + " · " + t("saving");
+          element("progress-label").textContent =
+            prefix + file.name + " · " + t("saving");
         } else {
           const elapsed = Math.max(0.2, (Date.now() - started) / 1000);
           const spd = speedText(event.loaded / elapsed);
-          const detail = total > 0
-            ? `${bytes(event.loaded)} / ${bytes(total)} · ${progress}%${spd ? " · " + spd : ""}`
-            : `${progress}%`;
-          element("progress-label").textContent = `${prefix}${file.name} · ${detail}`;
+          const detail =
+            total > 0
+              ? `${bytes(event.loaded)} / ${bytes(total)} · ${progress}%${spd ? " · " + spd : ""}`
+              : `${progress}%`;
+          element("progress-label").textContent =
+            `${prefix}${file.name} · ${detail}`;
         }
       };
       xhr.onload = () => {
@@ -434,9 +505,12 @@
     const files = Array.from(input.files || []);
     input.value = "";
     if (!linked || !files.length || upload) return;
+    element("gallery-menu").hidden = true;
+    element("pick-options").setAttribute("aria-expanded", "false");
     element("upload-progress").hidden = false;
     element("pick-photos").disabled = true;
     element("pick-files").disabled = true;
+    element("pick-options").disabled = true;
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
@@ -450,6 +524,7 @@
         recentSent.unshift({ name: file.name, size: file.size });
         if (recentSent.length > 5) recentSent.pop();
         renderSent();
+        waveTransfer(true);
         message(
           result.clipboard === false
             ? t("clipboard")
@@ -467,12 +542,15 @@
       element("upload-progress").hidden = true;
       element("pick-photos").disabled = !linked;
       element("pick-files").disabled = !linked;
+      element("pick-options").disabled = !linked;
       void poll();
     }
   }
-  element("pick-photos").addEventListener("click", () =>
-    element("photos").click(),
-  );
+  element("pick-photos").addEventListener("click", () => {
+    element("gallery-menu").hidden = true;
+    element("pick-options").setAttribute("aria-expanded", "false");
+    element("photos").click();
+  });
   element("pick-files").addEventListener("click", () =>
     element("files").click(),
   );
@@ -499,6 +577,8 @@
       });
       message(t("textDone"));
       element("text").value = "";
+      element("text").style.height = "38px";
+      waveTransfer(true);
     } catch (error) {
       message(errorMessage(error), true);
     } finally {

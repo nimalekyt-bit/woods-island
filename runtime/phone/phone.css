@@ -1,43 +1,82 @@
 .wi-phone-panel {
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 7px;
   height: 100%;
-  width: 196px;
+  width: 184px;
   flex-shrink: 0;
-  padding: 12px;
-  border: 1px solid var(--color-line, #ffffff12);
-  border-radius: 18px;
+  padding: 10px 12px;
+  container: phone-panel / size;
+  border: 0;
+  box-shadow: inset 0 0 0 1px var(--color-line, #ffffff0f);
+  border-radius: 20px;
   background: var(--color-tile, #ffffff08);
   color: var(--color-ink, #ffffffd9);
 }
 .wi-phone-panel > header {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
+  flex-shrink: 0;
 }
-.wi-phone-panel > header > div {
+.wi-phone-heading {
   display: flex;
   flex-direction: column;
-  gap: 2px;
   min-width: 0;
   flex: 1;
+  gap: 1px;
 }
 .wi-phone-panel > header strong {
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
-  line-height: 1.25;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 .wi-phone-panel [data-phone-status] {
-  font-size: 10px;
-  line-height: 1.3;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  line-height: 1.25;
   color: var(--color-ink-3, #ffffff66);
+  overflow-wrap: anywhere;
 }
 .wi-phone-panel [data-phone-status][data-connected="true"] {
   color: var(--color-ok, #7ee2a8);
+}
+.wi-phone-panel [data-phone-status][data-tone="waiting"],
+.wi-phone-panel [data-phone-status][data-tone="pending"] {
+  color: var(--color-timer, #f0bf5b);
+}
+.wi-phone-panel [data-phone-status] > i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.wi-phone-panel [data-phone-status][data-tone="idle"] > i { display: none; }
+.wi-phone-eyes {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 32px;
+  height: 18px;
+  flex-shrink: 0;
+  background: #000;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px #ffffff20;
+}
+.wi-phone-eyes i {
+  width: 5px;
+  height: 8px;
+  border-radius: 99px;
+  background: #f1efe8;
+}
+.wi-phone-eyes[data-tone="idle"] i {
+  height: 2px;
+  width: 6px;
 }
 .wi-phone-badge {
   position: relative;
@@ -85,8 +124,14 @@
   gap: 7px;
   min-height: 0;
   flex: 1;
-  overflow-y: auto;
-  scrollbar-width: thin;
+  overflow: auto;
+  scrollbar-width: none;
+}
+.wi-phone-content > :is(.wi-phone-pair, .wi-phone-approval, .wi-phone-empty, .wi-phone-notice) {
+  flex-shrink: 0;
+}
+.wi-phone-panel > :is(.wi-phone-actions, .wi-phone-connect, .wi-phone-help) {
+  flex-shrink: 0;
 }
 .wi-phone-empty,
 .wi-phone-pair {
@@ -122,13 +167,12 @@
 .wi-phone-pair [data-phone-qr] {
   display: grid;
   place-items: center;
-  width: 106px;
-  height: 106px;
-  padding: 5px;
+  width: clamp(76px, calc(100cqh - 122px), 94px);
+  aspect-ratio: 1;
+  padding: 4px;
   border-radius: 12px;
   background: #ffffff;
   color: #70757e;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.28);
   flex-shrink: 0;
 }
 .wi-phone-pair [data-phone-qr] > img {
@@ -141,17 +185,22 @@
   align-items: center;
   gap: 5px;
   max-width: 100%;
-  padding: 3px 7px;
+  width: 100%;
+  justify-content: center;
+  padding: 0;
   border-radius: 6px;
-  border: 1px solid var(--color-line, #ffffff12);
-  background: var(--color-tile, #ffffff0a);
-  color: var(--color-ink-2, #ffffff99);
+  border: 0;
+  background: transparent;
+  color: var(--color-ink-3, #ffffff66);
   cursor: pointer;
 }
 .wi-phone-pair [data-phone-url] {
   display: block;
   min-width: 0;
-  font: 9.5px/1.35 ui-monospace, Consolas, monospace;
+  font:
+    9.5px/1.35 ui-monospace,
+    Consolas,
+    monospace;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -170,10 +219,10 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 30px;
+  min-height: 28px;
   padding: 5px 9px;
   border-radius: 9px;
-  border: 1px solid var(--color-line, #ffffff12);
+  border: 0;
   background: var(--color-tile, #ffffff0c);
   color: inherit;
   font-size: 11px;
@@ -184,7 +233,7 @@
   flex: 1;
 }
 .wi-phone-actions button:last-child {
-  width: 30px;
+  width: 32px;
   font-size: 16px;
   padding: 0;
 }
@@ -244,7 +293,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 5px;
   text-align: center;
   flex: 1;
 }
@@ -252,11 +301,42 @@
   font-size: 12px;
   line-height: 1.35;
 }
-.wi-phone-approval > div {
+.wi-phone-approval p {
+  overflow-wrap: anywhere;
+}
+.wi-phone-approval-heading,
+.wi-phone-approval-actions {
   display: flex;
   gap: 6px;
   width: 100%;
+}
+.wi-phone-approval-heading {
+  align-items: center;
+  justify-content: center;
+  text-align: left;
+}
+.wi-phone-approval-heading .wi-phone-approval-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+.wi-phone-approval-actions {
   margin-top: 2px;
+}
+.wi-phone-notice {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+.wi-phone-notice strong {
+  font-size: 12.5px;
+  line-height: 1.3;
+}
+.wi-phone-notice .wi-phone-help {
+  margin-top: auto;
 }
 .wi-phone-approval button {
   flex: 1;

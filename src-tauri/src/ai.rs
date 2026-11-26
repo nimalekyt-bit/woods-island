@@ -20,8 +20,8 @@ fn authenticate(request:reqwest::RequestBuilder)->reqwest::RequestBuilder{
 pub async fn models(settings:&Value)->Result<Vec<Value>,String>{
     let response=authenticate(crate::ai_http::client(settings,30)?.get(endpoint(settings,"models")?)).send().await.map_err(|e|crate::ai_http::network_error(settings,&e))?;
     if !response.status().is_success(){return Err(crate::ai_http::status_error(settings,response.status()));}
-    let data:Value=response.json().await.map_err(|e|e.to_string())?;
-    let list=data["data"].as_array().ok_or("Provider did not return an OpenAI-compatible model list")?;
+    let data:Value=response.json().await.map_err(|e|crate::ai_http::network_error(settings,&e))?;
+    let list=data["data"].as_array().ok_or_else(||crate::ai_http::text(settings,"Сервис не вернул список моделей. Проверь адрес API в настройках ИИ.","The service did not return a model list. Check the API address in AI settings."))?;
     Ok(list.iter().filter_map(|m|m["id"].as_str().map(|id|json!({"id":id,"name":id}))).collect())
 }
 pub fn cancel(id:u64)->bool{
@@ -67,7 +67,7 @@ async fn stream(app:&tauri::AppHandle,id:u64,settings:&Value,messages:Vec<Value>
     let request=authenticate(crate::ai_http::client(settings,120)?.post(endpoint(settings,"chat/completions")?)).json(&json!({"model":model,"messages":messages,"stream":true}));
     let mut response=tokio::select!{response=request.send()=>response.map_err(|e|crate::ai_http::network_error(settings,&e))?,_ = cancel.signal.notified()=>return Ok(())};
     if !response.status().is_success(){return Err(crate::ai_http::status_error(settings,response.status()));}
-    let mut pending=Vec::new();
+    let mut pending=Vec::new();let mut finished=false;
     loop{
         let chunk=tokio::select!{chunk=response.chunk()=>chunk.map_err(|e|crate::ai_http::network_error(settings,&e))?,_=cancel.signal.notified()=>return Ok(())};
         let Some(chunk)=chunk else{break;}; pending.extend_from_slice(&chunk);
@@ -77,18 +77,35 @@ async fn stream(app:&tauri::AppHandle,id:u64,settings:&Value,messages:Vec<Value>
             let line=std::str::from_utf8(&line).map_err(|_|"AI stream contained invalid UTF-8")?.trim();
             if let Some(data)=line.strip_prefix("data:"){
                 let data=data.trim();if data=="[DONE]"{return Ok(());}
-                if let Some(text)=parse_chunk(data)?{let _=app.emit("ai:chunk",json!({"id":id,"text":text}));}
+                let (text,terminal)=stream_chunk(data).map_err(|_|crate::ai_http::text(settings,"Сервис ИИ прервал ответ. Проверь соединение, модель и лимиты сервиса.","The AI service interrupted the response. Check the connection, model and service limits."))?;
+                finished|=terminal;
+                if let Some(text)=text{let _=app.emit("ai:chunk",json!({"id":id,"text":text}));}
             }
         }
         if cancel.cancelled.load(Ordering::SeqCst){return Ok(());}
     }
-    Ok(())
+    let tail=std::str::from_utf8(&pending).map_err(|_|crate::ai_http::text(settings,"Ответ ИИ повреждён. Попробуй ещё раз.","The AI response is malformed. Try again."))?.trim();
+    if let Some(data)=tail.strip_prefix("data:") {
+        if data.trim()=="[DONE]"{return Ok(());}
+        if let Ok((text,terminal))=stream_chunk(data.trim()) {
+            finished|=terminal;if let Some(text)=text{let _=app.emit("ai:chunk",json!({"id":id,"text":text}));}
+        }else{finished=false;}
+    }else if !tail.is_empty(){finished=false;}
+    if finished{Ok(())}else{Err(crate::ai_http::text(settings,"Ответ ИИ оборвался до завершения. Полученный текст сохранён; попробуй ещё раз.","The AI response ended before completion. The received text is preserved; try again."))}
 }
 
-fn parse_chunk(data:&str)->Result<Option<String>,String>{
+fn stream_chunk(data:&str)->Result<(Option<String>,bool),String> {
     let event:Value=serde_json::from_str(data).map_err(|_|"Invalid AI stream event")?;
-    if let Some(error)=event["error"]["message"].as_str(){return Err(error.to_owned());}
-    Ok(event["choices"][0]["delta"]["content"].as_str().map(str::to_owned))
+    if !event["error"].is_null(){return Err("Provider stopped the response".into());}
+    let choices=event["choices"].as_array();
+    if choices.is_some_and(|choices|choices.iter().any(|choice|matches!(choice["finish_reason"].as_str(),Some("length"|"content_filter")))){return Err("Provider stopped the response before completion".into());}
+    let finished=choices.is_some_and(|choices|choices.iter().any(|choice|matches!(choice["finish_reason"].as_str(),Some("stop"|"tool_calls"|"function_call"))));
+    Ok((event["choices"][0]["delta"]["content"].as_str().map(str::to_owned),finished))
+}
+
+#[cfg(test)]
+fn parse_chunk(data:&str)->Result<Option<String>,String>{
+    stream_chunk(data).map(|(text,_)|text)
 }
 fn safe_id(id:&str)->bool{!id.is_empty()&&id.len()<100&&id.chars().all(|c|c.is_ascii_alphanumeric()||c=='-'||c=='_')}
 
@@ -127,6 +144,11 @@ pub fn prune(keep:&[String])->Result<(),String>{
 
 #[cfg(test)] mod tests{
     use super::*;
+    #[test] fn streaming_requires_completion_and_rejects_limit_or_provider_error_without_echoing_secrets(){
+        assert_eq!(stream_chunk(r#"{"choices":[{"delta":{"content":"часть"},"finish_reason":null}]}"#).unwrap(),(Some("часть".into()),false));
+        assert_eq!(stream_chunk(r#"{"choices":[{"delta":{},"finish_reason":"stop"}]}"#).unwrap(),(None,true));
+        for event in [r#"{"choices":[{"finish_reason":"length"}]}"#,r#"{"error":{"message":"secret-api-key"}}"#] {assert!(stream_chunk(event).is_err());assert!(!stream_chunk(event).unwrap_err().contains("secret-api-key"));}
+    }
     #[test] fn stream_parser_preserves_unicode_and_errors(){assert_eq!(parse_chunk(r#"{"choices":[{"delta":{"content":"Привет 🌲"}}]}"#).unwrap(),Some("Привет 🌲".into()));assert!(parse_chunk(r#"{"error":{"message":"quota"}}"#).is_err());}
     #[test] fn endpoint_prevents_cleartext_remote_api_keys(){assert!(endpoint(&json!({"aiBaseUrl":"http://remote.example/v1"}),"models").is_err());assert_eq!(endpoint(&json!({"aiBaseUrl":"http://127.0.0.1:11434/v1/"}),"models").unwrap(),"http://127.0.0.1:11434/v1/models");assert_eq!(endpoint(&json!({"aiBaseUrl":"http://[::1]:11434/v1"}),"models").unwrap(),"http://[::1]:11434/v1/models");}
 }

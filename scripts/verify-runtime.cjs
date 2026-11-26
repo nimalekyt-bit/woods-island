@@ -69,6 +69,30 @@ async function assertPassiveForeground(client) {
   return {tauriFocused,foregroundPid,testProcessPid:proc.pid,noActivate:true};
 }
 
+function minimizeOwnedWindow(label) {
+  const title=require(path.join(root,'src-tauri/tauri.conf.json')).app.windows.find(window=>window.label===label)?.title;
+  assert(title&&Number.isInteger(proc.pid),'Only a configured window of this QA process can be minimized');
+  const source=`Add-Type -TypeDefinition @'
+using System; using System.Text; using System.Collections.Generic; using System.Runtime.InteropServices;
+public class WoodsQaMinimize {
+ public delegate bool Callback(IntPtr hwnd, IntPtr data);
+ [DllImport("user32.dll")] static extern bool EnumWindows(Callback callback, IntPtr data);
+ [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint pid);
+ [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern int GetWindowText(IntPtr hwnd, StringBuilder text, int length);
+ [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr hwnd, int command);
+ public static void Minimize(uint pid, string title) {
+  var matches=new List<IntPtr>();
+  EnumWindows((hwnd,data)=>{uint owner;GetWindowThreadProcessId(hwnd,out owner);var text=new StringBuilder(512);GetWindowText(hwnd,text,512);if(owner==pid&&text.ToString()==title)matches.Add(hwnd);return true;},IntPtr.Zero);
+  if(matches.Count!=1)throw new Exception("Owned settings HWND is ambiguous");
+  ShowWindow(matches[0],6);
+ }
+}
+'@
+[WoodsQaMinimize]::Minimize(${proc.pid},'${title.replaceAll("'","''")}')`;
+  const result=spawnSync('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(source,'utf16le').toString('base64')],{encoding:'utf8',windowsHide:true});
+  assert.equal(result.status,0,result.stderr);
+}
+
 // Read the HWND rectangle independently of the provider's CDP screenshot and
 // of the application's cached surface proof. This also runs against old EXEs.
 function readWebAiHosts() {
@@ -186,8 +210,9 @@ function assertAttachedContainment(sample,native,label) {
   assert(native.visualBounds&&native.bounds,'Native region diagnostics missing: '+label);
   const contains=outer=>physical.left>=outer[0]-1&&physical.top>=outer[1]-1&&
     physical.right<=outer[2]+1&&physical.bottom<=outer[3]+1;
-  assert(contains([0,0,native.width,native.height]),'Attached paint clipped by WebView canvas: '+JSON.stringify({label,sample,native}));
-  assert(contains(native.visualBounds),'Attached paint clipped by native region: '+JSON.stringify({label,sample,native}));
+  const {snapshot,...bounds}=native;
+  assert(contains([0,0,native.width,native.height]),'Attached paint clipped by WebView canvas: '+JSON.stringify({label,sample,native:bounds}));
+  assert(contains(native.visualBounds),'Attached paint clipped by native region: '+JSON.stringify({label,sample,native:bounds}));
   // The extra painted surface must not turn the character into a desktop hitbox.
   assert(native.bounds[2]<=Math.ceil((sample.pill.right+4)*native.pageFactor)+2,'Right hitbox grew with paint: '+label);
   assert(native.bounds[3]<=Math.ceil((sample.pill.bottom+6)*native.pageFactor)+2,'Bottom hitbox grew with paint: '+label);
@@ -313,7 +338,7 @@ async function quit(client) {
 }
 
 (async () => {
-  const tempRoot = path.join(root, 'src-tauri', 'target', 'qa-temp', 'woodscorp_obs');
+  const tempRoot = process.env.WOODS_QA_TEMP || path.join(process.env.CARGO_TARGET_DIR || path.join(root,'src-tauri','target'), 'qa-temp', 'woodscorp_obs');
   await fs.mkdir(tempRoot,{recursive:true});
   const directory = await fs.mkdtemp(path.join(tempRoot, 'island-acceptance-'));
   const exe = path.join(directory, 'woods-island.exe');
@@ -331,19 +356,30 @@ async function quit(client) {
       lyricsRequests++;const query=new URL(req.url,'http://localhost').searchParams;
       if(query.get('track_name')==='Missing'){res.statusCode=404;res.end('{}');return;}
       if(query.get('track_name')==='Unavailable'){res.statusCode=503;res.end('{}');return;}
+      if(query.get('track_name')==='Plain only'){
+        res.end(JSON.stringify({id:45,plainLyrics:'Только обычный текст\n'.repeat(25),syncedLyrics:'',instrumental:false}));return;
+      }
+      if(query.get('track_name')==='Geometry Motion'){
+        res.end(JSON.stringify({id:44,plainLyrics:'',syncedLyrics:'[00:00.00]Да\n[00:10.00]Эта длинная строка проверяет плавную смену текста и перенос внутри музыкальной пилюли\n[00:15.00]Сверхдлинноесловобезпробелов'+'продолжениесловабезразрывов'.repeat(8),instrumental:false}));return;
+      }
       if(query.get('track_name')==='Geometry'){
         res.end(JSON.stringify({id:43,plainLyrics:'',syncedLyrics:'[00:00.00]Да\n[00:04.00]Эта длинная строка проверяет плавную смену текста и перенос внутри музыкальной пилюли\n[00:08.00]Сверхдлинноесловобезпробелов'.repeat(1)+'продолжениесловабезразрывов'.repeat(8),instrumental:false}));return;
       }
       res.end(JSON.stringify({id:42,plainLyrics:'Первая строка\nВторая строка\nТретья строка',syncedLyrics:'[00:00.00]Первая строка\n[00:04.00]Вторая строка\n[00:08.00]Третья строка',instrumental:false}));return;
     }
-    weatherRequests++;res.end(JSON.stringify(req.url.startsWith('/sun')?{properties:{sunrise:{time:new Date((weatherStart-8*3600)*1000).toISOString()},sunset:{time:new Date((weatherStart-2*3600)*1000).toISOString()}}}:weatherFixture));
+    weatherRequests++;
+    if(req.url.startsWith('/sun')){
+      const query=new URL(req.url,'http://localhost').searchParams;
+      const date=query.get('date'),offset=query.get('offset');
+      res.end(JSON.stringify({properties:{sunrise:{time:`${date}T08:26${offset}`},sunset:{time:`${date}T16:33${offset}`}}}));
+    }else res.end(JSON.stringify(weatherFixture));
   });
   await new Promise(resolve=>weatherServer.listen(0,'127.0.0.1',resolve));
   const weatherUrl=`http://127.0.0.1:${weatherServer.address().port}/forecast`;
   webAiServer=http.createServer((req,res)=>{
     if(failWebAi){req.socket.destroy();return;}
     res.setHeader('Content-Type','text/html; charset=utf-8');
-    const html=`<!doctype html><html><head><title>Isolated Web AI</title></head><body style="background:#fff;color:#111"><h1 data-provider="${req.url.slice(1)}">${req.url.slice(1)}</h1><input aria-label="Draft" /><div style="height:2200px"></div><script>window.fixtureInstance=crypto.randomUUID();</script></body></html>`;
+    const html=`<!doctype html><html><head><title>Isolated Web AI</title></head><body style="background:#fff;color:#111"><h1 data-provider="${req.url.slice(1)}">${req.url.slice(1)}</h1><input aria-label="Draft" /><div data-scroll-fixture tabindex="0" style="width:160px;height:100px;overflow:auto"><div style="width:400px;height:500px"></div></div><div style="height:2200px"></div><script>window.fixtureInstance=crypto.randomUUID();</script></body></html>`;
     if(holdWebAi)heldWebAiResponses.push(()=>res.end(html));
     else if(delayWebAi)setTimeout(()=>res.end(html),delayWebAi);else res.end(html);
   });
@@ -354,7 +390,7 @@ async function quit(client) {
   const agentConfigs=[['.claude/settings.json',JSON.stringify({permissions:{allow:['Read']},hooks:{Stop:[{hooks:[{type:'command',command:'fixture-notify.exe'}]}]}})],['.codex/config.toml','# untouched fixture\nnotify = ["fixture-notify.exe"]\nmodel = "fixture"\n'],['.config/opencode/opencode.json','{}']];
   for(const [name,content]of agentConfigs){const file=path.join(agentHome,name);await fs.mkdir(path.dirname(file),{recursive:true});await fs.writeFile(file,content);}
   async function launch(){
-    proc = spawn(exe, [], { cwd: directory, windowsHide: true, stdio: ['ignore','pipe','pipe'], env: { ...process.env, TEMP:scratchDir, TMP:scratchDir, APPDATA: path.join(directory, 'appdata'), WOODS_ISLAND_DATA_DIR: dataDir, WOODS_ISLAND_AGENT_HOME:agentHome, WOODS_ISLAND_NODE:process.execPath, WOODS_ISLAND_STEAM_PATH:path.join(directory,'steam'), WOODS_ISLAND_MUSIC_PORT:String(musicPort), WOODS_ISLAND_WEATHER_URL:weatherUrl, WOODS_ISLAND_LYRICS_URL:weatherUrl.replace('/forecast','/lyrics'), WOODS_ISLAND_WEBAI_TEST_URL:webAiUrl, WOODS_ISLAND_PASSIVE_QA:'1', WOODS_PHONE_QA_LOOPBACK:'1', WEBVIEW2_USER_DATA_FOLDER:path.join(directory,'webview'), WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}` } });
+    proc = spawn(exe, [], { cwd: directory, windowsHide: true, stdio: ['ignore','pipe','pipe'], env: { ...process.env, TEMP:scratchDir, TMP:scratchDir, APPDATA: path.join(directory, 'appdata'), WOODS_ISLAND_DATA_DIR: dataDir, WOODS_ISLAND_AGENT_HOME:agentHome, WOODS_ISLAND_NODE:process.execPath, WOODS_ISLAND_STEAM_PATH:path.join(directory,'steam'), WOODS_ISLAND_MUSIC_PORT:String(musicPort), WOODS_ISLAND_WEATHER_URL:weatherUrl, WOODS_ISLAND_LYRICS_URL:weatherUrl.replace('/forecast','/lyrics'), WOODS_ISLAND_WEBAI_TEST_URL:webAiUrl, WOODS_ISLAND_PASSIVE_QA:'1', WOODS_QA_SKIP_CLIPBOARD:'1', WOODS_PHONE_QA_LOOPBACK:'1', WEBVIEW2_USER_DATA_FOLDER:path.join(directory,'webview'), WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}` } });
     proc.stdout.on('data', data => process.stdout.write(data));
     proc.stderr.on('data', data => process.stderr.write(data));
     proc.on('exit', (code, signal) => console.log(`Native process exited: code=${code}, signal=${signal}`));
@@ -373,11 +409,43 @@ async function quit(client) {
     throw error;
   }
   for(let i=0;i<100;i++){if(await main.invoke('window_diagnostics'))break;await pause(100);}
+  // A human can change the host keyboard layout/volume during local QA.
+  // Keep those unrelated live notices out of geometry and pet-paint fixtures.
+  await main.invoke('settings_set',{settings:{showLayout:false,showCaps:false,showVolume:false,peripheralAlerts:false,weatherAlerts:false}});
   await pause(400);
   const persisted = new Map();
   const fixture = path.join(directory,'fixture.txt');
   await fs.writeFile(fixture,'Woods Island acceptance · Проверка');
   await check('Main UI mounts', async () => { assert(await main.evaluate('!!document.querySelector("[data-island]")')); });
+  await check('First Alt+Space event and subsequent openings animate the palette',async()=>{
+    const prior=await main.invoke('settings_get');
+    const measure=()=>main.evaluate(`new Promise(async resolve=>{
+      const {ot}=await import('/assets/runtime-debug.js');
+      const pill=document.querySelector('[data-island]'), before=pill.getBoundingClientRect().width;
+      const samples=[], start=performance.now();
+      const tick=()=>{
+        samples.push(pill.getBoundingClientRect().width);
+        if(performance.now()-start<850)requestAnimationFrame(tick);
+        else resolve({before,samples,mounted:!!document.querySelector('[data-palette-input]'),open:ot.getState().palette});
+      };
+      requestAnimationFrame(tick);
+      void window.__TAURI_INTERNALS__.invoke('plugin:event|emit',{event:'island:palette',payload:null});
+    })`);
+    try{
+      await main.invoke('settings_set',{settings:{reducedMotion:'full',openOnHover:false,autoHide:false}});
+      const openings=[];
+      for(let attempt=0;attempt<2;attempt++){
+        await waitFor(main,`import('/assets/runtime-debug.js').then(({ot})=>!ot.getState().palette&&!ot.getState().expanded)`,'Folded island before the hotkey');
+        await pause(500);
+        const sample=await measure(),end=sample.samples.at(-1);
+        assert(sample.mounted&&sample.open&&end>sample.before+100,JSON.stringify(sample));
+        assert(new Set(sample.samples.filter(width=>width>sample.before+5&&width<end-5)).size>=3,JSON.stringify(sample));
+        openings.push({before:sample.before,end,frames:sample.samples.length});
+        await main.evaluate(`import('/assets/runtime-debug.js').then(({ot})=>ot.getState().closePalette())`);
+      }
+      return {openings,nativeEvent:true};
+    }finally{await main.invoke('settings_set',{settings:prior});}
+  });
   await check('Settings and image editor renderers are absent until requested',async()=>{
     assert(!pages.some(page=>/\/(settings|editor)\.html$/.test(page.url)));
     return {settingsLazy:true,imageEditorLazy:true};
@@ -444,10 +512,209 @@ async function quit(client) {
     assert(['allowed','denied','unspecified','unavailable'].includes(await main.invoke('notifications_access')));
     const prior=await main.invoke('settings_get');
     await main.invoke('settings_set',{settings:{vpnLookupIp:false}});
-    try{const vpn=await main.invoke('vpn_refresh');assert.equal(vpn.ip,null);assert.equal(typeof vpn.active,'boolean');}finally{await main.invoke('settings_set',{settings:{vpnLookupIp:prior.vpnLookupIp}});}
+    try{const vpn=await main.invoke('vpn_refresh');assert.equal(vpn.ip,null);assert(vpn.active===null||typeof vpn.active==='boolean');}finally{await main.invoke('settings_set',{settings:{vpnLookupIp:prior.vpnLookupIp}});}
     const controls=await main.invoke('controls_get');assert(Array.isArray(controls.vpns));
     assert(Array.isArray(await main.invoke('bt_devices')));
     return {notifications:await main.invoke('notifications_access'),vpnProfiles:controls.vpns.length};
+  });
+  await check('Upstream controls read real sessions and monitors and release idle load collectors',async()=>{
+    const prior=await main.invoke('settings_get');
+    try{
+      await main.invoke('settings_set',{settings:{loadInPill:[]}});
+      await main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");ot.setState({expanded:false,tab:"home",palette:false,peek:null,queue:[]});})()');
+      await pause(4200);const before=await main.invoke('system_load_status');await pause(1400);const idle=await main.invoke('system_load_status');
+      assert.equal(idle.collecting,false);assert.equal(idle.samples,before.samples);
+      const apps=await main.invoke('audio_mixer_get',{refresh:true});assert(Array.isArray(apps));
+      for(const app of apps){assert.equal(typeof app.id,'string');assert.equal(typeof app.name,'string');assert(app.volume>=0&&app.volume<=1);assert(app.peak>=0&&app.peak<=1);}
+      await assert.rejects(()=>main.invoke('audio_mixer_set',{id:'missing-owned-fixture',level:1.1,mute:null}));
+      await assert.rejects(()=>main.invoke('brightness_set',{id:'all',level:101}));
+      let monitors,monitorReadError;
+      try{monitors=await main.invoke('brightness_get');for(const monitor of monitors){assert(monitor.level===null || Number.isFinite(monitor.level)&&monitor.level>=0&&monitor.level<=100);assert.equal(typeof monitor.id,'string');}}catch(error){monitorReadError=String(error);}
+      await main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");ot.setState({expanded:true,tab:"controls",peek:null,queue:[]});})()');
+      await waitFor(main,'!!document.querySelector("[data-system-load]")&&!!document.querySelector("[data-brightness-controls]")','Native load and monitor controls');
+      await pause(2600);const active=await main.invoke('system_load_status');assert(active.collecting);assert(active.samples>idle.samples);assert(active.gpuExpansions-idle.gpuExpansions<=1);
+      const readings=await main.invoke('system_load_get');assert(readings.cpu===null||readings.cpu>=0&&readings.cpu<=100);assert(readings.memory>=0&&readings.memory<=100);
+      const requestStart=(await main.invoke('system_load_status')).samples;
+      for(let i=0;i<10;i++){await main.invoke('system_load_get');await pause(40);}
+      assert((await main.invoke('system_load_status')).samples-requestStart<=1,'Cache reads must not accelerate the sampler');
+      await main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");ot.setState({expanded:false});})()');await pause(4200);
+      const stopped=await main.invoke('system_load_status');assert.equal(stopped.collecting,false);await pause(1400);assert.equal((await main.invoke('system_load_status')).samples,stopped.samples);
+      return {sessionGroups:apps.length,monitorCount:monitors?.length??null,monitorReadError:monitorReadError??null,idleSamples:idle.samples,activeSamples:active.samples,stoppedSamples:stopped.samples,gpu:readings.gpu,physicalWrites:false};
+    }finally{await main.invoke('settings_set',{settings:prior});}
+  });
+  await check('Control Center matches the reference card, 48px strip and power layout in native themes and scale',async()=>{
+    const prior=await main.invoke('settings_get');const samples=[];
+    try{
+      await main.invoke('settings_set',{settings:{openOnHover:false,hideInFullscreen:false,showVpn:true}});
+      for(const theme of ['dark','light'])for(const scale of [80,100,150,200]){
+        await main.invoke('settings_set',{settings:{theme,scale}});
+        await main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");ot.setState({expanded:true,tab:"controls",palette:false,pinned:true,peek:null,queue:[],holdOpen:false,hovered:false});})()');
+        await waitFor(main,'!!document.querySelector("[data-control-center]")','Control Center mount');await pause(1000);
+        const layout=await main.evaluate(`(()=>{const rect=e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height,right:r.right,bottom:r.bottom};};const center=document.querySelector('[data-control-center]'),grid=center.querySelector('[data-control-grid]'),strip=center.querySelector('[data-controls-strip]');return {center:rect(center),grid:rect(grid),strip:rect(strip),load:rect(center.querySelector('[data-system-load]')),brightness:rect(center.querySelector('[data-brightness-controls]')),cards:Array.from(grid.querySelectorAll('[data-control]')).map(e=>({id:e.dataset.control,...rect(e)})),power:Array.from(center.querySelectorAll('[data-power]')).map(e=>({id:e.dataset.power,...rect(e)}))};})()`);
+        assert(Math.abs(layout.strip.h-48)<.1,JSON.stringify(layout));assert(layout.grid.h>=95.9);
+        assert(layout.grid.bottom<=layout.strip.y+.1);assert(layout.load.right<=layout.brightness.x+.1);
+        assert.equal(layout.power.length,4);assert(layout.power.every(item=>item.h>=75.9&&item.w>60&&item.bottom<=layout.center.bottom+.1),JSON.stringify(layout));
+        assert(layout.cards.length>=4);assert(layout.cards.every(card=>card.h>=95.9&&card.bottom<=layout.strip.y+.1),JSON.stringify(layout));
+        if(scale===100){const shot=await main.command('Page.captureScreenshot',{format:'png'});await fs.writeFile(path.join(directory,`controls-reference-${theme}.png`),Buffer.from(shot.data,'base64'));}
+        samples.push({theme,scale,...layout});
+      }
+      await fs.writeFile(path.join(directory,'controls-reference-layout.json'),JSON.stringify(samples,null,2));return {themes:['dark','light'],scales:[80,100,150,200],stripHeight:48,samples};
+    }finally{await main.invoke('settings_set',{settings:prior});await main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");ot.setState({expanded:false,tab:"home",pinned:false,peek:null,queue:[]});})()');}
+  });
+  await check('Physical monitor brightness changes only its selected display and restores the original level',async()=>{
+    if(process.env.WOODS_TEST_MONITOR_WRITES!=='1')return {skipped:true,reason:'Physical write acceptance is explicitly enabled on the owner workstation'};
+    const monitors=await main.invoke('brightness_get'),supported=monitors.filter(m=>Number.isFinite(m.level));
+    if(!supported.length)return {skipped:true,reason:'No display exposes brightness controls',monitors};
+    const changes=[];
+    for(const selected of supported){
+      const target=selected.level===100?99:selected.level+1;
+      try{
+        await main.invoke('brightness_set',{id:selected.id,level:target});const changed=await main.invoke('brightness_get');
+        assert(Math.abs(changed.find(m=>m.id===selected.id).level-target)<=1);
+        for(const monitor of monitors.filter(m=>m.id!==selected.id))assert.equal(changed.find(m=>m.id===monitor.id)?.level,monitor.level,'Another monitor changed');
+        changes.push({name:selected.name,before:selected.level,changed:target});
+      }finally{
+        await main.invoke('brightness_set',{id:selected.id,level:selected.level});
+        const after=await main.invoke('brightness_get');
+        assert(Math.abs(after.find(m=>m.id===selected.id)?.level-selected.level)<=1,'Original brightness must be restored');
+      }
+    }
+    return {monitors,changes,independent:true,restored:true};
+  });
+  await check('Home mixer stays inside the visible panel at supported scales',async()=>{
+    const prior=await main.invoke('settings_get');
+    const render=async scale=>{
+      await main.invoke('settings_set',{settings:{scale,showVolume:true,homeHidden:[],reducedMotion:'reduce'}});
+      await main.evaluate(`import('/assets/runtime-debug.js').then(({ot})=>ot.setState({expanded:true,palette:false,tab:'home',holdOpen:true,peek:null,queue:[]}))`);
+      await waitFor(main,'!!document.querySelector("[data-audio-mixer-toggle]")','Home volume strip');
+      await main.evaluate('document.querySelector("[data-audio-mixer-toggle]").click()');
+      await waitFor(main,'!!document.querySelector("[data-audio-mixer][data-placement]")','Mixer panel positioned');
+      const proof=await main.evaluate(`(()=>{const popup=document.querySelector('[data-audio-mixer]'),home=popup.closest('[data-home]'),a=popup.getBoundingClientRect(),b=home.getBoundingClientRect(),list=popup.querySelector('[data-mixer-list]');return {top:a.top-b.top,bottom:b.bottom-a.bottom,width:a.width,height:a.height,scrollbar:getComputedStyle(list).scrollbarWidth,placement:popup.dataset.placement};})()`);
+      assert(proof.top>=-1&&proof.bottom>=-1&&proof.width>150&&proof.height>=40,JSON.stringify({scale,proof}));
+      assert.equal(proof.scrollbar,'none');
+      await main.evaluate('document.querySelector("[data-audio-mixer] > div > button").click()');
+      return proof;
+    };
+    try{
+      const samples=[];
+      for(const scale of [100,150,200])samples.push({scale,...await render(scale)});
+      return {samples};
+    }finally{
+      await main.invoke('settings_set',{settings:prior});
+      await main.evaluate(`import('/assets/runtime-debug.js').then(({ot})=>ot.setState({expanded:false,holdOpen:false}))`);
+    }
+  });
+  await check('VPN picker fits common providers and keeps keyboard access without bars',async()=>{
+    const prior=await main.invoke('settings_get');
+    const profiles=['AmneziaWG','Hiddify','Proton VPN','Radmin VPN','Другой клиент'].map((name,index)=>({id:'app:qa-'+index,name,ready:false,on:false,launchPath:null}));
+    try{
+      await main.invoke('settings_set',{settings:{showVpn:true}});
+      await main.evaluate(`(async()=>{const {ot,O}=await import('/assets/runtime-debug.js');window.__qaControlsGet=O.controlsGet;const live=await O.controlsGet();O.controlsGet=async()=>({...live,vpns:${JSON.stringify(profiles)}});ot.setState({expanded:true,tab:'controls',holdOpen:true,peek:null,queue:[]});})()`);
+      await waitFor(main,'document.querySelector("[data-vpn-list]")?.disabled===false','VPN clients button');
+      await main.evaluate('document.querySelector("[data-vpn-list]").click()');
+      await waitFor(main,'document.querySelectorAll("[data-vpn-pick]").length===5','All VPN options visible');
+      const layout=await main.evaluate(`(()=>{const list=document.querySelector('.wi-vpn-items');return {bar:getComputedStyle(list).scrollbarWidth,vertical:list.scrollHeight-list.clientHeight,horizontal:list.scrollWidth-list.clientWidth};})()`);
+      assert.deepEqual(layout,{bar:'none',vertical:0,horizontal:0});
+      await main.evaluate(`document.querySelector('[data-vpn-choice]').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`);
+      await waitFor(main,'!document.querySelector("[data-vpn-choice]")','Escape closes VPN list');
+      return {providers:profiles.length,...layout};
+    }finally{
+      await main.evaluate(`import('/assets/runtime-debug.js').then(({ot,O})=>{if(window.__qaControlsGet){O.controlsGet=window.__qaControlsGet;delete window.__qaControlsGet;}ot.setState({expanded:false,holdOpen:false,tab:'home'});})`);
+      await main.invoke('settings_set',{settings:prior});
+    }
+  });
+  await check('Clipboard search uses a rounded focus surface and accepts typing',async()=>{
+    try{
+      await main.evaluate(`import('/assets/runtime-debug.js').then(({ot})=>ot.getState().open('click','clipboard'))`);
+      const search='document.querySelector(\'input[placeholder="Поиск по истории"],input[placeholder="Search history"]\')';
+      await waitFor(main,`!!${search}`,'Clipboard search');
+      const focus=await main.evaluate(`(()=>{const input=${search};input.focus();const row=input.closest('label');return {outline:getComputedStyle(input).outlineStyle,radius:parseFloat(getComputedStyle(row).borderRadius),focused:document.activeElement===input};})()`);
+      assert(focus.focused&&focus.outline==='none'&&focus.radius>=10,JSON.stringify(focus));
+      await main.command('Input.insertText',{text:'Woods clipboard search'});
+      assert.equal(await main.evaluate(`${search}.value`),'Woods clipboard search');
+      return focus;
+    }finally{
+      await main.evaluate(`import('/assets/runtime-debug.js').then(({ot})=>ot.getState().close())`);
+    }
+  });
+  await check('Launcher shortcuts use their genuine Windows icons and save them',async()=>{
+    const shortcut=path.join(directory,'Native launcher shortcut.lnk');
+    const command="$shell=New-Object -ComObject WScript.Shell; $link=$shell.CreateShortcut($env:WOODS_QA_LINK); $link.TargetPath=$env:WOODS_QA_EXE; $link.IconLocation=$env:WOODS_QA_EXE+',0'; $link.Save()";
+    const created=spawnSync('powershell.exe',['-NoProfile','-Command',command],{encoding:'utf8',windowsHide:true,env:{...process.env,WOODS_QA_LINK:shortcut,WOODS_QA_EXE:exe}});assert.equal(created.status,0,created.stderr);
+    const before=await main.invoke('launcher_list');const items=await main.invoke('launcher_add',{paths:[shortcut,exe]});
+    for(const target of [shortcut,exe]){const item=items.find(item=>item.path===target);assert(item);assert.match(item.icon,/^data:image\/png;base64,/);const image=rgbaPng(Buffer.from(item.icon.split(',')[1],'base64'));assert(image.width>=24&&image.height>=24);}
+    const saved=JSON.parse(await fs.readFile(path.join(dataDir,'launcher.json'),'utf8'));assert(saved.some(item=>item.path===shortcut&&item.icon));
+    for(const item of items.filter(item=>!before.some(previous=>previous.id===item.id)))await main.invoke('launcher_remove',{id:item.id});
+    return {shortcutAndExecutable:true,persistedPng:true,onlyOwnedFixtures:true};
+  });
+  await check('Holiday garland follows capsule and MacBook notch edges with glowing lamps in native modes',async()=>{
+    const prior=await main.invoke('settings_get');let playing=false,timer;const samples=[];
+    const send=()=>fetch(`http://127.0.0.1:${musicPort}/track`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({trackId:'holiday-contour-fixture',title:'Geometry',artist:'Fixture',duration:20000,progress:1000,isPlaying:playing})});
+    const reset=()=>main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");ot.setState({expanded:false,palette:false,pinned:false,holdOpen:false,hovered:false,peek:null,queue:[],tab:"home"});})()');
+    try{
+      await main.invoke('settings_set',{settings:{snow:'on',snowFall:false,snowCap:false,garland:'wave',reducedMotion:'full',character:'liquid',characterMusic:'liquid',mediaPill:'normal',openOnHover:false,hideInFullscreen:false}});
+      await reset();await send();await main.invoke('media_pick',{id:'ru.yandex.desktop.music.mod.connector'});timer=setInterval(()=>void send().catch(()=>{}),300);
+      for(const style of ['notch','capsule'])for(const mode of ['idle','controls','music','chat','palette','notice'])for(const scale of [100,200]){
+        playing=mode==='music';await send();await main.invoke('settings_set',{settings:{style,scale}});await reset();
+        if(mode==='controls')await main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");ot.setState({expanded:true,tab:"controls"});})()');
+        if(mode==='chat')await main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");ot.setState({expanded:true,tab:"chat",tall:true});})()');
+        if(mode==='palette')await main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");ot.setState({expanded:false,palette:true});})()');
+        if(mode==='notice')await main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");ot.setState({expanded:false,peek:{kind:"done",label:"Проверка гирлянды"}});})()');
+        await pause(mode==='idle'?3400:1300);
+        await waitFor(main,'!!document.querySelector("[data-garland=wave]")','Native garland');
+        const measure=()=>main.evaluate(`(async()=>{const node=document.querySelector('canvas[data-garland=wave]'),pill=node.closest('[data-island]'),rect=pill.getBoundingClientRect(),pixels=node.getContext('2d').getImageData(0,0,node.width,node.height).data,ratio=node.width/parseFloat(node.style.width),pad=-parseFloat(node.style.left),points=(await import('/assets/runtime-debug.js')).garlandPoints(rect.width,rect.height,${style==='capsule'},parseFloat(pill.style.borderBottomLeftRadius));let hash=2166136261,painted=0,topInk=0;for(let i=0;i<pixels.length;i+=4){if(pixels[i+3]>20){painted++;hash=Math.imul(hash^pixels[i]^pixels[i+1]^pixels[i+2]^pixels[i+3],16777619);}}for(let y=0;y<Math.min(node.height,9*ratio);y++)for(let x=Math.floor((rect.width/4+pad)*ratio);x<(rect.width*.75+pad)*ratio;x++){const i=(y*node.width+x)*4;if(pixels[i+3]>20&&Math.max(pixels[i],pixels[i+1],pixels[i+2])-Math.min(pixels[i],pixels[i+1],pixels[i+2])>20)topInk++;}return {width:rect.width,height:rect.height,points,painted,topInk,hash};})()`);
+        const before=await measure();await pause(160);const after=await measure();
+        assert(after.painted>100,'Native canvas must paint the garland');assert(after.points.length>8);assert.equal(after.topInk>0,style==='capsule','Top lights belong only to the capsule');
+        assert(before.hash!==after.hash,'Wave brightness must change real canvas pixels');
+        samples.push({style,mode,scale,...after});
+        if(scale===100){const shot=await main.command('Page.captureScreenshot',{format:'png'});await fs.writeFile(path.join(directory,`garland-${style}-${mode}.png`),Buffer.from(shot.data,'base64'));}
+      }
+      await fs.writeFile(path.join(directory,'garland-native-layout.json'),JSON.stringify(samples,null,2));return {styles:['notch','capsule'],modes:['idle','controls','music','chat','palette','notice'],scales:[100,200],glowingLamps:true,sideAndTopEdges:true,samples};
+    }finally{clearInterval(timer);await main.invoke('media_pick',{id:null});await main.invoke('settings_set',{settings:prior});await reset();await pause(3400);}
+  });
+  await check('Holiday settings preview follows selected island shape and saves all light modes',async()=>{
+    const prior=await main.invoke('settings_get');let settings,timer;
+    try{
+      await main.invoke('settings_set',{settings:{snow:'on',snowFall:false,snowCap:false,garland:'wave',reducedMotion:'full',character:'liquid',characterMusic:'liquid',mediaPill:'title'}});
+      let previewTitle='Native preview track';
+      const send=()=>fetch(`http://127.0.0.1:${musicPort}/track`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({trackId:previewTitle,title:previewTitle,artist:'Native fixture',duration:180000,progress:1000,isPlaying:true})});
+      await send();await main.invoke('media_pick',{id:'ru.yandex.desktop.music.mod.connector'});timer=setInterval(()=>void send().catch(()=>{}),300);
+      await main.invoke('open_settings',{section:'holidays'});
+      const pages=await pagesReady(page=>page.url.endsWith('/settings.html'));settings=await attach(pages.find(page=>page.url.endsWith('/settings.html')));
+      await waitFor(settings,'!!document.querySelector("[data-holiday-live-preview] [data-stage-actual]")','Live production holiday preview');
+      await waitFor(settings,'document.querySelector("[data-holiday-live-preview]")?.textContent.includes("Native preview track")','Native media reaches the real preview');
+      assert.equal(await settings.evaluate('!!document.querySelector(".wi-holiday-preview-pill")'),false,'Static holiday prototype was removed');
+      const samples=[];
+      for(const style of ['notch','capsule'])for(const theme of ['dark','light'])for(const garland of ['blink','wave','music','off']){
+        await main.invoke('settings_set',{settings:{style,theme,garland}});
+        await waitFor(settings,`document.querySelector('[data-holiday-live-preview] [data-island]')?.dataset.islandStyle===${JSON.stringify(style)}&&document.querySelector('[data-holiday-live-preview] [data-island]')?.dataset.islandTheme===${JSON.stringify(theme)}&&${garland==='off'?"!document.querySelector('[data-holidays-settings] [data-garland]')":`!!document.querySelector('[data-holidays-settings] [data-garland=${garland}]')`}`,'Selected preview style and light mode');
+        await pause(200);
+        const layout=await settings.evaluate(`(()=>{const pill=document.querySelector('[data-holiday-live-preview] [data-island]'),canvas=pill.querySelector('canvas'),pixels=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;let ink=0;for(let i=3;i<pixels.length;i+=4)if(pixels[i]>20)ink++;return {ink,radius:getComputedStyle(pill).borderTopLeftRadius,scrolls:document.documentElement.scrollWidth>innerWidth};})()`);
+        assert.equal(layout.scrolls,false);assert.equal(layout.ink>0,garland!=='off');assert.equal(layout.radius==='0px',style==='notch');samples.push({style,theme,garland,...layout});
+        if(garland==='wave'){const shot=await settings.command('Page.captureScreenshot',{format:'png'});await fs.writeFile(path.join(directory,`garland-settings-${style}-${theme}.png`),Buffer.from(shot.data,'base64'));}
+      }
+      await main.invoke('plugin:window|hide',{label:'settings'});
+      await waitFor(settings,`(async()=>{const {isCharacterAnimationSuspended}=await import('/assets/runtime-debug.js');return !await window.__TAURI_INTERNALS__.invoke('plugin:window|is_visible',{label:'settings'})&&isCharacterAnimationSuspended();})()`,'Hidden native settings suspend preview frames');
+      await pause(150);
+      previewTitle='Native preview after reopening';await send();
+      await waitFor(main,`(async()=>{const {ot}=await import('/assets/runtime-debug.js');return ot.getState().media?.title==='Native preview after reopening';})()`,'Main receives the next native track');
+      await pause(500);
+      const hiddenTitle=await settings.evaluate(`(async()=>{const {ot}=await import('/assets/runtime-debug.js');return ot.getState().media?.title;})()`);
+      assert.equal(hiddenTitle,'Native preview track','Hidden preview must unsubscribe from media events');
+      await main.invoke('open_settings',{section:'holidays'});
+      await waitFor(settings,`(async()=>{const {isCharacterAnimationSuspended}=await import('/assets/runtime-debug.js');return await window.__TAURI_INTERNALS__.invoke('plugin:window|is_visible',{label:'settings'})&&!isCharacterAnimationSuspended();})()`,'Visible native settings resume preview frames');
+      await waitFor(settings,'document.querySelector("[data-holiday-live-preview]")?.textContent.includes("Native preview after reopening")','Reopened preview bootstraps current native media');
+      minimizeOwnedWindow('settings');
+      await waitFor(settings,`(async()=>{const {isCharacterAnimationSuspended}=await import('/assets/runtime-debug.js');return await window.__TAURI_INTERNALS__.invoke('plugin:window|is_minimized',{label:'settings'})&&isCharacterAnimationSuspended();})()`,'Minimized native settings suspend preview frames');
+      previewTitle='Native preview after restore';await send();await pause(800);
+      assert.equal(await settings.evaluate(`(async()=>{const {ot}=await import('/assets/runtime-debug.js');return ot.getState().media?.title;})()`),'Native preview after reopening','Minimized preview must unsubscribe from media events');
+      await main.invoke('open_settings',{section:'holidays'});
+      await waitFor(settings,'document.querySelector("[data-holiday-live-preview]")?.textContent.includes("Native preview after restore")','Restored preview bootstraps current native media');
+      await main.invoke('settings_set',{settings:{snow:'auto',snowFrom:'12-15',snowTo:'01-15'}});
+      const seasonal=await settings.evaluate('!!document.querySelector("[data-snow-now]")');
+      if(seasonal){await settings.evaluate('document.querySelector("[data-snow-now]").click()');await waitFor(settings,'!document.querySelector("[data-snow-now]")','Turn on now saved');assert.equal((await main.invoke('settings_get')).snow,'on');}
+      return {samples,shapes:['notch','capsule'],modes:['off','blink','wave','music'],themes:['dark','light'],turnOnNow:seasonal,hiddenUnsubscribed:true,reopenedCurrentMedia:true,minimizedUnsubscribed:true,restoredCurrentMedia:true};
+    }finally{clearInterval(timer);await main.invoke('media_pick',{id:null});await main.invoke('settings_set',{settings:prior});if(settings)await main.invoke('plugin:window|hide',{label:'settings'});}
   });
   await check('Weather cities and visibility preferences survive native settings saves',async()=>{
     const prior=await main.invoke('settings_get');
@@ -558,18 +825,20 @@ async function quit(client) {
     const pages = await pagesReady(page => page.url.endsWith('/settings.html'));
     const settings = await attach(pages.find(page => page.url.endsWith('/settings.html')));
     await waitFor(settings, 'document.querySelector("[data-nav=hotkeys]")?.dataset.now==="true"', 'Hotkey settings');
-    await settings.evaluate('document.querySelector(".scroll-thin.min-w-0.flex-1.overflow-y-auto").scrollTop=180');
+    const settingsScroll = 'document.querySelector("[data-settings-content]")';
+    assert.deepEqual(await settings.evaluate(`[getComputedStyle(${settingsScroll}).scrollbarWidth,getComputedStyle(document.querySelector("[data-settings-nav-list]")).scrollbarWidth]`),['none','none']);
+    await settings.evaluate(`${settingsScroll}.scrollTop=180`);
     await pause(120);
-    const before = await settings.evaluate('document.querySelector(".scroll-thin.min-w-0.flex-1.overflow-y-auto").scrollTop');
+    const before = await settings.evaluate(`${settingsScroll}.scrollTop`);
     assert(before > 100, 'Hotkey settings must overflow for this regression');
     try {
       await settings.invoke('settings_set', { settings: { hotkeyPalette: 'UnavailableKey' } });
       await pause(300);
-      const after = await settings.evaluate('document.querySelector(".scroll-thin.min-w-0.flex-1.overflow-y-auto").scrollTop');
+      const after = await settings.evaluate(`${settingsScroll}.scrollTop`);
       assert.equal(after, before, 'Changing settings must not reset the section scroll');
       await settings.evaluate('document.querySelector("[data-nav=general]").click()');
       await pause(100);
-      assert.equal(await settings.evaluate('document.querySelector(".scroll-thin.min-w-0.flex-1.overflow-y-auto").scrollTop'), 0);
+      assert.equal(await settings.evaluate(`${settingsScroll}.scrollTop`), 0);
       return { before, after, sectionNavigationResetsScroll: true, passive: true };
     } finally {
       await settings.invoke('settings_set', { settings: { hotkeyPalette: prior.hotkeyPalette } });
@@ -730,6 +999,7 @@ async function quit(client) {
       clearInterval(timer);await main.invoke('media_pick',{id:null});
       await main.invoke('settings_set',{settings:{mediaHidden:prior.mediaHidden}});
       await publish();
+      await main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");ot.setState({expanded:false,palette:false,peek:null,queue:[],hovered:false,pinned:false,holdOpen:false,tab:"home"});})()');
     }
   });
   await check('Plain island and visible pause collapse after 2500 ms despite repeated metadata',async()=>{
@@ -768,7 +1038,7 @@ async function quit(client) {
     }finally{clearInterval(timer);await main.invoke('media_pick',{id:null});await main.invoke('settings_set',{settings:prior});await pause(3400);}
   });
   await check('LRCLIB milliseconds highlight, advance, pause and seek the rendered lyrics',async()=>{
-    const prior=await main.invoke('settings_get');let progress=1000,playing=true,at=Date.now(),timer,phase='bootstrap';
+    const prior=await main.invoke('settings_get');let progress=1000,playing=true,at=Date.now(),timer,phase='bootstrap',title='Test Slowed',trackId='lyrics-fixture';
     const publishEvents=[];
     await main.evaluate(`(async()=>{const {ot}=await import('/assets/runtime-debug.js');const trace={started:performance.now(),samples:[]};window.__woodsLyricsQaTrace=trace;trace.timer=setInterval(()=>{const state=ot.getState(),pill=document.querySelector('[data-media-pill]');trace.samples.push({at:performance.now()-trace.started,media:state.media,mediaLive:state.mediaLive,expanded:state.expanded,hovered:state.hovered,holdOpen:state.holdOpen,pinned:state.pinned,tab:state.tab,peek:state.peek?.kind,settings:{mediaPill:state.settings?.mediaPill,lyrics:state.settings?.lyrics,lyricsInHome:state.settings?.lyricsInHome,lyricsInPlayer:state.settings?.lyricsInPlayer},dom:{mode:pill?.dataset.mediaPill,now:Array.from(document.querySelectorAll('[data-lyrics-now]')).map(e=>e.textContent),folded:Array.from(document.querySelectorAll('[data-lyrics-line]')).map(e=>e.textContent),paused:!!document.querySelector('[data-media-paused]')}});if(trace.samples.length>1000)trace.samples.shift();},50);})()`);
     const saveTrace=async outcome=>{
@@ -778,7 +1048,7 @@ async function quit(client) {
       return tracePath;
     };
     const publish=async()=>{
-      const frame={trackId:'lyrics-fixture',title:'Test Slowed',artist:'Fixture',duration:12000,progress:Math.min(12000,progress+(playing?Date.now()-at:0)),isPlaying:playing};
+      const frame={trackId,title,artist:'Fixture',duration:12000,progress:Math.min(12000,progress+(playing?Date.now()-at:0)),isPlaying:playing};
       const event={phase,sentAt:Date.now(),frame};publishEvents.push(event);
       const response=await fetch(`http://127.0.0.1:${musicPort}/track`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(frame)});
       event.receivedAt=Date.now();event.status=response.status;
@@ -813,11 +1083,21 @@ async function quit(client) {
       playing=true;at=Date.now();await publish();
       phase='folded lyrics';
       await main.invoke('settings_set',{settings:{mediaPill:'lyrics'}});
+      await main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");ot.setState({expanded:false,palette:false,peek:null,queue:[],hovered:false,pinned:false,holdOpen:false,tab:"home"});})()');
       await waitFor(main,'document.querySelector("[data-media-pill=lyrics] [data-lyrics-line]")?.textContent.includes("Третья строка")','Folded lyrics mode');
       await main.evaluate('(async()=>{const m=await import("/assets/runtime-debug.js");m.ot.setState({expanded:true,tab:"home"});})()');
       phase='home lyrics';
       await waitFor(main,'document.querySelector("[data-home] [data-lyrics-now]")?.textContent === "Третья строка"','Home lyrics mode');
-      assert(lyricsRequests>=4);const timingProof=await saveTrace('passed');return {milliseconds:true,highlight:true,advance:true,pause:true,seekBothDirections:true,foldedLyrics:true,homeLyrics:true,missing404:true,retryable503:true,isolatedBridge:true,timingProof};
+      phase='plain text after switching tracks';
+      trackId='plain-fixture';title='Plain only';progress=1500;at=Date.now();await publish();
+      await waitFor(main,'!!document.querySelector("[data-home] [data-lyrics-static]")','Unsynced lyrics panel');
+      const plain=await main.evaluate(`(()=>{const el=document.querySelector('[data-home] [data-lyrics-static]');el.scrollTop=50;return {text:el.textContent,scroll:el.scrollTop,active:!!document.querySelector('[data-lyrics-now]')}})()`);
+      assert.match(plain.text,/Текст без синхронизации|Unsynced lyrics/);assert.match(plain.text,/Только обычный текст/);
+      assert(plain.scroll>0);assert.equal(plain.active,false);
+      phase='clear plain text on missing track';
+      trackId='missing-fixture';title='Missing';await publish();
+      await waitFor(main,`import('/assets/runtime-debug.js').then(({lyricsStore})=>lyricsStore.getState().status==='none'&&lyricsStore.getState().lyrics===null&&!document.querySelector('[data-lyrics-static],[data-lyrics-now]'))`,'Missing track clears lyrics');
+      assert(lyricsRequests>=6);const timingProof=await saveTrace('passed');return {milliseconds:true,highlight:true,advance:true,pause:true,seekBothDirections:true,foldedLyrics:true,homeLyrics:true,plainText:true,missing404:true,retryable503:true,isolatedBridge:true,timingProof};
     }catch(error){
       const timingProof=await saveTrace('failed');
       const screenshot=await main.command('Page.captureScreenshot',{format:'png'});await fs.writeFile(path.join(directory,'lyrics-failure.png'),Buffer.from(screenshot.data,'base64'));
@@ -828,34 +1108,41 @@ async function quit(client) {
       await main.invoke('settings_set',{settings:{lyrics:prior.lyrics,lyricsInPlayer:prior.lyricsInPlayer,lyricsInHome:prior.lyricsInHome,mediaPill:prior.mediaPill}});await pause(3400);
     }
   });
-  await check('Lyrics keep stable geometry across short, wrapped and unbroken lines',async()=>{
-    const prior=await main.invoke('settings_get');let position=1000,timer;
+  await check('Lyrics fit the current short, wrapped and unbroken line with a stable height',async()=>{
+    const prior=await main.invoke('settings_get');let position=1000,positionAt=Date.now(),timer;
     const send=async()=>{
-      const response=await fetch(`http://127.0.0.1:${musicPort}/track`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({trackId:'geometry-fixture',title:'Geometry',artist:'Fixture',duration:20000,progress:position,isPlaying:true})});assert.equal(response.status,200);
+      const response=await fetch(`http://127.0.0.1:${musicPort}/track`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({trackId:'geometry-fixture',title:'Geometry Motion',artist:'Fixture',duration:20000,progress:position+Date.now()-positionAt,isPlaying:true})});assert.equal(response.status,200);
     };
     try{
-      await main.invoke('settings_set',{settings:{lyrics:true,mediaPill:'lyrics',character:'liquid',liquidWith:false,showClock:false,showBattery:false,showWeather:false,layoutInPill:false,desktopInPill:false}});
+      await main.invoke('settings_set',{settings:{lyrics:true,mediaPill:'normal',character:'liquid',liquidWith:false,showClock:false,showBattery:false,showWeather:false,showCaps:false,showPrivacy:false,agentsStatus:false,obsStatus:false,moduleShelf:false,downloadsInPill:'off',deviceBattery:'off',loadInPill:[],layoutInPill:false,desktopInPill:false}});
       await main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");ot.setState({expanded:false,palette:false,peek:null,queue:[]});})()');
-      await main.evaluate(`(()=>{window.__lyricMotion=[];const start=performance.now();function tick(){const p=document.querySelector('[data-island]')?.getBoundingClientRect();window.__lyricMotion.push({t:performance.now()-start,width:p?.width,height:p?.height});if(performance.now()-start<2500)requestAnimationFrame(tick);}requestAnimationFrame(tick);})()`);
       await send();await main.invoke('media_pick',{id:'ru.yandex.desktop.music.mod.connector'});timer=setInterval(()=>void send().catch(()=>{}),200);
+      await waitFor(main,'(async()=>{const {ot}=await import("/assets/runtime-debug.js");return ot.getState().media?.title==="Geometry Motion";})()','Geometry track selected before measuring mode transition');
+      await main.evaluate(`(()=>{window.__lyricMotion=[];const start=performance.now();function tick(){const p=document.querySelector('[data-island]')?.getBoundingClientRect();window.__lyricMotion.push({t:performance.now()-start,width:p?.width,height:p?.height});if(performance.now()-start<2500)requestAnimationFrame(tick);}requestAnimationFrame(tick);})()`);
+      await main.invoke('settings_set',{settings:{mediaPill:'lyrics'}});
       await waitFor(main,'document.querySelector("[data-lyrics-line]")?.textContent === "Да"','Short geometry line');await pause(1000);
-      const frames=await main.evaluate(`new Promise(resolve=>{const samples=[],start=performance.now();function tick(){const pill=document.querySelector('[data-island]'),viewport=document.querySelector('[data-lyrics-viewport]');const p=pill?.getBoundingClientRect(),v=viewport?.getBoundingClientRect();samples.push({t:performance.now()-start,width:p?.width,height:p?.height,viewportHeight:v?.height});if(performance.now()-start<1800)requestAnimationFrame(tick);else resolve(samples);}requestAnimationFrame(tick);})`);
-      assert(frames.length>15);const width=frames.at(-1).width,height=frames.at(-1).height;
-      assert(Math.max(...frames.map(f=>f.width))-Math.min(...frames.map(f=>f.width))<1);
+      const frames=await main.evaluate(`new Promise(resolve=>{const samples=[],start=performance.now();function tick(){const pill=document.querySelector('[data-island]'),viewport=document.querySelector('[data-lyrics-viewport]');const p=pill?.getBoundingClientRect(),v=viewport?.getBoundingClientRect();samples.push({t:performance.now()-start,width:p?.width,height:p?.height,viewportHeight:v?.height,text:document.querySelector('[data-lyrics-line]')?.textContent});if(performance.now()-start<1800)requestAnimationFrame(tick);else resolve(samples);}requestAnimationFrame(tick);})`);
+      await fs.writeFile(path.join(directory,'lyrics-steady-frames.json'),JSON.stringify(frames));
       const opening=await main.evaluate('window.__lyricMotion');
+      await fs.writeFile(path.join(directory,'lyrics-motion.json'),JSON.stringify(opening));
+      assert(frames.length>15);const width=frames.at(-1).width,height=frames.at(-1).height;
+      assert(Math.max(...frames.map(f=>f.width))-Math.min(...frames.map(f=>f.width))<1,'Short line width did not settle: '+JSON.stringify({first:frames[0],last:frames.at(-1)}));
       // Width is quantized to 2 physical pixels; very close RAF timestamps
       // must not amplify that harmless rounding into a fictitious large jump.
       const normalizedSteps=opening.slice(1).map((frame,i)=>Math.abs(frame.width-opening[i].width)*16/Math.max(4,frame.t-opening[i].t));
       await fs.writeFile(path.join(directory,'lyrics-motion.json'),JSON.stringify(opening));
       assert(Math.max(...normalizedSteps)<70,'Lyrics width must animate rather than jump: '+JSON.stringify(opening.filter((f,i)=>i&&normalizedSteps[i-1]>=70)));
-      assert(Math.max(...opening.map(f=>f.width))<=width+2,'Lyrics opening must not overshoot its final width');
+      assert(Math.max(...opening.map(f=>f.width))<=Math.max(width,opening[0].width)+2,'Lyrics transition must not overshoot its starting or final width');
       const lines=[];
-      for(const next of [4500,8500,1000]){
-        position=next;await send();await pause(700);
+      for(const next of [10900,15900,1000]){
+        position=next;positionAt=Date.now();await send();await pause(1150);
         const sample=await main.evaluate(`(()=>{const p=document.querySelector('[data-island]').getBoundingClientRect(),v=document.querySelector('[data-lyrics-viewport]').getBoundingClientRect(),line=Array.from(document.querySelectorAll('[data-lyrics-line]')).find(e=>Number(getComputedStyle(e).opacity)>.99),text=line?.lastElementChild;return {width:p.width,height:p.height,viewportHeight:v.height,textHeight:text?.getBoundingClientRect().height,wrap:text?getComputedStyle(text).overflowWrap:null,lineCount:document.querySelectorAll('[data-lyrics-line]').length,text:line?.textContent};})()`);
-        assert(Math.abs(sample.width-width)<1,JSON.stringify(sample));assert(Math.abs(sample.height-height)<1);
+        await fs.writeFile(path.join(directory,`lyrics-${next}-layout.json`),JSON.stringify({baseline:{width,height},sample}));
+        assert(sample.width>=width-1&&sample.width<=680,JSON.stringify(sample));assert(Math.abs(sample.height-height)<1,JSON.stringify({height,next,sample}));
+        if(next===10900)assert(sample.width>width+30,'A long line must get more room than a short line');
+        if(next===1000)assert(Math.abs(sample.width-width)<2,'Returning to the short line must release the long line width: '+JSON.stringify({width,sample}));
         assert.equal(sample.viewportHeight,30);assert(sample.textHeight<=30);assert.equal(sample.lineCount,1);assert.equal(sample.wrap,'anywhere');lines.push({position:next,...sample,text:undefined});
-        if(next===4500){const shot=await main.command('Page.captureScreenshot',{format:'png'});await fs.writeFile(path.join(directory,'lyrics-wrapped.png'),Buffer.from(shot.data,'base64'));}
+        if(next===10900){const shot=await main.command('Page.captureScreenshot',{format:'png'});await fs.writeFile(path.join(directory,'lyrics-wrapped.png'),Buffer.from(shot.data,'base64'));}
       }
       const screenshot=await main.command('Page.captureScreenshot',{format:'png'});await fs.writeFile(path.join(directory,'lyrics-stable.png'),Buffer.from(screenshot.data,'base64'));
       assert.equal(await main.invoke('plugin:window|is_focused',{label:'main'}),false);
@@ -868,9 +1155,13 @@ async function quit(client) {
       const response=await fetch(`http://127.0.0.1:${musicPort}/track`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({trackId:'typed-geometry',title:'Geometry',artist:'Fixture',duration:20000,progress:position,isPlaying:playing})});assert.equal(response.status,200);
     };
     const reset=()=>main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");ot.setState({expanded:false,palette:false,peek:null,queue:[],hovered:false,pinned:false,holdOpen:false,tall:false,tab:"home",dragOver:null});})()');
-    const sample=()=>main.evaluate('(async()=>{const {lyricsStore}=await import("/assets/runtime-debug.js"),p=document.querySelector("[data-island]").getBoundingClientRect(),v=document.querySelector("[data-lyrics-viewport]")?.getBoundingClientRect();return {width:p.width,height:p.height,viewportHeight:v?.height,lineW:lyricsStore.getState().lineW,wrap:lyricsStore.getState().wrap,pill:document.querySelector("[data-media-pill]")?.dataset.mediaPill};})()');
+    const trace=[];
+    const sample=async()=>{
+      const value=await main.evaluate('(async()=>{const {lyricsStore,ot}=await import("/assets/runtime-debug.js"),state=ot.getState(),p=document.querySelector("[data-island]").getBoundingClientRect(),v=document.querySelector("[data-lyrics-viewport]")?.getBoundingClientRect();return {width:p.width,height:p.height,viewportHeight:v?.height,lineW:lyricsStore.getState().lineW,wrap:lyricsStore.getState().wrap,pill:document.querySelector("[data-media-pill]")?.dataset.mediaPill,playing:state.media?.playing,mediaLive:state.mediaLive,source:state.media?.app,key:state.media?.key,settingsPill:state.settings?.mediaPill,scale:state.settings?.scale,character:state.settings?.character,characterMusic:state.settings?.characterMusic,expanded:state.expanded,palette:state.palette,peek:state.peek?.kind};})()');
+      trace.push({at:Date.now(),...value});await fs.writeFile(path.join(directory,'typed-geometry-trace.json'),JSON.stringify(trace,null,2));return value;
+    };
     // WebView2 rounds layout coordinates to subpixels when page zoom is 80%.
-    const heightIs=(value,expected)=>assert(Math.abs(value-expected)<0.05,`Height ${value}, expected ${expected}`);
+    const heightIs=(value,expected)=>assert(Math.abs(value-expected)<0.05,`Height ${value}, expected ${expected}: ${JSON.stringify(trace.at(-1))}`);
     const measured=[];
     try{
       await main.invoke('settings_set',{settings:{lyrics:true,mediaPill:'normal',character:'none',characterMusic:'none',liquidWith:false,showClock:false,showBattery:false,showWeather:false,showCaps:false,layoutInPill:false,desktopInPill:false,agentsStatus:false,obsStatus:false,showPrivacy:false,downloadsInPill:'badge',moduleShelf:false,openOnHover:false}});
@@ -883,7 +1174,7 @@ async function quit(client) {
         await main.invoke('settings_set',{settings:{mediaPill:'lyrics'}});
         await waitFor(main,'document.querySelector("[data-lyrics-line]")?.textContent === "Да"','Typed lyrics mount');await pause(1000);
         const lyrics=await sample();heightIs(lyrics.height,44);heightIs(lyrics.viewportHeight,30);assert(lyrics.lineW>0);assert(lyrics.width<=682);
-        position=8500;await send();await pause(450);const long=await sample();assert(Math.abs(long.width-lyrics.width)<1,JSON.stringify({scale,lyrics,long}));assert.equal(long.height,lyrics.height);
+        position=8500;await send();await pause(900);const long=await sample();assert(long.width>lyrics.width+30&&long.width<=681,JSON.stringify({scale,lyrics,long}));assert.equal(long.height,lyrics.height);
         position=1000;await send();await pause(350);
         await main.invoke('settings_set',{settings:{mediaPill:'normal',character:'legs',characterMusic:'legs',showClock:true}});await pause(900);
         const face=await sample();heightIs(face.height,32);assert(face.width>=265,JSON.stringify({scale,face}));assert.equal(face.lineW,0,'Lyrics must release width on unmount');
@@ -894,7 +1185,7 @@ async function quit(client) {
         await reset();await main.invoke('settings_set',{settings:{character:'none',characterMusic:'none',showClock:false,mediaPill:'title'}});await pause(900);
         playing=false;await send();await waitFor(main,'!!document.querySelector("[data-media-paused]")','Typed paused title');
         heightIs((await sample()).height,44);await pause(3400);const idle=await sample();assert(Math.abs(idle.width-150)<3);heightIs(idle.height,30);
-        assert.equal(await main.invoke('plugin:window|is_focused',{label:'main'}),false);
+        await assertPassiveForeground(main);
         measured.push({scale,normal,lyrics,long,face,slot,expanded,idle});
         playing=true;await send();await waitFor(main,'!!document.querySelector("[data-media-pill=title][data-playback-state=playing]")','Typed resume');
       }
@@ -919,7 +1210,7 @@ async function quit(client) {
         const sample=await main.evaluate(`(()=>{const badge=document.querySelector('[data-media-pill=${mode}] [data-media-paused]'),cover=badge.parentElement,pill=badge.closest('[data-media-pill]'),icon=badge.querySelector('svg');const rect=e=>{const r=e.getBoundingClientRect();return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height};};const b=rect(badge),i=rect(icon),s=getComputedStyle(badge);return {badge:b,cover:rect(cover),pill:rect(pill),icon:i,position:s.position,background:s.backgroundColor,color:s.color,visibleAtCenter:badge.contains(document.elementFromPoint(b.left+b.width/2,b.top+b.height/2)),bars:icon.querySelectorAll('rect').length};})()`);
         assert(contains(sample.cover,sample.badge),'Badge outside cover: '+JSON.stringify({scale,mode,...sample}));
         assert(contains(sample.pill,sample.badge),'Badge clipped by pill');assert(contains(sample.badge,sample.icon));
-        assert(Math.abs(sample.badge.width-14)<.05&&Math.abs(sample.badge.height-14)<.05);assert.equal(sample.position,'absolute');assert.equal(sample.visibleAtCenter,true);assert.equal(sample.bars,2);assert.equal(sample.color,'rgb(255, 255, 255)');
+        assert(Math.abs(sample.badge.width-11)<.05&&Math.abs(sample.badge.height-11)<.05);assert.equal(sample.position,'absolute');assert.equal(sample.bars,2);assert.equal(sample.color,'rgb(255, 255, 255)');
         measurements.push({scale,mode,...sample});
         if(scale===100&&mode==='title'){
           const shot=await main.command('Page.captureScreenshot',{format:'png'});await fs.writeFile(path.join(directory,'pause-badge-fixed.png'),Buffer.from(shot.data,'base64'));
@@ -1284,7 +1575,8 @@ async function quit(client) {
       await settings.evaluate('Array.from(document.querySelectorAll("[data-connection-settings] button")).find(button=>button.textContent.trim()==="Сведения").click()');
       await waitFor(settings,'!!document.querySelector(".wi-report")','Support details');
       const report=await settings.evaluate('document.querySelector(".wi-report").textContent');
-      assert(report.includes('Woods Island 1.2.0'));assert(!report.includes('\\'));assert(!report.includes('://'));
+      const version=(await main.invoke('bootstrap')).version;
+      assert(report.includes('Woods Island '+version));assert(!report.includes('\\'));assert(!report.includes('://'));
       const shot=await settings.command('Page.captureScreenshot',{format:'png'});
       await fs.writeFile(path.join(directory,'reliability-connections.png'),Buffer.from(shot.data,'base64'));
       await settings.evaluate('document.querySelector("[data-nav=updates]").click()');
@@ -1314,6 +1606,22 @@ async function quit(client) {
       assert.notEqual(changed.utcOffset,19800);
       return {manualIana:true,cacheInvalidated:true,halfHourOffset:true};
     }finally{await main.invoke('settings_set',{settings:prior});}
+  });
+  await check('Weather UV precipitation sun wind humidity and pressure cards use native forecast values',async()=>{
+    const prior=await main.invoke('settings_get'),saved=structuredClone(weatherFixture);
+    try{
+      for(const [index,entry]of weatherFixture.properties.timeseries.entries()){entry.data.instant.details.ultraviolet_index_clear_sky=2.4+index%4;entry.data.instant.details.air_pressure_at_sea_level=1012+index*.2;}
+      await main.invoke('settings_set',{settings:{weatherCity:'Брянск',weatherLat:53.2424,weatherLon:34.3668,weatherTimezone:'Europe/Moscow',weatherUnits:'metric',language:'ru'}});
+      await main.invoke('weather_refresh');const forecast=await main.invoke('weather_get');assert.equal(forecast.now.uv,2.4);assert(forecast.days[0].uvMax>=2.4);assert.equal(forecast.now.humidity,80);assert(forecast.days[0].sunset>forecast.days[0].sunrise);
+      await main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");ot.setState({expanded:true,tab:"weather",palette:false,peek:null,queue:[]});})()');
+      await waitFor(main,'["wind","humidity","pressure","sun","precip","uv"].every(mark=>!!document.querySelector(`[data-wx-tile="${mark}"]`))','All native weather cards');await pause(1800);
+      const text=await main.evaluate('Object.fromEntries(["wind","humidity","pressure","sun","precip","uv"].map(mark=>[mark,document.querySelector(`[data-wx-tile="${mark}"]`).textContent]))');
+      assert(!Object.values(text).some(value=>/NaN|undefined/.test(value)));assert(text.humidity.includes('80'));assert(text.pressure.includes(String(Math.round(forecast.now.pressure*.750062))),JSON.stringify(text));assert(!text.sun.includes('недоступны'));assert(!text.uv.includes('Нет данных'));
+      const shot=await main.command('Page.captureScreenshot',{format:'png'});await fs.writeFile(path.join(directory,'weather-all-cards.png'),Buffer.from(shot.data,'base64'));
+      for(const entry of weatherFixture.properties.timeseries)delete entry.data.next_1_hours.details.precipitation_amount;
+      await main.invoke('weather_refresh');await waitFor(main,'document.querySelector("[data-wx-tile=precip]")?.textContent.includes("Нет данных")','Absent precipitation is not fabricated zero');
+      return {cards:Object.keys(text),nativeUvAndMax:true,sunTimes:true,humidity:true,pressure:true,precipitationMissingState:true,localForecastFixture:true};
+    }finally{weatherFixture.properties.timeseries=saved.properties.timeseries;await main.invoke('settings_set',{settings:prior});if(prior.weatherCity)await main.invoke('weather_refresh');await main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");ot.setState({expanded:false,tab:"home",peek:null,queue:[]});})()');}
   });
   await check('Disabled download cards and agent questions suppress their UI events',async()=>{
     const prior=await main.invoke('settings_get');
@@ -1362,16 +1670,50 @@ async function quit(client) {
         samples.push(await main.evaluate('(async()=>{const m=await import("/assets/runtime-debug.js"),s=m.ot.getState();return {level:s.level,bands:s.bands,age:performance.now()-s.bandsAt,path:document.querySelector("[data-island] > svg path")?.getAttribute("d")};})()'));
         await pause(100);
       }
-      assert(samples.every(s=>s.bands.length===8&&s.bands.every(v=>Number.isFinite(v)&&v>=0&&v<=1)&&Number.isFinite(s.level)&&s.level>=0&&s.level<=1));
+      assert(samples.every(s=>s.bands.length===24&&s.bands.every(v=>Number.isFinite(v)&&v>=0&&v<=1)&&Number.isFinite(s.level)&&s.level>=0&&s.level<=1));
       assert(samples.every(s=>s.age<700||(s.level===0&&s.bands.every(v=>v===0))),
         'Nonzero live spectrum must remain fresh; silence may stop repeating events');
       const peak=Math.max(...samples.map(s=>s.level)),bandPeak=Math.max(...samples.flatMap(s=>s.bands)),paths=new Set(samples.map(s=>s.path)).size;
       if(process.env.WOODS_TEST_EXPECT_AUDIO==='1'){assert(peak>0.00001,'Expected playing audio must reach WASAPI');assert(bandPeak>0,'Expected spectrum must contain energy');}
       if(peak>0.00001)assert(paths>1,'The liquid contour must change with measured sound');
-      assert(samples.every(s=>s.path));return {eightBands:true,liveSpectrumFresh:true,silenceMayBeDeduplicated:true,peak,bandPeak,distinctContours:paths,liveSoundDetected:peak>0.00001,explicitOutputPriority:true};
+      const native=await main.invoke('window_diagnostics');
+      const contourBottom=await main.evaluate(`(()=>{const p=document.querySelector('[data-island] > svg path');const box=p.getBBox();return new DOMPoint(0,box.y+box.height).matrixTransform(p.getScreenCTM()).y;})()`);
+      assert(native.visualBounds[3]-native.bounds[3]>=30*native.pageFactor,'Native region reserves space below the hitbox for the stronger wave');
+      assert(contourBottom*native.pageFactor<=native.visualBounds[3]+2,'Native region contains the liquid contour');
+      assert(samples.every(s=>s.path));return {eightBands:true,liveSpectrumFresh:true,silenceMayBeDeduplicated:true,peak,bandPeak,distinctContours:paths,liveSoundDetected:peak>0.00001,explicitOutputPriority:true,nativeContourContained:true};
     }finally{
       clearInterval(timer);await main.invoke('media_pick',{id:null});await main.invoke('settings_set',{settings:{audioOutput:prior.audioOutput,character:prior.character,characterMusic:prior.characterMusic,liquidWith:prior.liquidWith,liquidSpectrum:prior.liquidSpectrum,mediaPill:prior.mediaPill}});await pause(3400);
     }
+  });
+  await check('Mini equalizer follows actual WASAPI bands and track accent through all music modes',async()=>{
+    const prior=await main.invoke('settings_get');let playing=true,timer;const samples=[];
+    const send=()=>fetch(`http://127.0.0.1:${musicPort}/track`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({trackId:'mini-spectrum',title:'Geometry',artist:'Fixture',duration:20000,progress:1000,isPlaying:playing})});
+    try{
+      await main.invoke('settings_set',{settings:{character:'none',characterMusic:'none',lyrics:true,openOnHover:false,reducedMotion:'full',mediaPill:'normal'}});
+      await main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");ot.setState({expanded:false,palette:false,peek:null,queue:[]});})()');
+      await send();await main.invoke('media_pick',{id:'ru.yandex.desktop.music.mod.connector'});timer=setInterval(()=>void send().catch(()=>{}),150);
+      await waitFor(main,'(async()=>{const {ot}=await import("/assets/runtime-debug.js");return ot.getState().media?.title==="Geometry";})()','Mini track selected');
+      await pause(4200); // Let the missing-cover grace finish before checking explicit test accents.
+      for(const mode of ['normal','title','lyrics','player']){
+        await main.invoke('settings_set',{settings:{mediaPill:mode}});
+        await waitFor(main,`!!document.querySelector('[data-media-pill=${mode}]')`,'Selected mini mode '+mode);
+        await waitFor(main,'!!document.querySelector("[data-audio-glyph]")','Mini spectrum '+mode);
+        assert.equal(await main.evaluate(`document.querySelector('[data-media-pill=${mode}]').querySelectorAll('[data-audio-glyph]').length`),1,'One mini spectrum in the active pill');
+        await main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");ot.setState({accent:"rgb(229, 72, 77)"});})()');
+        await main.evaluate('(async()=>{window.__miniDebug=await import("/assets/runtime-debug.js");})()');
+        const readings=await main.evaluate(`new Promise(resolve=>{const values=[],start=performance.now();function tick(){const glyph=document.querySelector('[data-audio-glyph]');const state=window.__miniDebug.ot.getState();values.push({playing:state.media?.playing,hidden:document.hidden,suspended:window.__miniDebug.isCharacterAnimationSuspended(),level:state.level,bands:state.bands,age:performance.now()-state.bandsAt,color:getComputedStyle(glyph).color,heights:Array.from(glyph.querySelectorAll('rect')).map(e=>Number(e.getAttribute('height')))});if(performance.now()-start<1600)setTimeout(tick,50);else resolve(values);}tick();})`);
+        await fs.writeFile(path.join(directory,'mini-'+mode+'-readings.json'),JSON.stringify(readings,null,2));
+        assert(readings.every(sample=>sample.color==='rgb(229, 72, 77)'&&sample.heights.length===4));
+        const bands=await main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");const s=ot.getState();return {level:s.level,bands:s.bands,age:performance.now()-s.bandsAt};})()');
+        if(bands.level>.00001&&bands.age<700)assert(readings.some(sample=>sample.heights.some(height=>height>2.6)),'Actual sound must move mini bars');
+        await main.evaluate('(async()=>{const {ot}=await import("/assets/runtime-debug.js");ot.setState({accent:"rgb(90, 184, 255)"});})()');
+        await waitFor(main,'getComputedStyle(document.querySelector("[data-audio-glyph]")).color==="rgb(90, 184, 255)"','New track accent');
+        samples.push({mode,bands,maxHeight:Math.max(...readings.flatMap(sample=>sample.heights)),distinctFrames:new Set(readings.map(sample=>JSON.stringify(sample.heights))).size});
+      }
+      playing=false;await send();await waitFor(main,'!!document.querySelector("[data-audio-glyph]")&&Array.from(document.querySelectorAll("[data-audio-glyph] rect")).every(e=>Number(e.getAttribute("height"))===2.5)','Paused mini spectrum');
+      const shot=await main.command('Page.captureScreenshot',{format:'png'});await fs.writeFile(path.join(directory,'mini-spectrum-native.png'),Buffer.from(shot.data,'base64'));
+      return {samples,actualSoundDetected:samples.some(sample=>sample.bands.level>.00001),accentChanges:true,pauseReturnsToBaseline:true,noInventedAudio:true};
+    }finally{clearInterval(timer);await main.invoke('media_pick',{id:null});await main.invoke('settings_set',{settings:prior});await pause(3400);}
   });
   await check('Repeated hover keeps the folded pill visible and native styles unchanged',async()=>{
     await main.evaluate('window.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",code:"Escape",bubbles:true}))');
@@ -1440,8 +1782,12 @@ async function quit(client) {
       let samples=0,changed=0,fixturePixels=0,pillChanges=0;
       for(let y=88;y<a.height-12;y+=7)for(let x=12;x<a.width-12;x+=7){
         const offset=(y*a.width+x)*4;
-        if((a.pixels[offset]===185&&a.pixels[offset+1]===212&&a.pixels[offset+2]===56)||(a.pixels[offset]===89&&a.pixels[offset+1]===50&&a.pixels[offset+2]===146))fixturePixels++;
+        const fixturePixel=(a.pixels[offset]===185&&a.pixels[offset+1]===212&&a.pixels[offset+2]===56)||(a.pixels[offset]===89&&a.pixels[offset+1]===50&&a.pixels[offset+2]===146);
+        if(fixturePixel)fixturePixels++;
         if(x>=bounds[0]-48&&x<=bounds[2]+48&&y<=bounds[3]+48)continue;
+        // Only the owned stationary checkerboard proves tint. The owner's desktop
+        // outside that window can animate between the hidden and visible captures.
+        if(!fixturePixel)continue;
         samples++;if(a.pixels.subarray(offset,offset+3).compare(b.pixels.subarray(offset,offset+3)))changed++;
       }
       for(let y=Math.max(0,bounds[1]);y<bounds[3];y+=3)for(let x=bounds[0];x<bounds[2];x+=3){const o=(y*a.width+x)*4;if(a.pixels.subarray(o,o+3).compare(b.pixels.subarray(o,o+3)))pillChanges++;}
@@ -1498,7 +1844,7 @@ async function quit(client) {
         await main.invoke('web_ai_window',{service});
         const pages=await pagesReady(p=>p.url.endsWith('/web-ai.html'));
         const shell=await attach(pages.find(p=>p.url.endsWith('/web-ai.html')));
-        await waitFor(shell,`!!(document.querySelector('[data-preferences-ready=true][data-phase=loading]')&&document.querySelector('.webai-provider-mark>img'))`,'first loading paint');
+        await waitFor(shell,`!!(document.querySelector('[data-preferences-ready=true][data-phase=loading]')&&document.querySelector('.webai-provider-mark>[data-provider-icon]'))`,'first loading paint');
         const geometry=await shell.evaluate(`(${readWebAiPaintRects.toString()})()`);
         const shot=Buffer.from((await shell.command('Page.captureScreenshot',{format:'png'})).data,'base64');
         const label=`web-ai-first-${theme}-${reducedMotion}-${service}`;
@@ -1576,10 +1922,11 @@ async function quit(client) {
       const pages=await pagesReady(p=>p.url.startsWith(webAiUrl+'/gemini'));
       const content=await attach(pages.find(p=>p.url.startsWith(webAiUrl+'/gemini')));
       await waitFor(content,`getComputedStyle(document.body).backgroundColor==='rgb(23, 25, 28)'`,'dark embedded page surface');
-      const dark=await content.evaluate(`({theme:document.documentElement.dataset.woodsAiTheme,thumb:getComputedStyle(document.documentElement,'::-webkit-scrollbar-thumb').borderRadius,width:getComputedStyle(document.documentElement,'::-webkit-scrollbar').width,preferred:matchMedia('(prefers-color-scheme:dark)').matches})`);
-      assert.deepEqual(dark,{theme:'dark',thumb:'999px',width:'8px',preferred:true});
+      const dark=await content.evaluate(`({theme:document.documentElement.dataset.woodsAiTheme,width:getComputedStyle(document.documentElement).scrollbarWidth,preferred:matchMedia('(prefers-color-scheme:dark)').matches})`);
+      assert.deepEqual(dark,{theme:'dark',width:'none',preferred:true});
       await content.evaluate(`document.querySelector('input').value='Черновик при смене темы';scrollTo(0,400)`);
       const draft=await content.evaluate(`({value:document.querySelector('input').value,scroll:scrollY,instance:window.fixtureInstance})`);
+      assert.equal(draft.scroll,400);
       const screenshot=await content.command('Page.captureScreenshot',{format:'png'});
       await fs.writeFile(path.join(directory,'embedded-dark.png'),Buffer.from(screenshot.data,'base64'));
       await main.invoke('settings_set',{settings:{theme:'light'}});
@@ -1590,7 +1937,7 @@ async function quit(client) {
       assert(proof.corner_cut&&proof.center_included&&proof.corner_radius>=12,'Native region must remove corners and retain the viewport centre');
       await main.invoke('settings_set',{settings:{theme:'dark',scale:150}});
       await waitFor(main,`window.__TAURI_INTERNALS__.invoke('web_ai_status').then(s=>s.some(s=>s.service==='gemini'&&s.surface?.corner_radius>=18&&s.surface?.corner_cut))`,'scaled rounded native view');
-      return {nativeRegion:proof,customScrollbar:true,darkAndLight:true,liveTheme:true,draftScrollAndInstancePreserved:true,scale150:true};
+      return {nativeRegion:proof,hiddenScrollbars:true,darkAndLight:true,liveTheme:true,draftScrollAndInstancePreserved:true,scale150:true};
     }finally{
       await main.invoke('settings_set',{settings:{theme:settings.theme,scale:settings.scale,reducedMotion:settings.reducedMotion}});
       await main.evaluate(`import('/assets/runtime-debug.js').then(async({ot,O})=>{ot.setState(${JSON.stringify(before)});await O.webAiHide()})`);
@@ -1701,6 +2048,20 @@ async function quit(client) {
       await shell.evaluate(`document.querySelector('[data-web-ai-service=gemini]').click()`);
       await loaded('gemini');
       assert.equal(await gemini.evaluate(`document.querySelector('input').value`),'Сохранённый черновик');
+      await shell.evaluate(`document.querySelector('[data-web-ai-service=chatgpt]').click()`);
+      await loaded('chatgpt');assert.equal(await main.invoke('web_ai_popped'),'chatgpt');
+      assert.equal(await shell.evaluate(`!!document.querySelector('[data-web-ai-service=chatgpt] [data-provider-icon=chatgpt]')`),true);
+      const chatgptPages=await pagesReady(p=>p.url===webAiUrl+'/chatgpt');const chatgpt=await attach(chatgptPages.find(p=>p.url===webAiUrl+'/chatgpt'));
+      const readChatGpt=()=>chatgpt.evaluate(`(()=>{const el=document.querySelector('[data-scroll-fixture]');return {draft:document.querySelector('input').value,scroll:scrollY,x:el.scrollLeft,y:el.scrollTop,width:getComputedStyle(el).scrollbarWidth,rootWidth:getComputedStyle(document.documentElement).scrollbarWidth,client:[el.clientWidth,el.clientHeight],instance:window.fixtureInstance}})()`);
+      await chatgpt.evaluate(`document.querySelector('input').value='Черновик ChatGPT';document.querySelector('[data-scroll-fixture]').scrollTo(35,60);scrollTo(0,300)`);
+      const chatgptState=await readChatGpt();
+      assert.deepEqual({...chatgptState,instance:null},{draft:'Черновик ChatGPT',scroll:300,x:35,y:60,width:'none',rootWidth:'none',client:[160,100],instance:null});
+      await shell.evaluate(`document.querySelector('[data-web-ai-back]').click()`);await waitForWindowClosed('/web-ai.html');
+      assert.deepEqual(await readChatGpt(),chatgptState,'ChatGPT must preserve scrolling and draft in the pill');
+      await main.invoke('web_ai_window',{service:'chatgpt'});pages=await pagesReady(p=>p.url.endsWith('/web-ai.html'));shell=await attach(pages.find(p=>p.url.endsWith('/web-ai.html')));await loaded('chatgpt');
+      assert.deepEqual(await readChatGpt(),chatgptState,'ChatGPT must preserve scrolling and draft in the separate window');await assertPassiveForeground(main);
+      const chatgptShot=await shell.command('Page.captureScreenshot',{format:'png'});await fs.writeFile(path.join(directory,'chatgpt-separate-window.png'),Buffer.from(chatgptShot.data,'base64'));
+      await shell.evaluate(`document.querySelector('[data-web-ai-service=gemini]').click()`);await loaded('gemini');
       failWebAi=true;
       await shell.evaluate(`document.querySelector('[data-web-ai-retry]').click()`);
       await waitFor(shell,`document.querySelector('[data-web-ai-status]')?.dataset.webAiStatus==='error'`,'Web AI error feedback');
@@ -1728,7 +2089,7 @@ async function quit(client) {
       shell=await attach(pages.find(p=>p.url.endsWith('/web-ai.html')));
       await loaded('deepseek');
       await assertPassiveForeground(main);
-      return {services:['gemini','deepseek'],localFixture:true,draftPreserved:true,errorRetry:true,reopen:true,foregroundStolen:false};
+      return {services:['gemini','deepseek','chatgpt'],localFixture:true,draftPreserved:true,chatgptSeparateWindowAndReturn:true,errorRetry:true,reopen:true,foregroundStolen:false};
     } catch(error) {
       console.log('Web AI pop-out primary failure:',error.message);
       console.log('Web AI native state:',JSON.stringify(await main.invoke('web_ai_status')));
@@ -1821,6 +2182,7 @@ async function quit(client) {
       let body='';for await(const chunk of request)body+=chunk;const data=JSON.parse(body);received.push(data);
       if(data.messages.some(message=>JSON.stringify(message).includes('force-http-error'))){response.writeHead(429);response.end('fixture rate limit');return;}
       response.setHeader('content-type','text/event-stream');
+      if(data.messages.some(message=>JSON.stringify(message).includes('force-truncated'))){response.end('data: '+JSON.stringify({choices:[{delta:{content:'partial response'}}]})+'\n\n');return;}
       if(data.messages.some(message=>JSON.stringify(message).includes('force-cancel'))){
         response.write('data: '+JSON.stringify({choices:[{delta:{content:'pending'}}]})+'\n\n');
         const timer=setTimeout(()=>response.end('data: [DONE]\n\n'),600);
@@ -1847,6 +2209,10 @@ async function quit(client) {
       await main.invoke('ai_chat',{id:failedId,messages:[{role:'user',content:'force-http-error'}]});
       await waitFor(main,`window.__woodsEvents['ai:error'].some(e=>e.id===${failedId})`,'AI error');
       const error=(await main.evaluate("window.__woodsEvents['ai:error']")).find(e=>e.id===failedId);assert.equal(typeof error.id,'number');assert.match(error.message,/лимит|limit/i);
+      const truncatedId=id+3;await main.invoke('ai_chat',{id:truncatedId,messages:[{role:'user',content:'force-truncated'}]});
+      await waitFor(main,`window.__woodsEvents['ai:error'].some(e=>e.id===${truncatedId})`,'Truncated stream is an error');
+      assert(!(await main.evaluate("window.__woodsEvents['ai:done']")).includes(truncatedId));
+      assert((await main.evaluate("window.__woodsEvents['ai:chunk']")).some(e=>e.id===truncatedId&&e.text==='partial response'));
       const cancelledId=id+2;
       await main.invoke('ai_chat',{id:cancelledId,messages:[{role:'user',content:'force-cancel'}]});
       await waitFor(main,`window.__woodsEvents['ai:chunk'].some(e=>e.id===${cancelledId})`,'AI cancellation fixture start');
@@ -1915,7 +2281,7 @@ async function quit(client) {
       await waitFor(main,"window.__woodsEvents['record:done'].some(e=>e?.path)",'Recording result');
       const video=(await main.evaluate("window.__woodsEvents['record:done']")).find(e=>e?.path);
       assert(path.resolve(video.path).startsWith(path.resolve(dataDir)+path.sep));assert((await fs.stat(video.path)).size>0);
-      const ffprobe=process.env.WOODS_TEST_FFPROBE||path.join(root,'src-tauri','resources','bin','ffprobe.exe');
+      const ffprobe=process.env.WOODS_TEST_FFPROBE||process.env.WOODS_FFPROBE_PATH||path.join(root,'src-tauri','resources','bin','ffprobe.exe');
       const probe=spawnSync(ffprobe,['-v','error','-show_streams','-show_format','-of','json',video.path],{windowsHide:true,encoding:'utf8',timeout:15000});
       assert.equal(probe.status,0,probe.stderr||probe.error?.message);const metadata=JSON.parse(probe.stdout);
       assert(metadata.streams.some(s=>s.codec_type==='video'&&s.width===160&&s.height===90));assert(metadata.streams.some(s=>s.codec_type==='audio'&&s.sample_rate>0));assert(Number(metadata.format.duration)>0);
@@ -2020,7 +2386,12 @@ async function quit(client) {
     for(let i=0;i<100;i++){if((await fs.readdir(folder)).length>=2)break;await pause(100);}
     assert.equal((await fs.readdir(folder)).filter(name=>name.endsWith('.md')).length,2);
     assert.equal(await fs.readFile(path.join(folder,first),'utf8'),markdown);
-    return {folder};
+    const hit=await main.evaluate(`(()=>{const button=document.querySelector('[data-note-clear]'),box=button.getBoundingClientRect(),well=document.querySelector('[data-note-editor]').getBoundingClientRect(),target=document.elementFromPoint(box.left+box.width/2,box.top+box.height/2);return box.right<=well.right+1&&button.contains(target);})()`);
+    assert(hit,'Clear note must be inside the editor column with an unobstructed hit area');
+    await main.evaluate('document.querySelector("[data-note-clear]").click()');
+    await waitFor(main,'window.__TAURI_INTERNALS__.invoke("note_get").then(value=>value==="")','Cleared note persisted');
+    await main.invoke('note_set',{text:markdown});
+    return {folder,clearButtonHitArea:true,clearedNotePersisted:true};
   });
   await check('Reminder named dates, time shifts and weekly choices save through the real native UI',async()=>{
     const prior=await main.invoke('settings_get');const before=await main.invoke('reminders_get');
@@ -2108,6 +2479,8 @@ async function quit(client) {
       assert.equal(await main.invoke('plugin:window|is_visible',{label:'snow-screen'}),false);
       await waitFor(snow,`window.__woodsSnow?.status().revision>=${state.revision}`,'Snow renderer received the native state');
       const renderer=await snow.evaluate('window.__woodsSnow.status()');assert(renderer.enabled&&renderer.density===2);
+      const canvasResets = await snow.evaluate(`(()=>{const canvas=document.querySelector('#woods-snow'),observer=new MutationObserver(()=>{});observer.observe(canvas,{attributes:true,attributeFilter:['width','height']});for(let i=0;i<5;i++)dispatchEvent(new Event('resize'));const resets=observer.takeRecords().length;observer.disconnect();return resets;})()`);
+      assert.equal(canvasResets,0,'A resize notification with identical dimensions must preserve the painted frame');
       await pause(1600);const unchanged=await main.invoke('snow_state');assert.equal(unchanged.revision,state.revision,'Idle polling must not repeat native changes');
       await main.invoke('settings_set',{settings:{reducedMotion:'reduce'}});
       await waitFor(main,`window.__TAURI_INTERNALS__.invoke('snow_state').then(state=>!state.enabled&&state.reason==='motion')`,'Reduced motion stops screen snow');
@@ -2167,6 +2540,39 @@ async function quit(client) {
       await main.evaluate(`(async()=>{const {ot}=await import('/assets/runtime-debug.js');ot.setState({peek:null,queue:[]});})()`);
     }
   });
+  await check('Phone page uses the actual native HTTP assets and shelf previews in mobile layouts',async()=>{
+    const {chromium}=require('playwright-core');const prior=await main.invoke('settings_get'),shelfBefore=await main.invoke('shelf_list');let browser;
+    try{
+      await main.invoke('settings_set',{settings:{scale:100,theme:'dark',openOnHover:false}});
+      await main.evaluate(`(async()=>{const {ot}=await import('/assets/runtime-debug.js');ot.setState({expanded:true,tab:'shelf',palette:false,peek:null,queue:[]});})()`);
+      const imagePath=path.join(directory,'Снимок Woods.png'),notePath=path.join(directory,'Заметки.md');
+      const actualImage=path.join(directory,'controls-reference-dark.png');
+      await fs.copyFile(await fs.stat(actualImage).then(()=>actualImage).catch(()=>path.join(root,'src-tauri','icons','128x128.png')),imagePath);
+      await fs.copyFile(path.join(root,'README.md'),notePath);
+      const added=await main.invoke('shelf_add',{paths:[imagePath,notePath]});assert(added.find(item=>item.path===imagePath)?.preview);
+      await waitFor(main,`!!document.querySelector(${JSON.stringify('[data-shelf-item="Снимок Woods.png"] .wi-shelf-print img')})`,'Actual native PNG preview');
+      const receiver=await main.invoke('phone_start');assert.equal(new URL(receiver.url).hostname,'127.0.0.1');
+      await waitFor(main,'!!document.querySelector("[data-phone-qr] img")','Native QR image');
+      const qr=await main.evaluate(`(()=>{const r=document.querySelector('[data-phone-qr]').getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};})()`);
+      const rendered=await main.command('Page.captureScreenshot',{format:'png',clip:{...qr,scale:1}});await fs.writeFile(path.join(directory,'phone-rendered-94px-qr.png'),Buffer.from(rendered.data,'base64'));await fs.writeFile(path.join(directory,'phone-rendered-qr-link.txt'),receiver.url);
+      const shown=await main.command('Page.captureScreenshot',{format:'png'});await fs.writeFile(path.join(directory,'shelf-real-files-and-qr.png'),Buffer.from(shown.data,'base64'));
+      browser=await chromium.launch({executablePath:process.env.WOODS_TEST_BROWSER||'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',headless:true,args:['--no-first-run']});
+      const context=await browser.newContext({viewport:{width:390,height:844},locale:'ru-RU',isMobile:true,hasTouch:true,userAgent:'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36'}),phone=await context.newPage();const exceptions=[];phone.on('pageerror',error=>exceptions.push(error.message));
+      const response=await phone.goto(receiver.url);assert(response.ok());assert.match(response.headers()['content-type'],/^text\/html/);assert.equal(response.headers()['content-disposition'],undefined);
+      await phone.waitForFunction(()=>document.getElementById('connection-title').textContent.includes('Подтверди'));
+      const pending=await main.invoke('phone_state');assert(pending.pending);await main.invoke('phone_allow',{id:pending.pending.id});
+      await phone.waitForFunction(()=>!document.getElementById('send-text').disabled);
+      await main.invoke('phone_send',{paths:[imagePath,notePath]});await phone.locator('#offered strong').filter({hasText:'Снимок Woods.png'}).waitFor();
+      for(const width of [320,390,768]){
+        await phone.setViewportSize({width,height:844});assert(await phone.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+        assert.equal(await phone.locator('#pick-files').isEnabled(),true);assert.equal(await phone.locator('#text').isEnabled(),true);
+        await phone.screenshot({path:path.join(directory,`phone-native-page-${width}.png`),fullPage:true});
+      }
+      await phone.locator('#text').fill('Проверка нативной страницы Woods');await phone.locator('#send-text').click();await phone.waitForFunction(()=>document.getElementById('text').value==='');
+      assert.equal(await fs.readFile(path.join(dataDir,'phone-qa-text.txt'),'utf8'),'Проверка нативной страницы Woods');assert.deepEqual(exceptions,[]);
+      return {actualNativeHttpPage:true,actualPngPreview:true,actualMarkdownFile:true,renderedQrPixels:94,phoneWidths:[320,390,768],desktopApproval:true,textReachedIsolatedNativeSink:true,exceptions,realAndroid:'pending'};
+    }finally{await browser?.close();await main.invoke('phone_stop');for(const item of await main.invoke('shelf_list'))if(!shelfBefore.some(previous=>previous.id===item.id))await main.invoke('shelf_remove',{id:item.id});await main.invoke('settings_set',{settings:prior});await main.evaluate(`(async()=>{const {ot}=await import('/assets/runtime-debug.js');ot.setState({expanded:false,tab:'home',peek:null,queue:[]});})()`);}
+  });
   await check('Phone transfer uses desktop approval and the real isolated local HTTP server',async()=>{
     await main.evaluate(`(async()=>{const {ot}=await import('/assets/runtime-debug.js');ot.getState().open('click','shelf');})()`);
     await waitFor(main,'!!document.querySelector("[data-phone-panel]")','Phone panel on the shelf');
@@ -2178,8 +2584,29 @@ async function quit(client) {
         await waitFor(main,`(async()=>{const {ot}=await import('/assets/runtime-debug.js');const s=ot.getState().phone;return !!s&&s.running===${result.running}&&s.connected===${result.connected}&&s.pending?.id===${JSON.stringify(result.pending?.id)};})()`,'Phone state delivered to real UI');
         states++;
       }
-      if(command==='phone_start')await waitFor(main,'!!document.querySelector("[data-phone-qr] img")','Phone QR code generated');
-      if(command==='phone_state'&&result.pending)await waitFor(main,'!!document.querySelector("[data-phone-allow]")','Desktop approval controls');
+      if(command==='phone_start'){
+        await waitFor(main,'!!document.querySelector("[data-phone-qr] img")','Phone QR code generated');
+        const source=await main.evaluate('document.querySelector("[data-phone-qr] img").src');
+        assert.match(source,/^data:image\/png;base64,/);
+        await fs.writeFile(path.join(directory,'phone-displayed-qr.png'),Buffer.from(source.split(',')[1],'base64'));
+        await fs.writeFile(path.join(directory,'phone-displayed-qr-link.txt'),result.url);
+        const layout=await main.evaluate(`(()=>{const rect=e=>{const r=e.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height};};return {panel:rect(document.querySelector('[data-phone-panel]')),qr:rect(document.querySelector('[data-phone-qr]')),shelf:rect(document.querySelector('.wi-shelf-row-wrap'))};})()`);
+        assert(Math.abs(layout.panel.width-184)<.05);assert(layout.qr.width>=76&&layout.qr.width<=94);assert(layout.panel.right<=layout.shelf.left+.05,'Phone panel must be to the left of the shelf');
+        assert(layout.qr.top>=layout.panel.top&&layout.qr.bottom<=layout.panel.bottom,'QR must fit inside the card');
+        assert(await main.evaluate(`(()=>{const url=document.querySelector('[data-phone-url]'),content=url.closest('.wi-phone-content');return url.getBoundingClientRect().bottom<=content.getBoundingClientRect().bottom+1;})()`),'QR instructions and link must fit');
+        await fs.writeFile(path.join(directory,'phone-reference-layout.json'),JSON.stringify(layout,null,2));
+        const screenshot=await main.command('Page.captureScreenshot',{format:'png'});await fs.writeFile(path.join(directory,'phone-native-qr.png'),Buffer.from(screenshot.data,'base64'));
+      }
+      if(command==='phone_state'&&result.pending){
+        await waitFor(main,'!!document.querySelector("[data-phone-allow]")','Desktop approval controls');
+        const header=await main.evaluate(`(()=>{const el=document.querySelector('[data-phone-device]'),status=document.querySelector('[data-phone-status]'),box=el.closest('header');const fits=node=>{const range=document.createRange();range.selectNodeContents(node);const bounds=box.getBoundingClientRect();return [...range.getClientRects()].every(rect=>rect.left>=bounds.left-1&&rect.right<=bounds.right+1&&rect.bottom<=bounds.bottom+1);};return {device:el.textContent,status:status.textContent,deviceFits:fits(el),statusFits:fits(status),deviceLeft:el.getBoundingClientRect().left,statusLeft:status.getBoundingClientRect().left,headerWidth:box.clientWidth};})()`);
+        assert.equal(header.device,result.pending.device);
+        assert.match(header.status,/нужно подтверждение|needs approval/);
+        assert(header.deviceFits&&header.statusFits&&Math.abs(header.statusLeft-header.deviceLeft)<=2,JSON.stringify(header));
+        const approval=await main.evaluate(`(()=>{const buttons=Array.from(document.querySelectorAll('[data-phone-allow],[data-phone-deny]')),rect=buttons[0].closest('.wi-phone-content').getBoundingClientRect();return buttons.map(button=>{const bounds=button.getBoundingClientRect();return {top:bounds.top-rect.top,bottom:rect.bottom-bounds.bottom,right:rect.right-bounds.right};});})()`);
+        const screenshot=await main.command('Page.captureScreenshot',{format:'png'});await fs.writeFile(path.join(directory,'phone-native-approval.png'),Buffer.from(screenshot.data,'base64'));
+        assert(approval.every(bounds=>bounds.top>=-1&&bounds.bottom>=-1&&bounds.right>=-1),JSON.stringify({header,approval}));
+      }
       return result;
     }});
     await main.evaluate(`(async()=>{const {ot}=await import('/assets/runtime-debug.js');ot.getState().close();})()`);

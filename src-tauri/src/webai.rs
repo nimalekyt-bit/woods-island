@@ -3,6 +3,7 @@ use std::sync::{Mutex,atomic::{AtomicBool,AtomicU64,Ordering},mpsc};
 use std::collections::BTreeMap;
 use webview2_com::{Microsoft::Web::WebView2::Win32::{ICoreWebView2_3, COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC, COREWEBVIEW2_WEB_ERROR_STATUS}, TrySuspendCompletedHandler, NavigationStartingEventHandler, NavigationCompletedEventHandler};
 use windows_core_webview::Interface;
+pub mod permissions;
 static POPPED:Mutex<Option<String>>=Mutex::new(None);
 static LAST_WORD:AtomicU64=AtomicU64::new(0);
 static VISIBLE_VIEWS:Mutex<BTreeMap<String,bool>>=Mutex::new(BTreeMap::new());

@@ -1,3 +1,5 @@
+import { publishLiquidContour, clearLiquidContour } from './liquid-contour';
+import { liquidSpectrumBands } from '../media/spectrum-state';
 import type { CharacterMood } from './types';
 import { advanceLiquidWave, createEnvelope, gaussian, liquidBottomAt, LIQUID_POINTS,
   smoothLiquidPath, updateEnvelope, type LiquidPoint } from './liquid-geometry';
@@ -10,6 +12,7 @@ export interface LiquidOptions {
 export interface LiquidAudio {
   level: number; bands: readonly number[]; bandsAt: number; liquidSpectrum: boolean;
 }
+export const LIQUID_SPECTRUM_BOTTOM = 36;
 export interface LiquidPorts {
   options: () => LiquidOptions;
   audio: () => LiquidAudio;
@@ -39,6 +42,7 @@ function element<K extends keyof SVGElementTagNameMap>(tag: K, attributes: Recor
 export function mountLiquidIsland(svg: SVGSVGElement, ports: LiquidPorts, initialFill: string) {
   const parent = svg.parentElement;
   if (!parent) throw new Error('Liquid island needs a parent');
+  const contourOwner = parent.closest('[data-island]') ?? parent;
   const now = ports.now ?? (() => performance.now()), random = ports.random ?? Math.random;
   const dropLayer = element('g', {}, svg);
   const gradientId = `liquid-${random().toString(36).slice(2)}`;
@@ -63,6 +67,7 @@ export function mountLiquidIsland(svg: SVGSVGElement, ports: LiquidPorts, initia
   const envelope = createEnvelope();
   const spikeStrengths = new Float32Array(Math.ceil(LIQUID_POINTS / 7)).fill(1);
   const bandLevels = new Float32Array(spikeStrengths.length);
+  const measuredLobes = new Float32Array(spikeStrengths.length);
   let spectrumBlend = 0;
   const radius = () => Math.min(height / 2, height > 60 ? 32 : 26);
   const bottomAt = (x: number) => liquidBottomAt(x, width, height);
@@ -138,7 +143,7 @@ export function mountLiquidIsland(svg: SVGSVGElement, ports: LiquidPorts, initia
         : ` L${format(halfWidth)},${format(sideHeight)} L${smoothLiquidPath(points.slice().reverse())} L${format(-halfWidth)},${format(sideHeight)}`)
       + (ears > 0 ? ` L${format(-halfWidth)},${format(ears)} A${format(ears)},${format(ears)} 0 0 0 ${format(-halfWidth - ears)},0` : '')
       + (round > 0 ? ` L${format(-halfWidth)},${format(round)} A${format(round)},${format(round)} 0 0 1 ${format(-halfWidth + round)},0` : '') + ' Z';
-    if (nextBodyD !== lastBodyD) { body.setAttribute('d', nextBodyD); lastBodyD = nextBodyD; }
+    if (nextBodyD !== lastBodyD) { body.setAttribute('d', nextBodyD); lastBodyD = nextBodyD; publishLiquidContour(contourOwner,{width,height,points}); }
     const nextRimD = 'M' + smoothLiquidPath(points.slice(4, 86).map(([x, y]): LiquidPoint => [x, y - 2.2]));
     if (nextRimD !== lastRimD) { rim.setAttribute('d', nextRimD); lastRimD = nextRimD; }
     if (height !== gradientHeight) { gradient.setAttribute('y2', format(height)); gradientHeight = height; }
@@ -167,17 +172,29 @@ export function mountLiquidIsland(svg: SVGSVGElement, ports: LiquidPorts, initia
       const signal = updateEnvelope(envelope, audio.level, timeMs, dt); volumeEnvelope = signal.env; heard = signal.heard;
       if (signal.hit) for (let index = 0; index < spikeStrengths.length; index++) spikeStrengths[index] = 0.5 + 0.5 * random();
     }
-    const bands = mood === 'music' && audio.liquidSpectrum && audio.bands.length > 1 && now() - audio.bandsAt < 700 ? audio.bands : null;
+    const bands = liquidSpectrumBands(audio, mood === 'music', now());
+    const islandSpectrum = smoothCorners() && mood === 'music' && audio.liquidSpectrum;
     spectrumBlend += (+!!bands - spectrumBlend) * (1 - Math.exp(-dt / 0.2));
+    let strongestLobe = 0;
     for (let index = 0; index < bandLevels.length; index++) {
       let level = 0;
       if (bands) {
-        const position = bandLevels.length > 1 ? (index / (bandLevels.length - 1)) ** 1.2 * (bands.length - 1) : 0;
+        const exponent = islandSpectrum ? 1.15 : 1.2;
+        const position = bandLevels.length > 1 ? (index / (bandLevels.length - 1)) ** exponent * (bands.length - 1) : 0;
         const low = Math.floor(position), high = Math.min(bands.length - 1, low + 1);
         level = bands[low] + (bands[high] - bands[low]) * (position - low);
       }
-      bandLevels[index] += (level - bandLevels[index]) * (1 - Math.exp(-dt / (level > bandLevels[index] ? 0.02 : 0.11)));
+      const response = level > bandLevels[index] ? 0.02 : islandSpectrum ? 0.1 : 0.11;
+      bandLevels[index] += (level - bandLevels[index]) * (1 - Math.exp(-dt / response));
+      if (islandSpectrum) {
+        const shaped = Math.min(1, Math.max(0, bandLevels[index]) ** 1.3);
+        measuredLobes[index] = shaped;
+        if (shaped > strongestLobe) strongestLobe = shaped;
+      }
     }
+    const musicDepth = Math.min(30, height * 0.9);
+    const measuredDepth = Math.min(32, height * 0.92);
+    const activeFloor = islandSpectrum ? 0.08 * Math.min(1, strongestLobe * 4) : 0;
     const cursor = ports.cursor();
     const pointer = cursor ? { x: cursor.x - (bounds.left + width / 2), y: cursor.y - bounds.top } : null;
     for (let index = 0; index < LIQUID_POINTS; index++) {
@@ -190,10 +207,17 @@ export function mountLiquidIsland(svg: SVGSVGElement, ports: LiquidPorts, initia
         const variation = 1 + (spikeStrengths[Math.floor(index / 7)] - 1) * heard;
         const offset = index % 7 - 3, spike = Math.max(0, 1 - Math.abs(offset) / 3.5);
         const signal = envelopeLevel * variation;
-        const combined = signal + (0.1 + 0.9 * bandLevels[Math.floor(index / 7)] - signal) * spectrumBlend;
         const edgeDistance = Math.min(index, 89 - index) - 4;
         const edge = Math.max(0, Math.min(1, edgeDistance / 6)), smoothEdge = edge * edge * (3 - 2 * edge);
-        amplitude = Math.min(30, height * 0.9) * combined * spike * spike * (1 + (smoothEdge - 1) * spectrumBlend);
+        if (islandSpectrum) {
+          // Match Island's sleek quadratic spike profile while settling cleanly to zero in silence.
+          const liveLobe = activeFloor + (1 - activeFloor) * measuredLobes[Math.floor(index / 7)];
+          const combined = signal + (liveLobe - signal) * spectrumBlend;
+          amplitude = measuredDepth * combined * spike * spike * (1 + (smoothEdge - 1) * spectrumBlend);
+        } else {
+          const combined = signal + (0.1 + 0.9 * bandLevels[Math.floor(index / 7)] - signal) * spectrumBlend;
+          amplitude = musicDepth * combined * spike * spike * (1 + (smoothEdge - 1) * spectrumBlend);
+        }
       }
       if (mood === 'think') amplitude = 4 * Math.sin(index * 0.32 - timeMs / 130);
       if (mood === 'happy') amplitude = elapsed < 520 ? 18 * Math.min(1, elapsed / 520) * gaussian(x / 26) : 0;
@@ -247,6 +271,6 @@ export function mountLiquidIsland(svg: SVGSVGElement, ports: LiquidPorts, initia
     draw,
     updateFill(fill: string) { tintStop.style.stopColor = fill; },
     interval() { return now() < resizeUntil ? 0 : ports.options().mood === 'sleep' ? 50 : ports.options().mood === 'idle' ? 16 : 0; },
-    dispose() { measuredIslands.delete(measureChanged); svg.replaceChildren(); if (clip) clip.style.clipPath = ''; if (squash) squash.style.transform = ''; },
+    dispose() { measuredIslands.delete(measureChanged); clearLiquidContour(contourOwner); svg.replaceChildren(); if (clip) clip.style.clipPath = ''; if (squash) squash.style.transform = ''; },
   };
 }

@@ -1,9 +1,9 @@
 // Compatibility application source; migrate components incrementally.
 // Woods-owned additions to the extracted runtime; keep their source readable.
-// Reserve the song's lyric width once, so short/long lines do not resize the HUD.
+// Quantize the selected line's measured width; the component delays shrinkage.
 export function songLyricsWidth(widths) {
   const widest = widths.reduce((max, width) => (Number.isFinite(width) ? Math.max(max, width) : max), 0);
-  return widest > 0 ? Math.ceil(Math.min(520, Math.max(170, widest)) / 16) * 16 : 0;
+  return widest > 0 ? Math.ceil(Math.min(520, Math.max(96, widest)) / 16) * 16 : 0;
 }
 
 export const lyricsSizeTransition = {

@@ -1,0 +1,119 @@
+name: Publish accepted Windows release
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Stable version from the accepted main build'
+        type: string
+        required: true
+      accepted_run_id:
+        description: 'Full successful Windows build and both installer scenarios'
+        type: string
+        required: true
+      dry_run:
+        description: 'Verify accepted payloads without publishing'
+        type: boolean
+        default: true
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: accepted-application-release
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      PUBLISH_VERSION: ${{ inputs.version }}
+      ACCEPTED_RUN_ID: ${{ inputs.accepted_run_id }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - name: Validate full accepted source
+        id: accepted
+        run: node scripts/publish-accepted.mjs --inspect
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ steps.accepted.outputs.source_revision }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify publication contracts
+        run: node --test scripts/publish-contract.test.mjs scripts/release-acceptance.test.mjs
+      - name: Download accepted installer and portable
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: woods-island-installer
+          path: dist-publish/accepted/installer
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.accepted_run_id }}
+      - name: Download accepted application
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: woods-island-windows-exe
+          path: dist-publish/accepted/application
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.accepted_run_id }}
+      - name: Download ExistingRuntime acceptance
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: installer-ExistingRuntime
+          path: dist-publish/accepted/ExistingRuntime
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.accepted_run_id }}
+      - name: Download MissingRuntime acceptance
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: installer-MissingRuntime
+          path: dist-publish/accepted/MissingRuntime
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.accepted_run_id }}
+      - name: Inspect portable application without rebuilding
+        shell: pwsh
+        run: |
+          $workspace=(Resolve-Path .).Path
+          $target=[IO.Path]::GetFullPath((Join-Path $workspace 'dist-publish/portable'))
+          if (-not $target.StartsWith($workspace+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)) { throw 'Portable verification escaped workspace' }
+          $archives=@(Get-ChildItem -LiteralPath dist-publish/accepted -Recurse -File -Filter '*-windows-x64-portable.zip')
+          if ($archives.Count -ne 1) { throw 'Accepted portable archive is ambiguous' }
+          $zip=[IO.Compression.ZipFile]::OpenRead($archives[0].FullName)
+          try {
+            foreach ($entry in $zip.Entries) {
+              $name=$entry.FullName.Replace('/',[IO.Path]::DirectorySeparatorChar)
+              $destination=[IO.Path]::GetFullPath((Join-Path $target $name))
+              if ([IO.Path]::IsPathRooted($name) -or -not $destination.StartsWith($target+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)) { throw 'Unsafe accepted portable entry' }
+            }
+          } finally { $zip.Dispose() }
+          New-Item -ItemType Directory -Path $target -Force | Out-Null
+          Expand-Archive -LiteralPath $archives[0].FullName -DestinationPath $target
+      - name: Prepare verified publication
+        run: node scripts/publish-accepted.mjs --prepare
+      - name: Publish the accepted bytes and metadata
+        if: ${{ !inputs.dry_run }}
+        run: node scripts/publish-accepted.mjs --publish
+      - name: Request immediate independent website verification
+        if: ${{ !inputs.dry_run }}
+        env:
+          WEBSITE_DISPATCH_TOKEN: ${{ secrets.WOODS_WEBSITE_DISPATCH_TOKEN }}
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WEBSITE_DISPATCH_TOKEN)) {
+            'Immediate website dispatch is not configured; scheduled independent synchronization remains active.' >> $env:GITHUB_STEP_SUMMARY
+            exit 0
+          }
+          $headers=@{Authorization='Bearer '+$env:WEBSITE_DISPATCH_TOKEN;Accept='application/vnd.github+json'}
+          $payload=@{event_type='woods-island-stable-release';client_payload=@{tag='v'+$env:PUBLISH_VERSION;acceptance_run_id=$env:ACCEPTED_RUN_ID}} | ConvertTo-Json -Depth 4
+          Invoke-RestMethod -Method Post -Uri 'https://api.github.com/repos/nimalekyt-bit/woods-island-web/dispatches' -Headers $headers -ContentType 'application/json' -Body $payload
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: accepted-publication-proof
+          path: dist-publish/publication-proof.json
+          if-no-files-found: warn
+          retention-days: 90

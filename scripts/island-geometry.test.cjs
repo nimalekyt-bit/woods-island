@@ -34,6 +34,12 @@ test('Character slots preserve aspect ratio with the old minimum and width cap',
   assert.equal(sizing.characterSlotWidth([0, 0, 0, 0], 44), 78);
 });
 
+test('A short lyric releases the unused title-width reservation while keeping a fixed viewport height',()=>{
+  assert.deepEqual(sizing.lyricsMediaSize({words:96}),[368,44]);
+  assert.deepEqual(sizing.lyricsMediaSize({words:1000}),[680,44]);
+  assert.equal(sizing.lyricsMediaSize({words:96,compact:244})[0]>368,true);
+});
+
 test('Palette, expansion, dictation and alerts retain priority over playback', () => {
   const state = fixture({ palette: true, expanded: true, dictating: true, peek: true, recording: true,
     updating: true, downloads: true, mediaLive: true, shelfCount: 2, status: true });

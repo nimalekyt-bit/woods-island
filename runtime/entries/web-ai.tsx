@@ -4,10 +4,11 @@ import { g } from '../vendor/react-foundation.js';
 import { invoke } from '../ipc/client';
 import { useWebAiStatus } from '../web-ai/use-status';
 import { statusText } from '../web-ai/status';
+import { SitePermissions } from '../web-ai/SitePermissions';
+import { ProviderIcon } from '../web-ai/ProviderIcon';
+import { webChatProviders } from '../web-ai/providers';
 import { applyMotionPreferences } from '../preferences/motion';
 import { ArrowLeft, Check, CircleAlert, ExternalLink, Globe, Link2, PanelsTopLeft, RefreshCw } from '../components/settings-icons';
-import geminiLogo from '../assets/providers/gemini.svg';
-import deepseekLogo from '../assets/providers/deepseek.svg';
 import islandLogo from '../../src-tauri/icons/128x128.png';
 import '../styles/runtime.css';
 import '../web-ai/window.css';
@@ -141,8 +142,8 @@ function WebAiWindow() {
   }, [ready, service, status?.navigation, preferencesReady]);
   const retry = () => action(() => invoke('web_ai_reload', { service, target: 'window' }));
   const browser = () => action(() => invoke('web_ai_browser', { service }));
-  const choices = ['gemini', 'deepseek', ...(!['', 'gemini', 'deepseek'].includes(service) ? [service] : [])];
-  const logo = service === 'deepseek' ? deepseekLogo : service === 'gemini' ? geminiLogo : null;
+  const choices: string[] = webChatProviders.map(provider=>provider.id);
+  if(service&&!choices.includes(service))choices.push(service);
   const domain = service === 'gemini' ? 'gemini.google.com' : service === 'deepseek' ? 'chat.deepseek.com' : names[service];
   // Mount once the initial theme and motion preferences have been applied.
   // Toggling inherited visibility on an already mounted tree can leave cached
@@ -158,11 +159,12 @@ function WebAiWindow() {
       <nav aria-label={english ? 'AI service' : 'AI сервис'} className="webai-tabs">
         {choices.map(id => <button className="press webai-service" key={id} data-web-ai-service={id} aria-pressed={service === id} disabled={pending}
           onClick={() => void action(() => invoke('web_ai_window', { service: id }))}>
-          {id === 'gemini' || id === 'deepseek' ? <img src={id === 'gemini' ? geminiLogo : deepseekLogo} alt="" /> : <Globe size={20} />}
+          <ProviderIcon service={id} size={20}/>
           <span>{names[id]}</span>
         </button>)}
       </nav>
       <div className="webai-tools">
+        <SitePermissions service={service||null} compact english={english} className="press webai-tool-button"/>
         <button className="press webai-tool-button" data-web-ai-retry disabled={!service || pending} title={english ? 'Reload website' : 'Перезагрузить сайт'} aria-label={english ? 'Reload website' : 'Перезагрузить сайт'} onClick={() => void retry()}><RefreshCw size={17}/></button>
         <button className="press webai-tool-button" data-web-ai-browser disabled={!service || pending} title={english ? 'Open in browser' : 'Открыть в браузере'} aria-label={english ? 'Open in browser' : 'Открыть в браузере'} onClick={() => void browser()}><ExternalLink size={17}/></button>
       </div></div>
@@ -173,7 +175,7 @@ function WebAiWindow() {
         <SatinBackdrop/>
         {(!ready || !contentRevealed) && <div ref={placeholder} className="webai-placeholder" role={failed ? 'alert' : 'status'} aria-hidden={ready || undefined}>
           <div className="webai-state-card" key={`${service}-${failed}`}>
-            <div className="webai-state-heading"><div className="webai-provider-mark">{logo ? <img src={logo} alt="" /> : <Globe size={42}/>} {failed ? <span className="webai-provider-badge" aria-hidden="true"><CircleAlert size={16}/></span> : <span className="webai-orbit" data-web-ai-loader aria-hidden="true"><i/><i/><i/></span>}</div>
+            <div className="webai-state-heading"><div className="webai-provider-mark"><ProviderIcon service={service} size={42}/> {failed ? <span className="webai-provider-badge" aria-hidden="true"><CircleAlert size={16}/></span> : <span className="webai-orbit" data-web-ai-loader aria-hidden="true"><i/><i/><i/></span>}</div>
             <div className="webai-state-copy"><span className="webai-eyebrow"><PanelsTopLeft size={14}/>{english ? 'Chat in a window' : 'Чат в отдельном окне'}</span>
             <h1>{failed ? (english ? `${names[service] ?? 'Service'} is not responding` : `${names[service] ?? 'Сервис'} не отвечает`) : <span className="webai-service-title">{names[service] ?? (english ? 'Your chat' : 'Ваш чат')}</span>}</h1>
             <p>{failed || slow ? message : (english ? 'Connecting to the website…' : 'Подключаемся к сайту…')}</p>

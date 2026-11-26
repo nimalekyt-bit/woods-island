@@ -10,3 +10,5 @@
 - Иконки интерфейса: Lucide 0.469.0, ISC (https://lucide.dev/license), геометрия через общий React runtime приложения. Логотипы Gemini/DeepSeek: Simple Icons, CC0 (https://github.com/simple-icons/simple-icons/blob/develop/LICENSE), источники https://cdn.simpleicons.org/googlegemini и https://cdn.simpleicons.org/deepseek. Товарные знаки принадлежат соответствующим владельцам.
 
 Условия для кода Woods указаны в LICENSE. Компоненты сторонних авторов сохраняют свои лицензии.
+
+Логотип OpenAI для ChatGPT: Lobe Icons (MIT), https://github.com/lobehub/lobe-icons. Зафиксированный источник и текст лицензии сохранены в runtime/assets/providers/SOURCES.md и lobe-icons-LICENSE. Товарный знак принадлежит OpenAI.

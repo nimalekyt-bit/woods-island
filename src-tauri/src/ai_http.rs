@@ -29,10 +29,13 @@ pub fn proxy(value: &str) -> Result<(String, String), String> {
     Ok((url.to_string(), full))
 }
 pub fn client(settings: &Value, seconds: u64) -> Result<reqwest::Client, String> {
+    client_for(settings,"aiBaseUrl",seconds)
+}
+pub fn client_for(settings:&Value,endpoint_key:&str,seconds:u64)->Result<reqwest::Client,String> {
     let mut builder = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(seconds))
         .connect_timeout(std::time::Duration::from_secs(8));
-    let endpoint = settings["aiBaseUrl"]
+    let endpoint = settings[endpoint_key]
         .as_str()
         .and_then(|s| reqwest::Url::parse(s).ok());
     let local = endpoint.as_ref().is_some_and(|url| {

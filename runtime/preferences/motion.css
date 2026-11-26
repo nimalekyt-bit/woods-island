@@ -7,7 +7,10 @@ html[data-woods-reduced-motion="true"] *::after {
   transition-duration: .01ms !important;
   scroll-behavior: auto !important;
 }
-button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible {
+button:focus-visible,
+select:focus-visible,
+input:not(.outline-none):focus-visible,
+textarea:not(.outline-none):focus-visible {
   outline: 2px solid #8ea2ff;
   outline-offset: 2px;
 }

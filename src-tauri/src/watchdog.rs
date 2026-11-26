@@ -467,7 +467,7 @@ pub fn page_pong(webview: &tauri::Webview, sequence: u64, ready: bool) -> bool {
     if !service.enabled || service.stopped.load(Ordering::SeqCst) {
         return false;
     }
-    let accepted = lock_monitor(&service).reply_tolerant(sequence, ready, active_ms(), 15_000);
+    let accepted = lock_monitor(&service).reply_tolerant(sequence, ready, active_ms());
     if accepted && ready {
         release_recovery();
     }

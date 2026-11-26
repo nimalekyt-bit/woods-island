@@ -1,6 +1,6 @@
 [package]
 name = "woods-island"
-version = "1.4.1"
+version = "1.4.2"
 default-run = "woods-island"
 description = "Dynamic Island HUD for Windows (Woods Personal Corp)"
 authors = ["Nikita Kuznetsov (Woods)"]
@@ -68,6 +68,9 @@ windows = { version = "0.58", features = [
     "Win32_NetworkManagement_Rras",
     "Win32_Networking_WinSock",
     "Win32_Devices_Bluetooth",
+    "Win32_Devices_Display",
+    "Win32_System_Performance",
+    "Win32_System_SystemInformation",
     "Win32_Devices_DeviceAndDriverInstallation",
     "Win32_Devices_Properties",
     "Win32_Devices_HumanInterfaceDevice",

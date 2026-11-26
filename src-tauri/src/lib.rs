@@ -3,6 +3,9 @@
 extern "C" {}
 
 pub mod audio;
+mod audio_mixer;
+mod brightness;
+mod system_load;
 pub mod speech;
 pub mod recorder;
 pub mod agents;
@@ -66,6 +69,7 @@ fn update_low_power(tucked: bool, hidden: bool, fullscreen: bool) {
     if prev && !low {
         media::notify_wake();
     }
+    if prev != low { system_load::configure(); }
 }
 
 static AUX_WINDOW_BUILD: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -75,6 +79,7 @@ fn ensure_aux_window(app: &AppHandle, label: &str) -> Result<tauri::WebviewWindo
     let config = app.config().app.windows.iter().find(|config| config.label == label).ok_or("Window configuration unavailable")?;
     let window = tauri::WebviewWindowBuilder::from_config(app, config).map_err(|e|e.to_string())?.build().map_err(|e|e.to_string())?;
     if win::WindowManager::passive_qa() { window.set_focusable(false).map_err(|e|e.to_string())?; }
+    if label == "settings" { win::track_settings_visibility(&window)?; }
     // Auxiliary windows close normally, releasing their renderer. Reopening creates
     // them from the same configuration; persisted settings and the image source remain native.
     Ok(window)
@@ -135,6 +140,8 @@ fn default_settings() -> Value {
     "releaseHotkeysInFullscreen": false,
     "captureVisible": false,
     "autoHide": false,
+    "autoHideMusic": false,
+    "hotkeyAutoHide": "",
     "showOnDesktop": false,
     "through": false,
     "opacityThrough": 45,
@@ -155,6 +162,9 @@ fn default_settings() -> Value {
     "clockFormat": "auto",
     "showBattery": true,
     "showPeripherals": true,
+    "deviceBattery": "off",
+    "deviceBatteryLow": 20,
+    "loadInPill": [],
     "peripheralHidden": [],
     "peripheralLimit": 3,
     "peripheralUnknown": true,
@@ -310,6 +320,7 @@ fn start_cursor_loop(app: AppHandle, state: Arc<AppState>) {
         let mut is_edge = false;
         let mut mouse_down = false;
         let mut last_near: Option<(i32, i32)> = None;
+        let mut unfolded_anchor: Option<visibility::Bounds> = None;
         let mut last_context = Value::Null;
         let mut last_check = std::time::Instant::now() - std::time::Duration::from_secs(1);
         let mut last_monitor_check = std::time::Instant::now() - std::time::Duration::from_secs(10);
@@ -365,12 +376,13 @@ fn start_cursor_loop(app: AppHandle, state: Arc<AppState>) {
             }
             if rect.expanded {
                 let down = unsafe { windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(0x01) < 0 };
-                if down && !mouse_down && !inside_pill { let _ = app.emit("outside-click", ()); }
+                if down && !mouse_down && !inside_pill && !win::WindowManager::qa_input_disabled() { let _ = app.emit("outside-click", ()); }
                 mouse_down = down;
             } else {
                 mouse_down = false;
             }
 
+            win::WindowManager::set_hover_passthrough(!inside_pill);
             if inside_pill != is_hovered {
                 is_hovered = inside_pill;
                 let _ = app.emit("hover", is_hovered);
@@ -410,7 +422,9 @@ fn start_cursor_loop(app: AppHandle, state: Arc<AppState>) {
                 if recording_until>0 && (media::now_ms()>=recording_until || !settings_is_foreground(&app)) {
                     HOTKEY_RECORDING_UNTIL.store(0,Ordering::Relaxed);let errors=register_hotkeys(&app,settings);*state.hotkey_errors.lock().unwrap()=errors;
                 }
-                let anchor=visibility::Bounds {left:win_rect.left+(rect.x as f64*scale).round() as i32,top:win_rect.top+((if settings["style"]=="capsule" {8}else{0}) as f64*scale).round() as i32,right:win_rect.left+((rect.x+rect.w) as f64*scale).round() as i32,bottom:win_rect.top+((rect.h.clamp(1,64)+if settings["style"]=="capsule" {8}else{0}) as f64*scale).round() as i32};
+                let top = if settings["style"] == "capsule" { 8 } else { 0 };
+                let local = visibility::unfolded_bounds(visibility::Bounds { left:rect.x, top, right:rect.x+rect.w, bottom:top+rect.h.max(1) }, tucked, &mut unfolded_anchor);
+                let anchor = visibility::Bounds { left:win_rect.left+(local.left as f64*scale).round() as i32, top:win_rect.top+(local.top as f64*scale).round() as i32, right:win_rect.left+(local.right as f64*scale).round() as i32, bottom:win_rect.top+(local.bottom as f64*scale).round() as i32 };
                 context["under"]=json!(visibility::Bounds::from_json(&context["bounds"]).is_some_and(|window|anchor.intersects(window)));
                 let policy=visibility::resolve(settings,&context);
                 allow_edge=policy.edge;
@@ -483,6 +497,7 @@ fn report_island_rect(
     through: bool,
     attachment_right: Option<f64>,
     attachment_bottom: Option<f64>,
+    settling: Option<bool>,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Value {
     if ![x,y,w,h].iter().all(|v|v.is_finite()) || w<0.0 || h<0.0 { return Value::Null; }
@@ -516,7 +531,13 @@ fn report_island_rect(
             let y1 = 0;
             let x2 = rect.x + rect.w + pad_x;
             let y2 = rect.y + rect.h + pad_bottom;
-            win::WindowManager::update_island_region_with_insets(hwnd, if tucked && rect.y+rect.h<=0 {None}else{Some((x1, y1, x2, y2))}, right, bottom);
+            win::WindowManager::update_island_region_ex(
+                hwnd,
+                if tucked && rect.y+rect.h<=0 {None}else{Some((x1, y1, x2, y2))},
+                right,
+                bottom,
+                settling.unwrap_or(true),
+            );
         }
     }
     canvas.map(|canvas| json!({"layoutViewportHeight":canvas.layout_height,"canvasOverscanWidth":canvas.overscan_width,"canvasOverscanBottom":canvas.overscan_bottom})).unwrap_or(Value::Null)
@@ -621,6 +642,7 @@ fn settings_set(settings:Option<Value>,app:AppHandle,state:tauri::State<'_, Arc<
    *saved=updated.clone();SETTINGS_VERSION.fetch_add(1,Ordering::Relaxed);(before,updated)
  };
  if patch["audioOutput"].is_string() || patch["audioInput"].is_string() {audio::configure(&updated);}
+ if patch["loadInPill"].is_array() {system_load::configure();}
  if patch["mediaHidden"].is_array() {media::configure(&updated);}
  if patch["agentsAsk"].is_boolean(){agents::configure(updated["agentsAsk"]!=false);}
  if patch.as_object().unwrap().keys().any(|key|key.starts_with("vpnCustom")||key=="showVpn") {network::configure_vpn(&updated);}
@@ -684,7 +706,7 @@ fn phone_value(state:phone::PhoneState)->Result<Value,String>{serde_json::to_val
 #[tauri::command]
 async fn phone_start()->Result<Value,String>{phone_value(phone::phone_start().await?)}
 #[tauri::command]
-fn phone_state()->Result<Value,String>{phone_value(phone::phone_state()?)}
+async fn phone_state()->Result<Value,String>{tauri::async_runtime::spawn_blocking(||phone::phone_state().and_then(phone_value)).await.map_err(|e|e.to_string())?}
 #[tauri::command]
 fn phone_stop()->Result<Value,String>{phone_value(phone::phone_stop()?)}
 #[tauri::command]
@@ -713,12 +735,35 @@ fn launcher_list(state: tauri::State<'_, Arc<AppState>>) -> Vec<Value> {
 
 #[tauri::command]
 async fn launcher_add(paths:Option<Vec<String>>,app:AppHandle,state:tauri::State<'_, Arc<AppState>>)->Result<Vec<Value>,String>{
-    let additions = tauri::async_runtime::spawn_blocking(move || paths.unwrap_or_default().into_iter().map(|path|system::app_item(&path)).collect::<Result<Vec<_>,String>>()).await.map_err(|e|e.to_string())??;
+    let additions = tauri::async_runtime::spawn_blocking(move || paths.unwrap_or_default().into_iter().map(|path|{
+        let mut value=system::app_item(&path)?;
+        value["icon"]=json!(system::icon(&path));
+        Ok(value)
+    }).collect::<Result<Vec<_>,String>>()).await.map_err(|e|e.to_string())??;
     let mut items=state.launcher_items.lock().unwrap();
     let mut updated=items.clone();
     for mut value in additions {if updated.iter().any(|item|item["path"]==value["path"]){continue;}value["id"]=json!(new_item_id("launcher"));updated.push(value);}
     storage::save_json_file("launcher.json",&json!(updated))?;
     *items=updated;let _=app.emit("launcher:changed",items.clone());Ok(items.clone())
+}
+
+/// Repair older launcher entries outside the UI thread, preserving manual icons
+/// and edits made while Windows is resolving a shortcut.
+fn hydrate_launcher_icons(app:&AppHandle,state:&AppState) {
+    let snapshot=state.launcher_items.lock().unwrap().clone();
+    let found=snapshot.iter().filter(|item|!item["icon"].is_string()).filter_map(|item|{
+        let path=item["path"].as_str()?;
+        if path.starts_with("http://")||path.starts_with("https://"){return None;}
+        system::icon(path).map(|icon|(item["id"].clone(),path.to_owned(),icon))
+    }).collect::<Vec<_>>();
+    if found.is_empty(){return;}
+    let mut items=state.launcher_items.lock().unwrap();let mut updated=items.clone();
+    for (id,path,icon) in found {
+        if let Some(item)=updated.iter_mut().find(|item|item["id"]==id&&item["path"]==path&&!item["icon"].is_string()) {item["icon"]=json!(icon);}
+    }
+    if updated!=*items&&storage::save_json_file("launcher.json",&json!(updated)).is_ok(){
+        *items=updated;let _=app.emit("launcher:changed",items.clone());
+    }
 }
 
 #[tauri::command]
@@ -757,6 +802,43 @@ fn launcher_hotkeys_set(json:Option<String>,app:AppHandle,state:tauri::State<'_,
 
 #[tauri::command]
 fn controls_get(state:tauri::State<'_, Arc<AppState>>)->Value{state.controls.lock().unwrap().clone()}
+
+#[tauri::command]
+async fn audio_mixer_get(refresh:Option<bool>) -> Result<Vec<Value>, String> {
+    tauri::async_runtime::spawn_blocking(move||audio_mixer::list(refresh.unwrap_or(false))).await.map_err(|_|"Audio controls were interrupted".to_owned())?
+}
+
+#[tauri::command]
+async fn audio_mixer_set(id: String, level: Option<f64>, mute: Option<bool>) -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || audio_mixer::set(&id,level,mute)).await.map_err(|_|"Audio controls were interrupted".to_owned())?
+}
+
+#[tauri::command]
+async fn brightness_get() -> Result<Vec<Value>, String> {
+    tauri::async_runtime::spawn_blocking(brightness::list).await.map_err(|_|"Monitor controls were interrupted".to_owned())?
+}
+
+#[tauri::command]
+async fn brightness_set(id: String, level: f64) -> Result<Vec<Value>, String> {
+    tauri::async_runtime::spawn_blocking(move || brightness::set(&id,level)).await.map_err(|_|"Monitor controls were interrupted".to_owned())?
+}
+
+#[tauri::command]
+fn system_load_get() -> Value {system_load::request()}
+
+#[tauri::command]
+fn system_load_status() -> Value {system_load::status()}
+
+#[tauri::command]
+async fn task_manager_open()->Result<bool,String> {
+    tauri::async_runtime::spawn_blocking(||{
+        let mut directory=[0u16;32768];
+        let count=unsafe{windows::Win32::System::SystemInformation::GetSystemDirectoryW(Some(&mut directory))} as usize;
+        if count==0||count>=directory.len(){return Err("Could not locate Windows Task Manager".to_owned());}
+        let path=format!("{}\\Taskmgr.exe",String::from_utf16_lossy(&directory[..count]));
+        system::open_path(&path,false,false).map(|_|true)
+    }).await.map_err(|_|"Could not open Windows Task Manager".to_owned())?
+}
 
 #[tauri::command]
 async fn controls_set(what:Option<String>,on:Option<bool>,app:AppHandle,state:tauri::State<'_, Arc<AppState>>)->Result<Value,String>{let state=state.inner().clone();tauri::async_runtime::spawn_blocking(move||{let what=what.ok_or("Control is required")?;let on=on.ok_or("Control state is required")?;let what=what.strip_prefix("vpn:").unwrap_or(&what);match what{"wifi"=>system::radio_set(windows::Devices::Radios::RadioKind::WiFi,on)?,"bluetooth"=>system::radio_set(windows::Devices::Radios::RadioKind::Bluetooth,on)?,"ethernet"=>system::open_path("ms-settings:network-ethernet",false,false)?,"dark"|"theme"|"darkTheme"=>{let current=system::controls();if current["dark"].as_bool()!=Some(on)&&!theme_flip(){return Err("Cannot change Windows theme".into());}},key if key.starts_with("app:")||key.starts_with("ras:")||key.starts_with("service:")=>network::vpn_toggle(key,on)?,_=>return Err("This control is not available on this computer".into())}let mut current=system::controls();current["vpns"]=json!(network::vpn_profiles());*state.controls.lock().unwrap()=current.clone();let _=app.emit("controls:changed",&current);Ok(current)}).await.map_err(|e|e.to_string())?}
@@ -823,6 +905,13 @@ fn clip_clear(app:AppHandle,state:tauri::State<'_, Arc<AppState>>)->Result<(),St
 fn clip_current_text()->Option<String>{arboard::Clipboard::new().ok()?.get_text().ok()}
 
 #[tauri::command]
+fn clip_text(id: i64, state: tauri::State<'_, Arc<AppState>>) -> Result<String, String> {
+    let item = state.clipboard_store.get_item(id).map_err(|e|e.to_string())?;
+    if item.item_type != "text" { return Err("This clipboard entry is not text".into()); }
+    Ok(item.content)
+}
+
+#[tauri::command]
 fn clip_set_text(text:Option<String>)->Result<bool,String>{clipboard::set_text(&text.ok_or("Text is required")?).map(|_|true)}
 
 #[tauri::command]
@@ -846,6 +935,9 @@ fn media_rename(app_id:Option<String>,name:Option<String>)->Result<bool,String>{
 async fn media_seek(ms:Option<u64>)->Result<bool,String>{tauri::async_runtime::spawn_blocking(move||{if media::media_seek(ms.ok_or("Playback position is required")?){Ok(true)}else{Err("The active player does not allow seeking".into())}}).await.map_err(|e|e.to_string())?}
 
 #[tauri::command]
+async fn media_cover_recover(key:String,failed_cover:String,app:AppHandle)->bool {media::recover_cover(&app,key,failed_cover).await}
+
+#[tauri::command]
 async fn lyrics_get(artist: Option<String>, title: Option<String>, album: Option<String>, duration_ms: Option<u64>) -> Result<Value, String> {
     lyrics::get(artist.unwrap_or_default(), title.unwrap_or_default(), album.unwrap_or_default(), duration_ms).await
 }
@@ -857,10 +949,10 @@ async fn player_volume()->Result<Value,String>{tauri::async_runtime::spawn_block
 async fn player_volume_set(level:Option<f64>,mute:Option<bool>)->Result<bool,String>{tauri::async_runtime::spawn_blocking(move||{audio::set_player_volume(level,mute).map(|_|true)}).await.map_err(|e|e.to_string())?}
 
 #[tauri::command]
-fn audio_devices()->Result<Vec<Value>,String>{audio::devices(false)}
+async fn audio_devices()->Result<Vec<Value>,String>{tauri::async_runtime::spawn_blocking(||audio::devices(false)).await.map_err(|e|e.to_string())?}
 
 #[tauri::command]
-fn audio_inputs()->Result<Vec<Value>,String>{audio::devices(true)}
+async fn audio_inputs()->Result<Vec<Value>,String>{tauri::async_runtime::spawn_blocking(||audio::devices(true)).await.map_err(|e|e.to_string())?}
 
 #[tauri::command]
 fn audio_set_default(id:Option<String>)->Result<bool,String>{audio::set_default(&id.ok_or("Device ID is required")?).map(|_|true)}
@@ -907,7 +999,32 @@ async fn bt_switch(id:Option<String>,on:Option<bool>)->Result<bool,String>{let i
 async fn vpn_chip(app:AppHandle)->Result<bool,String>{if app.state::<Arc<AppState>>().settings.lock().unwrap()["showVpn"]==false{return Ok(false);}let profiles=tauri::async_runtime::spawn_blocking(network::vpn_profiles).await.map_err(|e|e.to_string())?;let available:Vec<_>=profiles.iter().filter(|p|p["ready"]==json!(true)).collect();if available.is_empty(){return Err("No supported VPN connection is installed".into());}if let Some(profile)=available.iter().find(|p|p["on"]==json!(true)){let id=profile["id"].as_str().unwrap_or_default().to_owned();tauri::async_runtime::spawn_blocking(move||network::vpn_toggle(&id,false)).await.map_err(|e|e.to_string())??;vpn_refresh(app).await?;return Ok(false);}if available.len()==1 && available[0]["onSource"]!="command"{let id=available[0]["id"].as_str().unwrap_or_default().to_owned();tauri::async_runtime::spawn_blocking(move||network::vpn_toggle(&id,true)).await.map_err(|e|e.to_string())??;vpn_refresh(app).await?;return Ok(false);}let _=app.emit("vpn:choose",());Ok(true)}
 
 #[tauri::command]
-async fn vpn_refresh(app:AppHandle)->Result<Value,String>{if app.state::<Arc<AppState>>().settings.lock().unwrap()["showVpn"]==false{let _=app.emit("vpn:update",Value::Null);return Ok(Value::Null);}let profiles=tauri::async_runtime::spawn_blocking(network::vpn_profiles).await.map_err(|e|e.to_string())?;let mut payload=network::vpn_summary(&profiles);let lookup=app.state::<Arc<AppState>>().settings.lock().unwrap()["vpnLookupIp"].as_bool().unwrap_or(true);if lookup{let client=reqwest::Client::builder().timeout(std::time::Duration::from_secs(5)).build().map_err(|e|e.to_string())?;if let Ok(response)=client.get("https://api.country.is").send().await{if let Ok(data)=response.json::<Value>().await{payload["ip"]=data["ip"].clone();payload["country"]=data["country"].clone();payload["countryCode"]=data["country"].clone();}}}let _=app.emit("vpn:update",&payload);Ok(payload)}
+async fn vpn_refresh(app:AppHandle)->Result<Value,String>{
+    let state=app.state::<Arc<AppState>>();
+    let settings=state.settings.lock().unwrap().clone();
+    if settings["showVpn"]==false{let _=app.emit("vpn:update",Value::Null);return Ok(Value::Null);}
+    let profiles=tauri::async_runtime::spawn_blocking(network::vpn_profiles).await.map_err(|e|e.to_string())?;
+    let initial=network::vpn_summary(&profiles);let mut country=None;
+    if settings["vpnLookupIp"]!=false {
+        let client=reqwest::Client::builder().timeout(std::time::Duration::from_secs(5)).build().map_err(|_|"Could not check VPN location".to_owned())?;
+        if let Ok(response)=client.get("https://api.country.is").send().await {
+            if let Ok(data)=response.json::<Value>().await{country=Some(data);}
+        }
+    }
+    let profiles=tauri::async_runtime::spawn_blocking(network::vpn_profiles).await.map_err(|e|e.to_string())?;
+    let mut payload=network::vpn_summary(&profiles);
+    let latest=state.settings.lock().unwrap().clone();
+    if latest["showVpn"]==false{let _=app.emit("vpn:update",Value::Null);return Ok(Value::Null);}
+    // A response for the previous tunnel or a disabled IP lookup cannot win.
+    if latest["vpnLookupIp"]!=false&&initial["active"]==payload["active"]&&initial["via"]==payload["via"] {
+        if let Some(data)=country {
+            if data["ip"].as_str().is_some_and(|ip|ip.parse::<std::net::IpAddr>().is_ok())&&data["country"].as_str().is_some_and(|code|code.len()==2&&code.bytes().all(|c|c.is_ascii_uppercase())) {
+                payload["ip"]=data["ip"].clone();payload["country"]=data["country"].clone();payload["countryCode"]=data["country"].clone();
+            }
+        }
+    }
+    let _=app.emit("vpn:update",&payload);Ok(payload)
+}
 
 #[tauri::command]
 async fn vpn_toggle_now(app:AppHandle)->Result<bool,String>{vpn_chip(app).await}
@@ -958,6 +1075,28 @@ fn theme_flip() -> bool {
 
 #[tauri::command]
 fn through_toggle(app:AppHandle,state:tauri::State<'_, Arc<AppState>>)->Result<bool,String>{let on=!state.click_through.load(Ordering::Relaxed);win::WindowManager::set_click_through(on);state.click_through.store(on,Ordering::Relaxed);let mut settings=state.settings.lock().unwrap();settings["through"]=json!(on);storage::save_json_file("settings.json",&settings)?;let _=app.emit("settings:changed",settings.clone());Ok(on)}
+
+#[tauri::command]
+fn auto_hide_toggle(app: AppHandle, state: tauri::State<'_, Arc<AppState>>) -> Result<bool, String> {
+    let mut settings = state.settings.lock().unwrap();
+    let on = !settings["autoHide"].as_bool().unwrap_or(false);
+    let mut updated = settings.clone();
+    updated["autoHide"] = json!(on);
+    storage::save_json_file("settings.json", &updated)?;
+    *settings = updated.clone();
+    SETTINGS_VERSION.fetch_add(1, Ordering::Relaxed);
+    drop(settings);
+    let _ = app.emit("settings:changed", updated);
+    Ok(on)
+}
+
+#[tauri::command]
+async fn web_ai_permissions_reset(service: Option<String>, app: AppHandle) -> Result<u32, String> {
+    let result=webai::permissions::reset(&app,service.as_deref()).await;
+    result.map(|count|count as u32).map_err(|_|ai_http::text(&app.state::<Arc<AppState>>().settings.lock().unwrap(),
+        "Не удалось сбросить разрешения сайта. Проверь, что WebView2 обновлён, и попробуй ещё раз.",
+        "Could not reset site permissions. Update WebView2 and try again."))
+}
 
 #[tauri::command]
 fn hover(state:Option<bool>,app:AppHandle)->bool{let _=app.emit("hover",state.unwrap_or(false));true}
@@ -1326,10 +1465,17 @@ fn editor_image()->Result<Value,String>{capture::editor_image().map(|url|json!({
 fn files_held()->Vec<Value>{system::recent()}
 
 #[tauri::command]
-fn files_search(query:Option<String>,state:tauri::State<'_, Arc<AppState>>)->Vec<Value>{let folders=state.settings.lock().unwrap()["paletteFolders"].as_array().map(|a|a.iter().filter_map(|s|s.as_str().map(str::to_owned)).collect::<Vec<_>>()).unwrap_or_default();system::search_files(&query.unwrap_or_default(),&folders)}
+async fn files_search(query: Option<String>, app: AppHandle) -> Vec<Value> {
+    let state = app.state::<Arc<AppState>>();
+    let folders = state.settings.lock().unwrap()["paletteFolders"].as_array()
+        .map(|list| list.iter().filter_map(Value::as_str).map(str::to_owned).collect::<Vec<_>>())
+        .unwrap_or_default();
+    tauri::async_runtime::spawn_blocking(move || system::search_files(&query.unwrap_or_default(), &folders))
+        .await.unwrap_or_default()
+}
 
 #[tauri::command]
-fn files_warm()->bool{!system::apps().is_empty()}
+async fn files_warm()->bool{tauri::async_runtime::spawn_blocking(|| !system::apps().is_empty()).await.unwrap_or(false)}
 
 #[tauri::command]
 fn attach_data(name:Option<String>,data:Option<String>)->Result<Value,String>{ai::attachment_data(&name.ok_or("Attachment name is required")?,&data.ok_or("Attachment data is required")?)}
@@ -1360,7 +1506,7 @@ async fn installed_browsers()->Vec<String>{tauri::async_runtime::spawn_blocking(
 async fn open_programs()->Vec<Value>{tauri::async_runtime::spawn_blocking(app_inventory::open_programs).await.unwrap_or_default()}
 
 #[tauri::command]
-fn palette_recent()->Vec<Value>{system::recent()}
+async fn palette_recent()->Vec<Value>{tauri::async_runtime::spawn_blocking(system::recent).await.unwrap_or_default()}
 
 #[tauri::command]
 async fn palette_icon(path:Option<String>)->Option<String>{let path=path?;tauri::async_runtime::spawn_blocking(move||system::icon(&path)).await.ok().flatten()}
@@ -1422,7 +1568,7 @@ fn ai_cancel(id:Option<u64>)->bool{id.map(ai::cancel).unwrap_or(false)}
 fn ai_key_set(key:Option<String>)->Result<bool,String>{let key=key.unwrap_or_default();storage::save_secret("ai",&key).map(|_|!key.is_empty())}
 
 #[tauri::command]
-fn ai_key_status()->bool{storage::load_secret("ai").map(|s|!s.is_empty()).unwrap_or(false)}
+async fn ai_key_status()->bool{tauri::async_runtime::spawn_blocking(||storage::load_secret("ai").map(|s|!s.is_empty()).unwrap_or(false)).await.unwrap_or(false)}
 #[tauri::command]
 fn ai_proxy_set(proxy:String,app:AppHandle,state:tauri::State<'_,Arc<AppState>>)->Result<bool,String>{
  ai_http::proxy(&proxy).map_err(|_|ai_http::text(&state.settings.lock().unwrap(),"Укажи адрес HTTP или SOCKS5-прокси без пути и параметров.","Enter an HTTP or SOCKS5 proxy address without a path or query."))?;
@@ -1436,7 +1582,7 @@ async fn ai_test(state:tauri::State<'_, Arc<AppState>>)->Result<String,String>{l
 fn stt_key_set(key:Option<String>)->Result<bool,String>{let key=key.unwrap_or_default();storage::save_secret("stt",&key).map(|_|!key.is_empty())}
 
 #[tauri::command]
-fn stt_key_status()->bool{storage::load_secret("stt").map(|s|!s.is_empty()).unwrap_or(false)}
+async fn stt_key_status()->bool{tauri::async_runtime::spawn_blocking(||storage::load_secret("stt").map(|s|!s.is_empty()).unwrap_or(false)).await.unwrap_or(false)}
 
 #[tauri::command]
 async fn stt_test(state:tauri::State<'_, Arc<AppState>>)->Result<bool,String>{let settings=state.settings.lock().unwrap().clone();speech::test(&settings).await}
@@ -1511,6 +1657,7 @@ fn register_hotkeys(app:&AppHandle,settings:&Value)->Vec<String>{
  errors
 }
 fn handle_hotkey(app:&AppHandle,key:&str){let state=app.state::<Arc<AppState>>();match key{
+ "hotkeyAutoHide"=>{if let Err(error)=auto_hide_toggle(app.clone(),state){let _=app.emit("island:warn",error);}},
  "hotkeyFullscreen"=>{let on=!state.settings.lock().unwrap()["hideInFullscreen"].as_bool().unwrap_or(true);let _=settings_set(Some(json!({"hideInFullscreen":on})),app.clone(),state);},
  "hotkeyPalette"=>{let _=app.emit("island:palette",());},"hotkeyToggle"=>{let _=app.emit("island:toggle",json!({}));},"hotkeyClipboard"=>{let _=app.emit("island:toggle",json!({"tab":"clipboard"}));},"hotkeyChat"=>{let _=app.emit("island:toggle",json!({"tab":"chat"}));},
  "hotkeyArea"|"hotkeyScreen"|"hotkeyOcr"|"hotkeyQr"|"hotkeyColor"|"hotkeyRecord"=>{let mode=match key{"hotkeyScreen"=>"screen","hotkeyOcr"=>"ocr","hotkeyQr"=>"qr","hotkeyColor"=>"color","hotkeyRecord"=>"record",_=>"area"};let _=capture_start(Some(mode.into()),app.clone(),state);},
@@ -1624,9 +1771,19 @@ pub fn run() {
     media::configure(&loaded_settings);
     network::configure_vpn(&loaded_settings);
     agents::configure(loaded_settings["agentsAsk"]!=false);
+    let mut browser_args = std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").unwrap_or_default();
     if loaded_settings["gpuAcceleration"]==false {
-        let arguments=std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").unwrap_or_default();
-        std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", format!("{arguments} --disable-gpu"));
+        if !browser_args.contains("--disable-gpu") {
+            browser_args = format!("{browser_args} --disable-gpu").trim().to_string();
+        }
+    } else if !browser_args.contains("SkiaGraphite") {
+        // Edge WebView2's Skia Graphite (Dawn D3D12) compiles HLSL PSOs synchronously on first draw
+        // (130-390ms freezes on first open/tab switches and 100ms+ stalls on window resize).
+        // Ganesh (ANGLE D3D11) keeps hardware GPU compositing with locked 6ms frame times.
+        browser_args = format!("{browser_args} --disable-features=SkiaGraphite").trim().to_string();
+    }
+    if !browser_args.is_empty() {
+        std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", browser_args);
     }
     // WinRT radio discovery requires MTA; the window thread belongs to OLE/STA.
     let loaded_controls = std::thread::spawn(system::controls).join()
@@ -1725,7 +1882,9 @@ pub fn run() {
                     });
                 }
             }
-            clipboard::start_watcher(app.handle().clone(), state_clone.clone());
+            if !(win::WindowManager::passive_qa() && std::env::var("WOODS_QA_SKIP_CLIPBOARD").as_deref()==Ok("1")) {
+                clipboard::start_watcher(app.handle().clone(), state_clone.clone());
+            }
             obs::start_loop(app.handle().clone(), state_clone.clone());
             agents::start(app.handle().clone());
             start_update_monitor(app.handle().clone(), state_clone.clone());
@@ -1733,6 +1892,9 @@ pub fn run() {
             telemetry::start(app.handle().clone(), state_clone.clone());
             peripherals::start(app.handle().clone(), state_clone.clone());
             network::start_controls_monitor(app.handle().clone(), state_clone.clone());
+            system_load::start(app.handle().clone(),state_clone.clone());
+            let icon_app=app.handle().clone();let icon_state=state_clone.clone();
+            tauri::async_runtime::spawn_blocking(move||hydrate_launcher_icons(&icon_app,&icon_state));
             let hotkey_errors = register_hotkeys(app.handle(), &state_clone.settings.lock().unwrap().clone());
             *state_clone.hotkey_errors.lock().unwrap()=hotkey_errors.clone();
             if !hotkey_errors.is_empty() { app_log("Some global shortcuts could not be registered"); }
@@ -1807,6 +1969,13 @@ pub fn run() {
             launcher_hotkeys_get,
             launcher_hotkeys_set,
             controls_get,
+            audio_mixer_get,
+            audio_mixer_set,
+            brightness_get,
+            brightness_set,
+            system_load_get,
+            system_load_status,
+            task_manager_open,
             controls_set,
             obs_state,
             obs_password_set,
@@ -1823,6 +1992,7 @@ pub fn run() {
             clip_delete,
             clip_clear,
             clip_current_text,
+            clip_text,
             clip_set_text,
             clip_set_png,
             media_control,
@@ -1830,6 +2000,7 @@ pub fn run() {
             media_pick,
             media_rename,
             media_seek,
+            media_cover_recover,
             lyrics_get,
             player_volume,
             player_volume_set,
@@ -1853,6 +2024,8 @@ pub fn run() {
             vpn_toggle_now,
             theme_flip,
             through_toggle,
+            auto_hide_toggle,
+            web_ai_permissions_reset,
             hover,
             island_tall,
             set_island_hidden,

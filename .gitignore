@@ -43,3 +43,4 @@ runtime-manifest.json
 
 # Verified metadata output is generated and uploaded by release-metadata.yml.
 dist-release-metadata/
+dist-publish/

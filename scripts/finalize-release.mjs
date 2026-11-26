@@ -14,12 +14,16 @@ const latest=await github('releases/latest');assert.equal(release.id,latest.id,'
 const source=await github('commits/'+encodeURIComponent(release.tag_name));
 const current=release.assets.filter(asset=>asset.name==='website-release.json');assert(current.length<=1);
 let pinnedRunId;
+const selectedRunArg=process.argv.find(value=>value.startsWith('--acceptance-run-id='));
+const selectedRunId=selectedRunArg?Number(selectedRunArg.slice('--acceptance-run-id='.length)):undefined;
+if(selectedRunArg)assert(Number.isSafeInteger(selectedRunId)&&selectedRunId>0,'Invalid accepted run id');
 if(current.length){
   assert(current[0].size<=262144 && /^sha256:[a-f0-9]{64}$/.test(current[0].digest),'Invalid published website metadata');
   const published=JSON.parse((await download(current[0].browser_download_url,{bytes:current[0].size,sha256:current[0].digest.slice(7)},true)).toString('utf8'));
   validateReleaseIdentity(published,release,source.sha);pinnedRunId=published.acceptanceRunId;
 }
-const run=await selectInstallerAcceptance(github,source.sha,pinnedRunId);
+if(selectedRunId&&pinnedRunId)assert.equal(selectedRunId,pinnedRunId,'Published metadata pins another acceptance run');
+const run=await selectInstallerAcceptance(github,source.sha,pinnedRunId||selectedRunId);
 const assets={};
 for(const [kind,name] of Object.entries(assetNames(version))) {
   const matches=release.assets.filter(asset=>asset.name===name);assert.equal(matches.length,1,'Missing/duplicate release asset: '+name);

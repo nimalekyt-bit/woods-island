@@ -10,12 +10,16 @@ use std::sync::{
 };
 use std::time::{Duration, Instant};
 use surface_monitor::Monitor as Geometry;
-use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow};
+use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow};
 use windows::Win32::{
     Foundation::HWND,
+    Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND},
     UI::WindowsAndMessaging::{
-        GetWindowLongPtrW, IsWindowVisible, SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE,
-        HWND_TOPMOST, SWP_NOACTIVATE, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
+        GetWindowLongPtrW, IsWindowVisible, SetWindowLongPtrW, SetWindowPos, ShowWindow,
+        GWL_EXSTYLE, GWL_STYLE, HWND_TOPMOST, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE,
+        SWP_NOSIZE, SW_HIDE, SW_SHOWNOACTIVATE, WS_BORDER, WS_CAPTION, WS_DLGFRAME,
+        WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_MAXIMIZEBOX,
+        WS_MINIMIZEBOX, WS_POPUP, WS_THICKFRAME,
     },
 };
 
@@ -33,6 +37,7 @@ struct Surface {
     geometry: Option<Geometry>,
     visible: bool,
     creation_after: Instant,
+    fullscreen_hits: u8,
 }
 #[derive(Debug, PartialEq)]
 struct Options {
@@ -115,13 +120,40 @@ fn build(app: &AppHandle) -> Result<WebviewWindow, String> {
             .map_err(|error| error.to_string())?;
         let hwnd = HWND(window.hwnd().map_err(|error| error.to_string())?.0 as _);
         unsafe {
+            let no_round: i32 = DWMWCP_DONOTROUND.0;
+            let _ = DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_WINDOW_CORNER_PREFERENCE,
+                &no_round as *const _ as _,
+                std::mem::size_of::<i32>() as u32,
+            );
+            let style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+            let clean_style = (style
+                & !(WS_CAPTION.0 as isize
+                    | WS_BORDER.0 as isize
+                    | WS_DLGFRAME.0 as isize
+                    | WS_THICKFRAME.0 as isize
+                    | WS_MINIMIZEBOX.0 as isize
+                    | WS_MAXIMIZEBOX.0 as isize))
+                | WS_POPUP.0 as isize;
+            SetWindowLongPtrW(hwnd, GWL_STYLE, clean_style);
             let old = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
             SetWindowLongPtrW(
                 hwnd,
                 GWL_EXSTYLE,
                 old | WS_EX_TRANSPARENT.0 as isize
                     | WS_EX_NOACTIVATE.0 as isize
-                    | WS_EX_TOOLWINDOW.0 as isize,
+                    | WS_EX_TOOLWINDOW.0 as isize
+                    | WS_EX_TOPMOST.0 as isize,
+            );
+            let _ = SetWindowPos(
+                hwnd,
+                HWND_TOPMOST,
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED,
             );
         }
         Ok(())
@@ -174,20 +206,45 @@ fn apply(service: &Service) {
     };
     if enabled {
         if let Ok(hwnd) = service.owner.main_hwnd.try_lock() {
+            let main_hwnd = HWND(hwnd.unwrap_or(0) as _);
             if !crate::win::WindowManager::passive_qa()
                 && hwnd.is_some_and(|hwnd| !unsafe { IsWindowVisible(HWND(hwnd as _)) }.as_bool())
             {
                 enabled = false;
                 reason = "hidden";
-            } else if geometry.as_ref().is_some_and(|monitor| {
-                surface_monitor::fullscreen(monitor, HWND(hwnd.unwrap_or(0) as _))
-            }) {
-                enabled = false;
-                reason = "fullscreen";
+            } else if geometry
+                .as_ref()
+                .is_some_and(|monitor| surface_monitor::fullscreen(monitor, main_hwnd))
+            {
+                // Require 2 consecutive detections so transient focus switches never blink snow.
+                let hits = {
+                    let mut surface = service
+                        .surface
+                        .lock()
+                        .unwrap_or_else(|failure| failure.into_inner());
+                    surface.fullscreen_hits = surface.fullscreen_hits.saturating_add(1);
+                    surface.fullscreen_hits
+                };
+                if hits >= 2 || crate::win::WindowManager::passive_qa() {
+                    enabled = false;
+                    reason = "fullscreen";
+                }
+            } else {
+                service
+                    .surface
+                    .lock()
+                    .unwrap_or_else(|failure| failure.into_inner())
+                    .fullscreen_hits = 0;
             }
         } else {
             return;
         }
+    } else {
+        service
+            .surface
+            .lock()
+            .unwrap_or_else(|failure| failure.into_inner())
+            .fullscreen_hits = 0;
     }
     let (old_geometry, was_visible, creation_after) = {
         let surface = service
@@ -230,22 +287,33 @@ fn apply(service: &Service) {
     if let Some(window) = &window {
         if created_window || geometry != old_geometry {
             if let Some(geometry) = &geometry {
-                let positioned =
-                    window
-                        .hwnd()
-                        .map_err(|error| error.to_string())
-                        .and_then(|hwnd| unsafe {
-                            SetWindowPos(
-                                HWND(hwnd.0 as _),
-                                HWND_TOPMOST,
-                                geometry.left,
-                                geometry.top,
-                                geometry.width,
-                                geometry.height,
-                                SWP_NOACTIVATE,
-                            )
+                // Use Tauri's position + size APIs so WebView2's controller bounds match the full monitor.
+                let positioned = window
+                    .set_position(PhysicalPosition::new(geometry.left, geometry.top))
+                    .and_then(|()| {
+                        window.set_size(PhysicalSize::new(
+                            geometry.width.max(1) as u32,
+                            geometry.height.max(1) as u32,
+                        ))
+                    })
+                    .map_err(|error| error.to_string())
+                    .and_then(|()| {
+                        window
+                            .hwnd()
                             .map_err(|error| error.to_string())
-                        });
+                            .and_then(|hwnd| unsafe {
+                                SetWindowPos(
+                                    HWND(hwnd.0 as _),
+                                    HWND_TOPMOST,
+                                    geometry.left,
+                                    geometry.top,
+                                    geometry.width,
+                                    geometry.height,
+                                    SWP_NOACTIVATE,
+                                )
+                                .map_err(|error| error.to_string())
+                            })
+                    });
                 match positioned {
                     Ok(()) => applied_geometry = Some(geometry.clone()),
                     Err(failure) => {
@@ -261,17 +329,43 @@ fn apply(service: &Service) {
             reason = "qa";
         }
         if may_show != visible {
-            let result = if may_show {
-                window.show()
-            } else {
-                window.hide()
-            };
+            // Show with SW_SHOWNOACTIVATE so the fullscreen overlay never flashes or steals focus.
+            let result = window.hwnd().map_err(|error| error.to_string()).map(|hwnd| {
+                let snow_hwnd = HWND(hwnd.0 as _);
+                unsafe {
+                    let _ = ShowWindow(
+                        snow_hwnd,
+                        if may_show { SW_SHOWNOACTIVATE } else { SW_HIDE },
+                    );
+                    if may_show {
+                        // Place snow below the main island window when available so the island stays on top.
+                        let z_after = service
+                            .owner
+                            .main_hwnd
+                            .try_lock()
+                            .ok()
+                            .and_then(|guard| *guard)
+                            .filter(|raw| *raw != 0)
+                            .map(|raw| HWND(raw as _))
+                            .unwrap_or(HWND_TOPMOST);
+                        let _ = SetWindowPos(
+                            snow_hwnd,
+                            z_after,
+                            0,
+                            0,
+                            0,
+                            0,
+                            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+                        );
+                    }
+                }
+            });
             match result {
                 Ok(()) => visible = may_show,
                 Err(failure) => {
                     enabled = false;
                     reason = "visibility";
-                    error = Some(failure.to_string());
+                    error = Some(failure);
                 }
             }
         }
@@ -329,6 +423,7 @@ pub fn start(app: AppHandle, owner: Arc<crate::AppState>) -> bool {
             geometry: None,
             visible: false,
             creation_after: Instant::now(),
+            fullscreen_hits: 0,
         }),
     });
     if SERVICE.set(service.clone()).is_err() {

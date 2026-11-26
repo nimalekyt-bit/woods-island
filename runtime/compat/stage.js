@@ -1,4 +1,8 @@
 // Compatibility application source; migrate components incrementally.
+import { compactIndicatorWidth } from '../controls/indicator-model';
+import { useLivePreview } from '../island/useLivePreview';
+import { HolidayEffects } from '../holidays/HolidayEffects';
+import { freeLicense } from '../free';
 import {
   C as e,
   G as t,
@@ -94,11 +98,14 @@ var g = o(t(), 1),
     home: n(`Раскрытый остров, «Главная»`, `The open island, Home`),
     through: n(`Сквозной режим`, `Through mode`),
   });
-function k({ scene: t, live: n, s: i, license: o, pausable: k = !0 }) {
+function k({ scene: t, live: stageLive, s: i, license: o = freeLicense, pausable: k = !0, actual = true }) {
+  const preview=useLivePreview(actual);
+  const realMedia=m(state=>actual?state.media:null),realLive=m(state=>actual?state.mediaLive:false),realBattery=m(state=>actual?state.battery:null),realShelf=m(state=>actual?state.shelf.length:0),realPeripherals=m(state=>actual?state.peripherals:null),realDesktop=m(state=>actual?state.vdesk:null),realLayout=m(state=>actual?state.layoutCode:''),realCaps=m(state=>actual?state.caps:false),realWeather=u(state=>actual?state.data:null),accent=m(state=>actual?state.accent:y);
   let A = i.moduleMedia !== !1,
-    j = (t === `music` || t === `home`) && A,
+    j = (t === `music` || t === `home` || t === 'current' && realLive) && A && (!actual || !!realMedia),
     M = t === `home` && A;
   ((0, g.useLayoutEffect)(() => {
+    if (actual) {m.setState({settings:i,license:o});s(i.clockFormat);return;}
     (m.setState({
       settings: i,
       license: o,
@@ -113,39 +120,42 @@ function k({ scene: t, live: n, s: i, license: o, pausable: k = !0 }) {
     }),
       s(i.clockFormat),
       u.setState({ data: o.pro ? x : null }));
-  }, [i, o]),
+  }, [i, o, actual]),
     (0, g.useLayoutEffect)(() => {
+      if (actual) return;
       m.setState({ media: S(), mediaLive: j });
-    }, [j]),
+    }, [j, actual]),
     (0, g.useLayoutEffect)(() => {
+      if (actual) return;
       let e = C();
       l.setState({ key: `stage`, status: `ready`, lyrics: e, widths: pe(e) });
-    }, []));
+    }, [actual]));
   let N = l((e) => (e.status === `ready` ? e.lineW : 0)),
-    P = f(be({ settings: i, license: o, mediaLive: j, media: j ? { playing: !0 } : null })),
+    P = f(be({ settings: i, license: o, mediaLive: j, media: j ? actual ? realMedia : { playing: !0 } : null })),
     F = i.characterSize === `large`,
     I = (() => {
       let e = r(i.mediaPill);
       return e === `lyrics` && i.lyrics !== !0 ? `title` : e;
     })(),
     L = {
+      compact: compactIndicatorWidth(i,realPeripherals),
       face: P.face === !0,
       character: P.kind === `slot`,
       clock: i.showClock !== !1,
       seconds: i.clockSeconds === !0,
-      battery: i.showBattery !== !1,
-      weather: o.pro && i.moduleWeather !== !1 && i.showWeather !== !1,
-      caps: !1,
-      layout: i.layoutInPill === !0,
-      desk: i.desktopInPill === !0 ? te(b).length : 0,
+      battery: i.showBattery !== !1 && (!actual || !!realBattery),
+      weather: o.pro && i.moduleWeather !== !1 && i.showWeather !== !1 && (!actual || !!realWeather),
+      caps: actual && realCaps && i.showCaps !== false,
+      layout: i.layoutInPill === !0 && (!actual || !!realLayout),
+      desk: i.desktopInPill === !0 ? actual ? realDesktop ? te(realDesktop).length : 0 : te(b).length : 0,
       dots: 0,
-      shelf: 0,
+      shelf: actual && i.moduleShelf !== false ? realShelf : 0,
     },
     [R, z] = M
       ? w
       : j
         ? I === `player`
-          ? ae({ ...L, seekable: !0, lyrics: i.lyrics === !0 && i.lyricsInPlayer !== !1 })
+          ? ae({ ...L, seekable: !actual || realMedia?.canSeek !== false && realMedia?.durationMs > 0, lyrics: i.lyrics === !0 && i.lyricsInPlayer !== !1 })
           : I === `lyrics`
             ? oe({ ...L, words: N })
             : I === `title`
@@ -154,7 +164,7 @@ function k({ scene: t, live: n, s: i, license: o, pausable: k = !0 }) {
         : ne({ ...L, slot: re(P.box, F ? 44 : void 0), big: F }),
     B = d(P.kind, i.liquidWith, o.pro),
     V = i.style === `capsule`,
-    H = V ? 8 : 0,
+    H = V && actual && i.garland && i.garland !== 'off' && i.snow !== 'off' ? 16 : V ? 8 : 0,
     U = Math.min(z / 2, M ? 32 : 26),
     W = le(i.theme, i.islandColor, window.matchMedia(`(prefers-color-scheme: light)`).matches),
     G = t === `through` || (i.through === !0 && !M),
@@ -171,9 +181,10 @@ function k({ scene: t, live: n, s: i, license: o, pausable: k = !0 }) {
     return (n.observe(e), () => n.disconnect());
   }, []);
   let Y = M ? 1 : (i.scale ?? 100) / 100,
-    Ce = Math.min(Y, (J - 28) / R, (154 - H) / z),
+    Ce = Math.max(0.01, Math.min(Y, (J - 36) / R, (154 - H) / z)),
     we = Math.min(J / 2, ((380 * (i.scale ?? 100)) / 100 / Math.max(window.screen.width, 800)) * J),
-    Te = ((i.offsetX ?? 0) / 100) * Math.max(0, J / 2 - we),
+    Te = Math.max(-Math.max(0, (J - R * Ce) / 2 - 16),
+      Math.min(Math.max(0, (J - R * Ce) / 2 - 16), ((i.offsetX ?? 0) / 100) * Math.max(0, J / 2 - we))),
     [Ee, X] = (0, g.useState)(!0);
   (0, g.useEffect)(() => {
     X(!0);
@@ -181,7 +192,7 @@ function k({ scene: t, live: n, s: i, license: o, pausable: k = !0 }) {
     return () => clearTimeout(e);
   }, [t, i, o.pro]);
   let [De, Z] = (0, g.useState)(!1),
-    Q = !n && !De && !Ee;
+    Q = !stageLive && !De && !Ee;
   (0, g.useEffect)(() => {
     if (k) return (h(`still`, Q), () => h(`still`, !1));
   }, [Q, k]);
@@ -197,13 +208,15 @@ function k({ scene: t, live: n, s: i, license: o, pausable: k = !0 }) {
               ? (0, _.jsx)(ce, {})
               : (0, _.jsx)(de, {})
         : (0, _.jsx)(me, {}),
-    $ = j ? `music` : `idle`,
+    $ = j && (!actual || realMedia?.playing) ? `music` : `idle`,
     Ae = W.color
       ? { "--color-island": W.color, ...(W.theme === `light` ? { "--color-black": W.color } : {}) }
       : {};
+  if (actual && !preview.ready) return _.jsx('div',{'data-live-preview-loading':true,className:'grid h-[180px] place-items-center rounded-2xl bg-[#1c1d22] text-[12px] text-white/50',children:preview.error?n('Не удалось загрузить остров','Could not load the island'):n('Загружаю остров…','Loading the island…')});
   return (0, _.jsxs)(`div`, {
     ref: q,
     "data-stage": t,
+    "data-stage-actual": actual || undefined,
     "data-stage-still": Q || void 0,
     onPointerEnter: () => Z(!0),
     onPointerLeave: () => Z(!1),
@@ -222,6 +235,8 @@ function k({ scene: t, live: n, s: i, license: o, pausable: k = !0 }) {
           style: { transformOrigin: `50% 0` },
           children: (0, _.jsxs)(c.div, {
             "data-island": !0,
+            "data-island-style": V ? 'capsule' : 'notch',
+            "data-island-theme": W.theme,
             className: `relative text-ink ${B ? `` : `bg-island`}`,
             initial: !1,
             animate: {
@@ -236,7 +251,8 @@ function k({ scene: t, live: n, s: i, license: o, pausable: k = !0 }) {
             transition: E,
             onUpdate: B ? () => se.postRender(p) : void 0,
             children: [
-              B && (0, _.jsx)(ye, { mood: $, accent: y, ears: !V, round: V, scaled: !0 }),
+              B && (0, _.jsx)(ye, { mood: $, accent, ears: !V, round: V, scaled: !0 }),
+              actual && _.jsx(HolidayEffects,{settings:i,width:R,height:z,capsule:V,visible:true,readMusicLevel:()=>m.getState().level??0}),
               P.kind === `attach` &&
                 (0, _.jsx)(ve, { id: P.id, mood: $, face: a(K) && (K !== `liveMedia` || I === `normal`) }),
               !V &&

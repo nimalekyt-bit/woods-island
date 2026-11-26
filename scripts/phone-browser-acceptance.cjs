@@ -43,11 +43,21 @@ async function verifyPhoneBrowser({directory} = {}) {
       await page.waitForFunction(color=>getComputedStyle(document.querySelector('[data-phone-panel]')).color===color,theme==='dark'?'rgb(255, 255, 255)':'rgb(23, 23, 26)');
       const stoppedColor=await page.locator('[data-phone-panel]').evaluate(e=>getComputedStyle(e).color);
       assert.equal(stoppedColor,theme==='dark'?'rgb(255, 255, 255)':'rgb(23, 23, 26)');
+      await page.evaluate(value=>window.setPhoneState(value),{running:true,permissionRequired:true,public:false});
+      await page.locator('[data-phone-notice]').waitFor();assert.equal(await page.locator('[data-phone-qr]').count(),0);
+      const permissionScreenshot=path.join(directory,`desktop-permission-${language}-${theme}.png`);await page.screenshot({path:permissionScreenshot});snapshots.push(permissionScreenshot);
+      await page.evaluate(()=>{window.phoneNext={running:true,permissionRequired:false,url:'http://127.0.0.1:32145/phone/#'+'a'.repeat(64),network:'Woods Wi-Fi'};});
+      await page.locator('[data-phone-firewall]').click();assert.equal((await page.evaluate(()=>window.phoneCalls)).at(-1).command,'phone_firewall');
+      await page.locator('[data-phone-qr] img').waitFor();
+      const qrBounds=await page.locator('[data-phone-qr]').boundingBox();assert.equal(qrBounds.width,94);assert.equal(qrBounds.height,94);
+      const qrScreenshot=path.join(directory,`desktop-qr-${language}-${theme}.png`);await page.screenshot({path:qrScreenshot});snapshots.push(qrScreenshot);
+      await page.evaluate(value=>window.setPhoneState(value),{running:false});
       await page.evaluate(value=>{window.phoneNext=value;}, {running:true,url:`http://127.0.0.1:32145/phone/#${token}`,network:'Woods Wi-Fi'});
       await page.locator('[data-phone-open]').click();await page.locator('[data-phone-qr] img').waitFor();
-      assert.equal((await page.evaluate(()=>window.phoneCalls))[0].command,'phone_start');
+      assert.equal((await page.evaluate(()=>window.phoneCalls)).at(-1).command,'phone_start');
       await page.evaluate(value=>window.setPhoneState(value),{running:true,pending:{id:token,device:name,expiresAt:Date.now()+120000}});
       await page.locator('[data-phone-allow]').waitFor();assert.equal(await page.locator('.wi-phone-panel header strong').textContent(),name);
+      const approvalScreenshot=path.join(directory,`desktop-approval-${language}-${theme}.png`);await page.screenshot({path:approvalScreenshot});snapshots.push(approvalScreenshot);
       await page.locator('[data-phone-allow]').click();assert.equal((await page.evaluate(()=>window.phoneCalls)).at(-1).args.id,token);
       await page.evaluate(value=>window.setPhoneState(value),{running:true,pending:{id:token,device:name,expiresAt:Date.now()+120000}});
       await page.locator('[data-phone-deny]').click();assert.equal((await page.evaluate(()=>window.phoneCalls)).at(-1).command,'phone_deny');
@@ -77,9 +87,16 @@ async function verifyPhoneBrowser({directory} = {}) {
       const mobileContext=await browser.newContext({locale:language,colorScheme:theme,viewport:{width:320,height:780},reducedMotion:'reduce'}),phone=await mobileContext.newPage();
       phone.on('pageerror',error=>exceptions.push(error.message));
       await phone.goto(origin+'/phone/#'+token);await phone.waitForFunction(()=>document.getElementById('connection-title').textContent.includes(document.documentElement.lang==='ru'?'Подтверди':'Approve'));
+      assert.equal(await phone.locator('.phone-top').evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(142, 162, 255)');
+      assert.equal(await phone.locator('.phone-bottom').evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(0, 0, 0)');
+      assert(await phone.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+      const pendingScreenshot=path.join(directory,`mobile-pending-${language}-${theme}.png`);await phone.screenshot({path:pendingScreenshot,fullPage:true});snapshots.push(pendingScreenshot);
       assert.equal(await phone.locator('#send-text').isDisabled(),true);
       approved=true;await phone.locator('#send-text').waitFor({state:'visible'});await phone.waitForFunction(()=>!document.getElementById('send-text').disabled);
       assert.equal(await phone.locator('#offered strong').textContent(),name);assert.equal(await phone.evaluate(()=>!!window.phoneXss),false);
+      await phone.locator('#pick-options').click();await phone.locator('#gallery-menu:not([hidden])').waitFor();assert.equal(await phone.locator('#pick-photos').isDisabled(),false);
+      await phone.locator('#photos').setInputFiles({name:'Фото.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64')});await phone.waitForFunction(()=>document.getElementById('message').textContent.includes('Фото.png'));
+      assert.equal(await phone.locator('#gallery-menu').isHidden(),true);
       await phone.locator('#text').fill('Woods: привет 你好');await phone.locator('#send-text').click();await phone.waitForFunction(()=>document.getElementById('text').value==='');assert.equal(receivedText,'Woods: привет 你好');
       await phone.locator('#offered button').click();await phone.waitForFunction(()=>document.getElementById('message').textContent.includes('<img'));assert.equal(acknowledgments,2,'Mobile acknowledgment retries only the short sender-record race');
       await phone.locator('#files').setInputFiles({name:'Документ 你好.txt',mimeType:'text/plain',buffer:Buffer.from('hello')});await phone.waitForFunction(()=>document.getElementById('message').textContent.includes('Документ'));assert(uploads>0);
@@ -89,7 +106,7 @@ async function verifyPhoneBrowser({directory} = {}) {
       await phone.locator('#disconnect').click();await phone.waitForFunction(()=>document.getElementById('send-text').disabled);await mobileContext.close();
     }
     assert.deepEqual(exceptions,[]);
-    const report={desktopApproval:true,desktopRpcControls:true,themes:['dark','light'],languages:['ru','en'],shelfArtwork:true,shelfKeyboardAndToolbar:true,shelfHorizontalWheel:true,mobile320px:true,mobileTextAndFile:true,mobileDownloadAck:true,mobileCancellation:true,xssEscaping:true,exceptions,snapshots};
+    const report={desktopWindowsPermissionStep:true,desktop94pxQr:true,desktopApproval:true,desktopRpcControls:true,themes:['dark','light'],languages:['ru','en'],shelfArtwork:true,shelfKeyboardAndToolbar:true,shelfHorizontalWheel:true,mobileReferenceHalves:true,mobile320px:true,mobileTextAndFile:true,mobileDownloadAck:true,mobileCancellation:true,xssEscaping:true,exceptions,snapshots};
     await fs.writeFile(path.join(directory,'report.json'),JSON.stringify(report,null,2)+'\n');return report;
   } finally {await browser?.close();await server.close();}
 }

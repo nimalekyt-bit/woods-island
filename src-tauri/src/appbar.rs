@@ -87,7 +87,7 @@ struct WindowData {
 }
 fn height(value: f64, scale: f64, zoom: f64, capsule: bool) -> i32 {
     let value = if value.is_finite() {
-        value.clamp(16., 96.)
+        value.clamp(16., 200.)
     } else {
         32.
     };
@@ -754,7 +754,7 @@ pub fn refresh() {
 pub fn set_pill_height(value: f64) {
     if let Some(service) = SERVICE.get() {
         let value = if value.is_finite() {
-            value.clamp(16., 96.)
+            value.clamp(16., 200.)
         } else {
             32.
         };
@@ -829,6 +829,7 @@ mod tests {
         assert_eq!(height(32., 1., 1., false), 32);
         assert_eq!(height(32., 2., 1.25, true), 100);
         assert_eq!(height(f64::NAN, 1., 1., false), 32);
-        assert_eq!(height(900., 1., 1., false), 96);
+        assert_eq!(height(900., 1., 1., false), 200);
+        assert_eq!(height(140., 2., 1.5, true), 444);
     }
 }

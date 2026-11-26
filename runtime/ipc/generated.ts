@@ -21,6 +21,8 @@ export interface Settings {
   releaseHotkeysInFullscreen: boolean;
   captureVisible: boolean;
   autoHide: boolean;
+  autoHideMusic: boolean;
+  hotkeyAutoHide: string;
   showOnDesktop: boolean;
   through: boolean;
   opacityThrough: number;
@@ -41,6 +43,9 @@ export interface Settings {
   clockFormat: string;
   showBattery: boolean;
   showPeripherals: boolean;
+  deviceBattery: string;
+  deviceBatteryLow: number;
+  loadInPill: string[];
   peripheralHidden: string[];
   peripheralLimit: number;
   peripheralUnknown: boolean;
@@ -176,7 +181,7 @@ export interface RustCommands {
   pets_import_codex: { args: {  }; result: JsonValue };
   pets_asset: { args: { id: string }; result: string };
   report_page_scale: { args: { width?: number | null }; result: void };
-  report_island_rect: { args: { x: number; y: number; w: number; h: number; expanded: boolean; tucked: boolean; through: boolean; attachmentRight?: number | null; attachmentBottom?: number | null }; result: JsonValue };
+  report_island_rect: { args: { x: number; y: number; w: number; h: number; expanded: boolean; tucked: boolean; through: boolean; attachmentRight?: number | null; attachmentBottom?: number | null; settling?: boolean | null }; result: JsonValue };
   web_ai_popped: { args: {  }; result: string | null };
   web_ai_open: { args: { service?: string | null }; result: boolean };
   web_ai_embed: { args: { service?: string | null; x?: number | null; y?: number | null; width?: number | null; height?: number | null; focus?: boolean | null; word?: number | null }; result: boolean };
@@ -231,6 +236,13 @@ export interface RustCommands {
   launcher_hotkeys_get: { args: {  }; result: string };
   launcher_hotkeys_set: { args: { json?: string | null }; result: Array<string> };
   controls_get: { args: {  }; result: JsonValue };
+  audio_mixer_get: { args: { refresh?: boolean | null }; result: Array<JsonValue> };
+  audio_mixer_set: { args: { id: string; level?: number | null; mute?: boolean | null }; result: boolean };
+  brightness_get: { args: {  }; result: Array<JsonValue> };
+  brightness_set: { args: { id: string; level: number }; result: Array<JsonValue> };
+  system_load_get: { args: {  }; result: JsonValue };
+  system_load_status: { args: {  }; result: JsonValue };
+  task_manager_open: { args: {  }; result: boolean };
   controls_set: { args: { what?: string | null; on?: boolean | null }; result: JsonValue };
   obs_state: { args: {  }; result: JsonValue };
   obs_password_set: { args: { password?: string | null }; result: boolean };
@@ -247,6 +259,7 @@ export interface RustCommands {
   clip_delete: { args: { id: number }; result: void };
   clip_clear: { args: {  }; result: void };
   clip_current_text: { args: {  }; result: string | null };
+  clip_text: { args: { id: number }; result: string };
   clip_set_text: { args: { text?: string | null }; result: boolean };
   clip_set_png: { args: { dataUrl?: string | null }; result: boolean };
   media_control: { args: { action?: string | null; playing?: boolean | null }; result: boolean };
@@ -254,6 +267,7 @@ export interface RustCommands {
   media_pick: { args: { id?: string | null }; result: boolean };
   media_rename: { args: { appId?: string | null; name?: string | null }; result: boolean };
   media_seek: { args: { ms?: number | null }; result: boolean };
+  media_cover_recover: { args: { key: string; failedCover: string }; result: boolean };
   lyrics_get: { args: { artist?: string | null; title?: string | null; album?: string | null; durationMs?: number | null }; result: JsonValue };
   player_volume: { args: {  }; result: JsonValue };
   player_volume_set: { args: { level?: number | null; mute?: boolean | null }; result: boolean };
@@ -277,6 +291,8 @@ export interface RustCommands {
   vpn_toggle_now: { args: {  }; result: boolean };
   theme_flip: { args: {  }; result: boolean };
   through_toggle: { args: {  }; result: boolean };
+  auto_hide_toggle: { args: {  }; result: boolean };
+  web_ai_permissions_reset: { args: { service?: string | null }; result: number };
   hover: { args: { state?: boolean | null }; result: boolean };
   island_tall: { args: { on?: boolean | null }; result: boolean };
   set_island_hidden: { args: { hidden?: boolean | null }; result: boolean };

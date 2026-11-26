@@ -1,21 +1,19 @@
 <div align="center">
 
-<img src="app-icon.svg" width="92" alt="Woods Island">
+<img src="app-icon.svg" width="96" alt="Woods Island">
 
 # Woods Island
 
 **Dynamic Island для Windows · 100% бесплатно · Woods Personal Corp**
 
 [![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011%20x64-18181b?style=flat-square)](https://github.com/nimalekyt-bit/woods-island/releases)
-[![Version](https://img.shields.io/badge/version-1.4.1-5b7cfa?style=flat-square)](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.4.1)
-![RU / EN](https://img.shields.io/badge/interface-RU%20%7C%20EN-18181b?style=flat-square)
+[![Version](https://img.shields.io/badge/version-1.4.2-b4b8ff?style=flat-square)](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.4.2)
+![RU / EN](https://img.shields.io/badge/interface-%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9%20%7C%20English-18181b?style=flat-square)
 ![Free](https://img.shields.io/badge/access-100%25%20free-2f9e66?style=flat-square)
 
-[**Скачать установщик 1.4.1**](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.4.1) · [**Что нового**](RELEASE_NOTES_1.4.1.md) · [**Сообщить об ошибке**](https://github.com/nimalekyt-bit/woods-island/issues/new/choose) · [**Telegram**](https://t.me/woodskilla)
+[**Скачать установщик 1.4.2**](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.4.2) · [**Что нового**](RELEASE_NOTES_1.4.2.md) · [**Сообщить об ошибке**](https://github.com/nimalekyt-bit/woods-island/issues/new/choose) · [**Telegram**](https://t.me/woodskilla)
 
 [**Сайт Woods Island**](https://island.woodslab.top/) · [**Портфолио автора**](https://me.woodslab.top/) · [**Woods Lab**](https://woodslab.top/) · [**support@woodslab.top**](mailto:support@woodslab.top)
-
-Telegram — основной канал обсуждения проектов; почта — для коротких обращений без больших вложений.
 
 </div>
 
@@ -25,121 +23,145 @@ Telegram — основной канал обсуждения проектов; 
 <summary><b>Русский</b></summary>
 <br>
 
-Чёрная динамическая пилюля у верхнего края экрана. Показывает музыку, погоду, заряд устройств,
-загрузки и работу ИИ-агентов, а по клику раскрывает полку с передачей с телефона, буфер обмена,
-заметки, ИИ и экранные инструменты.
-
 <div align="center">
-<img src="assets/readme/ru/home.png" width="860" alt="Woods Island: плеер, громкость, экранные инструменты и лаунчер">
+
+Жидкая чёрная пилюля у верхнего края экрана, которая показывает всё важное прямо сейчас<br>
+и по клику раскрывается в набор рабочих инструментов. Полностью бесплатно.
+
+<img src="assets/readme/ru/hero.png" width="860" alt="Woods Island на вкладке Главная: плеер, громкость, быстрые экранные инструменты и лаунчер">
+
 </div>
 
-## Что нового в 1.4.1
+## Что это
 
-- **Глубокая оптимизация CPU, GPU и RAM (без потерь в визуале):** медиаслужба Windows (GSMTC) переведена с постоянного опроса на события WinRT (`NPSMSvc` практически на нуле), убран постоянный `rAF`-пересчёт геометрии и лишние перерисовки атласов персонажей и жидкой пилюли, а фоновые циклы переходят в экономный режим в полноэкранных играх и при скрытом острове.
-- **Ввод с клавиатуры во встроенных веб-ИИ:** исправлен фокус окна при открытии ChatGPT, Gemini, Claude, DeepSeek, Grok и Qwen прямо внутри пилюли — текст теперь печатается сразу после клика.
-- **Стабильность watchdog в играх:** исправлены ложные перезапуски острова под высокой нагрузкой CPU и в полноэкранных приложениях.
+Woods Island живёт поверх всех окон, посередине верхнего края. Свёрнутый — это компактная пилюля с музыкой,
+погодой, таймером, нагрузкой ПК, микрофоном, загрузками и уведомлениями. Нажми на неё (или подведи курсор
+к верхнему краю) — и она плавно раскроется в панель: буфер обмена, полка с передачей с телефона по QR,
+инструменты текста, чат с ИИ, заметки, погода, центр управления и командная строка.
 
-### Из крупного обновления 1.4.0
+Остров не забирает фокус клавиатуры у окна, в котором ты работаешь — клик по записи буфера вставляет её
+прямо туда, где стоял курсор.
 
-- **Передача с телефона по QR (Wi-Fi):** отправляй фото, видео, файлы (до 256 МБ) и текст с iPhone или Android прямо на полку и в буфер Windows без облака и установки приложений. Поддерживается сохранение сессии и автопереподключение после перезапуска Woods Island.
-- **Режим выреза (Notch Bar):** опциональная верхняя полоса (AppBar) в стилях *Чёрная*, *Стекло* или *Обои*, чтобы развёрнутые окна начинались аккуратно под островом.
-- **Праздники и экранный снег:** мягкая снежная шапка на пилюле, гирлянда в такт музыке и отдельное окно падающего снега поверх экрана без мерцания.
-- **Пять сезонных персонажей Woods:** Снеговик, Дед Мороз, Снегирь, Пряник и Олень — теперь в Woods Island **41 встроенный персонаж** (+ 9 опциональных питомцев Codex).
-- **Звук и плееры:** захват звука конкретного плеера (WASAPI Process Loopback), поддержка AIMP/Winamp, резолвер PWA/Firefox и скрытие ненужных источников.
-- **Погода и города:** до 8 сохранённых городов с быстрым переключением, IANA часовыми поясами и автоматическим резервным источником (MET Norway + Open-Meteo).
-- **Умные интеграции и надёжность:** ChatGPT во встроенном окне Web AI, сохранение хуков агентов (Claude Code / Codex / OpenCode), календарь и напоминания, системный трей и watchdog-автовосстановление.
+<div align="center">
+<img src="assets/readme/demo-ru.webp" width="760" alt="Демонстрация Woods Island 1.4.2: музыка и 24-полосный эквалайзер, Главная, Буфер, Полка и телефон по QR, Текст, Чат с ИИ, Заметка, Погода, Центр управления, Командная строка, Праздники и Светлая тема">
+</div>
 
 ## Пилюля живая
 
-Музыка, обложка, текст песен и прогресс трека. Часы, таймер, микрофон, запись экрана,
-загрузки браузеров/торрентов, OBS, Steam и работа ИИ-агентов. Край острова реагирует на реальный звук
-через WASAPI (включая захват только активного плеера): низкие и высокие частоты, цвет обложки и движение жидкости.
+Сам остров — из ферромагнитной жидкости. Его нижний край тянется к курсору, пульсирует 24-полосным
+эквалайзером в цвет обложки трека (через WASAPI Loopback, включая захват только активного плеера) и мягко
+успокаивается в тишине.
 
-GSMTC подключает обычные Windows-плееры, AIMP/Winamp работают напрямую, а Яндекс Музыка Mod — через
-Woods-коннектор. Остров раскрывается по клику; размер меняется от **80 до 200%**, есть автоскрытие и
-режим выреза сверху экрана. Область вокруг острова пропускает клики к окнам под ним.
+<div align="center">
+<img src="assets/readme/ru/live-pills.png" width="860" alt="Состояния пилюли: жидкий остров, часы и заряд, музыка и 24-полосный эквалайзер, нагрузка ПК и периферия, таймер с подписью, микрофон и камера, голос в текст, запись экрана, загрузка, файлы на полке, персонаж, снег и гирлянда">
+</div>
+
+События аккуратно появляются сами и сворачиваются обратно через пару секунд:
+
+<div align="center">
+<img src="assets/readme/ru/live-cards.png" width="860" alt="Карточки событий: напоминание, таймер, надиктованный текст, скриншот, пипетка, готовая загрузка, заряд наушников, VPN">
+</div>
+
+Музыка с 24-полосным эквалайзером и синхронизированным текстом песен · голосовой ввод · напоминания и таймеры с
+подписями · загрузки браузеров, торрентов и Steam · точки микрофона и камеры с быстрым мьютом · громкость
+колёсиком мыши · раскладка и Caps Lock · заряд наушников и мышей (включая DAREU A950 Air V3 и ручной замер
+Logitech G435) · нагрузка CPU/GPU/RAM/сети · уведомления Windows · VPN со страной и IP · запись экрана и OBS ·
+статусы ИИ-агентов (Claude Code, Codex, OpenCode).
+
+Если пилюля мешает вкладкам браузера, есть три решения: **автоскрытие** (выезжает при наведении к верхнему краю
+или по хоткею), **список программ** (прячется в полноэкранных играх и выбранных окнах) и **режим выреза
+(Notch Bar)** как на MacBook — развёрнутые окна начинаются аккуратно под островом.
+
+<div align="center">
+<img src="assets/readme/ru/auto-hide.png" width="860" alt="Автоскрытие: остров скрыт, курсор у верхнего края, остров выезжает">
+</div>
 
 ## 41 встроенный персонаж + 9 питомцев Codex
 
-Жидкий остров, Пиксель, Искра, Глазки, медуза, костёр, хомяк, **5 сезонных персонажей Woods**
-(Снеговик, Дед Мороз, Снегирь, Пряник, Олень) и **11 авторских пиксельных питомцев Woods**:
-Складень, Узелок, Лунный Нокт, Нуль, Парадокс, Искорка, Кряжик, Нокт, Латунчик, Шурш и Скол.
-У каждого восемь анимаций, моргание и живая реакция на музыку, курсор и события.
-Выбирай в **Настройки → Персонаж** — всё доступно бесплатно без ключей и подписок.
+Жидкий остров включён по умолчанию. Если хочется компании — в **Настройки → Персонаж** ждёт **41 встроенный
+персонаж** с живым предпросмотром: Пиксель, Хвост, Остров на ножках, Медуза, Костёр, Хомяк, 5 сезонных
+персонажей (Снеговик, Дед Мороз, Снегирь, Пряник, Олень) и **11 авторских пиксельных питомцев Woods**
+(Складень, Узелок, Лунный Нокт, Нуль, Парадокс, Искорка, Кряжик, Нокт, Латунчик, Шурш, Скол).
+У каждого — живые реакции на музыку, ИИ, события и курсор. Всё бесплатно без ключей и подписок.
 
 <div align="center">
-<img src="assets/readme/characters.webp" width="812" alt="Персонажи Woods Island">
+<img src="assets/readme/characters.webp" width="812" alt="Персонажи Woods Island и их реакции">
 </div>
 
-Девять дополнительных питомцев Codex подключаются из установленного на этом ПК приложения
-(**Импортировать из установленного Codex**). Их атласы хранятся только локально в профиле;
-все 41 встроенных персонажей работают независимо от Codex.
+Девять опциональных питомцев Codex можно импортировать локально из установленного приложения Codex — их атласы
+хранятся только в твоём профиле.
 
 ## Погода и города
 
-Сейчас, следующие 24 часа и прогноз на 7 дней: ветер, влажность, давление, осадки, точка росы и восход/закат.
-Поддерживается до 8 сохранённых городов в один клик, точные IANA часовые пояса и автоматический резерв
-(MET Norway с fallback на Open-Meteo), поэтому прогноз загружается стабильно без API-ключей.
+Погода сейчас на фоне подходящего неба, прогноз по часам и на 7 дней вперёд, плюс карточки ветра, влажности,
+давления, солнца, осадков и УФ-индекса. До 8 сохранённых городов с переключением в один клик, точные IANA
+часовые пояса и автоматический резерв (MET Norway + Open-Meteo) без API-ключей.
 
 <div align="center">
-<img src="assets/readme/ru/weather.png" width="760" alt="Погодная панель Woods Island">
+<img src="assets/readme/ru/tab-weather.png" width="760" alt="Вкладка Погода в Woods Island: прогноз сейчас, по часам, на неделю, ветер, влажность, давление, солнце, осадки и УФ-индекс">
 </div>
-
-## Заряд устройств
-
-На главной — строка периферии и подробная карточка. Для поддерживаемых моделей (включая DAREU A950 Air V3)
-доступен автоматический заряд, имена, видимость и уведомления. Logitech G435 через LIGHTSPEED измеряется
-вручную с предупреждением о паузе звука; FL680 отображается без процента.
-[Поддерживаемые устройства и ограничения](docs/peripheral-support.md).
 
 ## Что внутри
 
 <table>
 <tr>
-<td width="50%" valign="top"><img src="assets/readme/ru/clipboard.png" alt="Буфер"><br><b>Буфер.</b> История текста, изображений и файлов, поиск и закрепление. Локальное хранение в SQLite.</td>
-<td width="50%" valign="top"><img src="assets/readme/ru/shelf.png" alt="Полка"><br><b>Полка и телефон.</b> Перетащи файлы на остров или отправь с телефона по QR через Wi-Fi. Превью и сохранность между перезапусками.</td>
+<td width="50%" valign="top">
+<img src="assets/readme/ru/tab-clipboard.png" alt="Вкладка Буфер обмена">
+<b>Буфер обмена.</b> История текста, изображений и файлов с поиском и закреплением в локальном SQLite. Клик вставляет запись в активное окно; текст можно превратить в QR-код.
+</td>
+<td width="50%" valign="top">
+<img src="assets/readme/ru/tab-shelf.png" alt="Вкладка Полка и передача с телефона по QR">
+<b>Полка и телефон по QR.</b> Бросай файлы на остров или отправляй фото, видео и текст с iPhone/Android по QR через домашний Wi-Fi без облака и установки приложений. Сессия сохраняется между перезапусками.
+</td>
 </tr>
 <tr>
-<td valign="top"><img src="assets/readme/ru/text.png" alt="Текст"><br><b>Текст.</b> Раскладка, регистр, транслитерация, JSON, Base64, URL, QR (6 стилей) и действия ИИ.</td>
-<td valign="top"><img src="assets/readme/ru/chat.png" alt="Чат"><br><b>ИИ и Web AI.</b> Документы, изображения, потоковые ответы, свой API-ключ, локальная модель или встроенный ChatGPT.</td>
+<td valign="top">
+<img src="assets/readme/ru/tab-text.png" alt="Вкладка Текст">
+<b>Текст.</b> Исправление раскладки, регистр, транслитерация, JSON, Base64, URL, стилизованные QR-коды (6 стилей) и действия ИИ: перевод, правка, сокращение, объяснение, ответ.
+</td>
+<td valign="top">
+<img src="assets/readme/ru/tab-chat.png" alt="Вкладка Чат с ИИ">
+<b>Чат и Web AI.</b> Диалог с ИИ с вложением картинок и документов (PDF, Word, Excel, PowerPoint), диктовка голосом, свой API-ключ / Ollama или встроенные ChatGPT, Gemini и DeepSeek в пилюле и отдельном окне.
+</td>
 </tr>
 <tr>
-<td valign="top"><img src="assets/readme/ru/note.png" alt="Заметки и Obsidian"><br><b>Заметки, календарь и Obsidian.</b> Форматирование, папки, таймер, напоминания и экспорт Markdown в выбранный vault.</td>
-<td valign="top"><img src="assets/readme/ru/controls.png" alt="Управление"><br><b>Управление.</b> Звук, микрофон, сеть, тема Windows, системный трей и быстрые действия.</td>
+<td valign="top">
+<img src="assets/readme/ru/command-bar.png" alt="Командная строка Alt+Space">
+<b>Командная строка.</b> Программы, файлы, калькулятор, конвертер величин и валют, веб-поиск, таймеры («таймер 25 мин Отчёт»), напоминания, управление системой и команды cmd/PowerShell через <code>&gt;</code>. <code>Alt+Space</code>.
+</td>
+<td valign="top">
+<img src="assets/readme/ru/tab-note.png" alt="Вкладка Заметка, таймер и напоминания">
+<b>Заметка, таймер и напоминания.</b> Автосохраняемые заметки с форматированием, чек-листами, папками и экспортом в Obsidian, плюс таймер с подписью и напоминания одной фразой.
+</td>
+</tr>
+<tr>
+<td valign="top">
+<img src="assets/readme/ru/tab-controls.png" alt="Вкладка Центр управления">
+<b>Центр управления.</b> Wi-Fi, Bluetooth, Ethernet, тёмная тема, VPN, живая нагрузка CPU/GPU/RAM/сети, микшер приложений и яркость каждого поддерживаемого монитора (DDC/CI).
+</td>
+<td valign="top">
+<img src="assets/readme/ru/light.png" alt="Светлая тема Woods Island">
+<b>Темы, масштаб и праздники.</b> Тёмная, светлая или системная тема, любой цвет пилюли, масштаб 80–200%, снежная шапка, гирлянда по контуру в такт музыке и падающий снег поверх всего экрана.
+</td>
 </tr>
 </table>
 
-### Рабочие инструменты
+## Что нового в 1.4.2
 
-- Скриншоты области и экрана, редактор с разметкой и 6 стилями QR-кодов.
-- Windows OCR, распознавание QR и пипетка цвета с историей.
-- Запись MP4/GIF и системного звука через WASAPI/FFmpeg.
-- Командная строка (`Alt+Space`), голосовой ввод, поиск, калькулятор, ярлыки и группы лаунчера.
-- Статусы OBS, Steam, браузерных/торрент-загрузок и ИИ-агентов (Claude Code / Codex / OpenCode).
-- Темы, прозрачность, мультимониторность, масштаб, автоскрытие, режим выреза и настройка всех хоткеев.
-
-### Всё доступно без подписки Woods Island
-
-Персонажи, телефон по QR, режим выреза, праздники, погода, OCR, запись и ИИ открыты полностью бесплатно.
-Оплата внешнего ИИ зависит только от твоего провайдера.
+- **Плавность 165 FPS без фризов:** убраны GPU-фризы Skia Graphite (Dawn D3D12) на первом открытии и переключениях вкладок, синхронные IPC переведены в фоновый пул, убран лишний ресайз окна при открытии/закрытии, гирлянда залочена на контур пилюли без отставания.
+- **24-полосный эквалайзер 30 Гц с адаптивным AGC:** живая жидкая волна и 4-зонный мини-эквалайзер в цвет обложки с чистым затуханием в тишине; улучшен поиск синхронизированных текстов песен (LRCLIB fallback).
+- **Центр управления и устройства:** адаптивные карточки, микшер приложений, яркость мониторов (DDC/CI), нагрузка CPU/GPU/RAM/сети по требованию, подписи таймеров и компактный заряд периферии ([подробности](docs/peripheral-support.md)).
+- **Телефон по QR, полка и экранный снег:** обновлённый интерфейс телефона, статус сети и подтверждения, карточки и превью файлов на полке, исправленный полноэкранный снег и прозрачность кликов в зоне свечения.
+- **Полный список изменений:** [RELEASE_NOTES_1.4.2.md](RELEASE_NOTES_1.4.2.md).
 
 ## Установка
 
-Скачай **Woods-Island-1.4.1-windows-x64-Setup.exe** из
-[релиза v1.4.1](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.4.1),
-пройди установку и запусти Woods Island через ярлык. Требуются **Windows 10/11 x64**.
-FFmpeg для MP4/GIF входит в комплект. Если WebView2 Runtime отсутствует, установщик загрузит его у Microsoft.
-
-Начиная с 1.2.0 установленное приложение проверяет и загружает обновления автоматически с проверкой цифровой подписи.
-Установщик пока без EV-сертификата Windows, поэтому SmartScreen может показать предупреждение — перед запуском сверь
-SHA256 с **SHA256SUMS.txt** в релизе.
-
-Для запуска без установки доступен **Woods-Island-1.4.1-windows-x64-portable.zip**:
-распакуй и запусти `woods-island.exe`, сохранив папку `bin` рядом.
+Скачай **Woods-Island-1.4.2-windows-x64-Setup.exe** из
+[релиза v1.4.2](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.4.2) (**Windows 10/11 x64**).
+FFmpeg для записи MP4/GIF уже в комплекте; автообновления проверяют цифровую подпись. Перед запуском можно сверить
+SHA256 с **SHA256SUMS.txt**. Также доступен портативный архив **Woods-Island-1.4.2-windows-x64-portable.zip**.
 
 ### Горячие клавиши
-
-Все сочетания меняются в настройках.
 
 | Действие | Сочетание |
 |---|---|
@@ -153,86 +175,150 @@ SHA256 с **SHA256SUMS.txt** в релизе.
 
 ### Приватность и локальное хранение
 
-Настройки, SQLite, полка и заметки хранятся локально в `%APPDATA%\woods-island`.
-Ключи и токен сессии телефона шифруются через Windows DPAPI. Локальная передача с телефона работает строго внутри твоей Wi-Fi сети без внешних серверов.
+Настройки, SQLite буфера, полка и заметки хранятся локально в `%APPDATA%\woods-island`. Ключи ИИ и токен сессии
+телефона шифруются Windows DPAPI. Передача с телефона работает строго внутри локальной Wi-Fi сети без облаков.
 
 </details>
 
 <details>
-<summary><b>English</b> · click to read</summary>
+<summary><b>English</b> · click to read in English</summary>
 <br>
 
-A black dynamic pill at the top of your Windows screen. Live media, weather, device batteries,
-downloads and AI agent statuses stay visible; a click expands the shelf with Wi-Fi phone transfer,
-clipboard, notes, AI and screen tools — 100% free.
-
 <div align="center">
-<img src="assets/readme/en/home.png" width="860" alt="Woods Island Home: player, volume, screen tools and launcher">
+
+A liquid black pill at the top of your screen that shows what is happening right now<br>
+and expands into a complete toolbox on click. 100% free.
+
+<img src="assets/readme/en/hero.png" width="860" alt="Woods Island on the Home tab: music player, volume, quick screen tools and launcher">
+
 </div>
 
-## What's new in 1.4.1
+## What it is
 
-- **Deep CPU, GPU & RAM optimization (zero visual compromises):** Windows media integration (GSMTC) moved from continuous polling to native WinRT events (virtually eliminating `NPSMSvc` overhead), continuous layout polling and redundant character/liquid DOM redraws were eliminated, and background loops enter low-power mode during fullscreen games or while hidden.
-- **Keyboard input in embedded Web AI:** fixed window activation and WebView2 focus when opening ChatGPT, Gemini, Claude, DeepSeek, Grok or Qwen inside the pill so typing works immediately on click.
-- **Watchdog stability in games:** eliminated false self-restarts under heavy CPU load and in fullscreen apps.
+Woods Island lives above every window at the top center of your Windows desktop. Collapsed, it stays compact
+with your music, weather, timer, PC load, microphone/camera indicators, downloads and notifications. Click it
+(or reach the top edge) and it expands smoothly into clipboard history, a file shelf with Wi-Fi QR phone
+transfer, text tools, AI chat, notes, weather, a control centre and a command bar.
 
-### Highlights from 1.4.0
-
-- **QR Phone Transfer over Wi-Fi:** send photos, videos, files (up to 256 MB) and clipboard text from iPhone/Android directly to the Windows shelf without any cloud or mobile app, with persistent session auto-reconnect across app restarts.
-- **Notch Bar Mode (AppBar):** optional MacBook-style top strip (*Black*, *Glass*, or *Wallpaper*) so maximized windows start cleanly below the island.
-- **Holidays & Screen Snow:** soft snow cap on the pill, music-reactive garland and an independent click-through full-screen snow layer.
-- **Five Seasonal Woods Characters:** Snowman, Frost, Bullfinch, Gingerbread and Reindeer — **41 built-in characters** total (+ 9 optional local Codex pets).
-- **Audio & Players:** per-app WASAPI Process Loopback, AIMP/Winamp support, PWA/Firefox name resolution and hidden media sources.
-- **Multi-city Weather:** switch up to 8 saved cities with IANA timezones and automatic MET Norway + Open-Meteo resilience.
-- **Integrations & Reliability:** built-in ChatGPT Web AI, persistent agent hooks (Claude Code / Codex / OpenCode), calendar reminders, system tray and watchdog self-recovery.
-
-## A living island
-
-The liquid edge responds to real WASAPI audio (including per-app loopback) and album artwork.
-Windows players use GSMTC, AIMP/Winamp work natively, and Yandex Music Mod connects via the Woods connector.
-Resize from **80 to 200%**, enable auto-hide or top Notch Bar, and pick from **41 built-in characters**,
-all completely free without keys or subscriptions.
+It never steals keyboard focus from the window you are typing in, so clicking a clipboard entry pastes directly
+where your caret is.
 
 <div align="center">
-<img src="assets/readme/characters.webp" width="812" alt="Woods Island characters">
+<img src="assets/readme/demo-en.webp" width="760" alt="Woods Island 1.4.2 walkthrough: music and 24-band equalizer, Home, Clipboard, Shelf and QR phone transfer, Text, AI Chat, Note, Weather, Control Center, Command Bar, Holidays and Light theme">
 </div>
 
-Nine optional Codex pets can be imported locally from an installed Codex app; their atlases remain only
-in your local profile and all 41 built-in characters work independently.
+## The pill is alive
 
-## Weather & Peripheral Batteries
+Its liquid bottom edge reaches toward your cursor and reacts to real audio with a 24-band 30 Hz AGC equalizer
+tinted to the album cover (via WASAPI Loopback, including per-app capture), settling cleanly to zero in silence.
 
-Current conditions, 24-hour and 7-day forecasts for up to 8 saved cities with automatic MET Norway / Open-Meteo
-fallback and IANA DST timezones. Peripheral telemetry supports automatic battery tracking (e.g., DAREU A950 Air V3),
-manual LIGHTSPEED measurement for Logitech G435 and presence display for FL680 ([details](docs/peripheral-support.md)).
+<div align="center">
+<img src="assets/readme/en/live-pills.png" width="860" alt="Live pill states: liquid island, clock and battery, music and 24-band equalizer, PC load and device battery, labeled timer, microphone and camera, voice to text, screen recording, download, shelf files, character, snow and garland">
+</div>
+
+Live event cards appear on their own and fold away cleanly:
+
+<div align="center">
+<img src="assets/readme/en/live-cards.png" width="860" alt="Live event cards: reminder, timer done, dictated text, screenshot, color picker, finished download, low headphones battery, VPN">
+</div>
+
+Music with synced lyrics · voice dictation · labeled timers and reminders · browser, torrent & Steam downloads ·
+mic/camera dots with one-click mute · mouse-wheel volume · keyboard layout & Caps Lock · peripheral battery
+levels (DAREU A950 Air V3, manual Logitech G435 LIGHTSPEED, and more) · CPU/GPU/RAM/network load · Windows
+notifications · VPN country/IP · screen recording & OBS · AI agent hooks (Claude Code, Codex, OpenCode).
+
+Need it out of the way of browser tabs? Use **Auto-hide**, **per-app hiding**, or **Notch Bar mode** (AppBar)
+so maximized windows start cleanly below the island.
+
+<div align="center">
+<img src="assets/readme/en/auto-hide.png" width="860" alt="Auto-hide: island hidden, cursor at the top edge, island emerges">
+</div>
+
+## 41 built-in characters + 9 optional Codex pets
+
+Liquid island is the default, and **Settings → Character** offers **41 built-in characters** with live
+previews: Pixel, Tail, Legs, Jellyfish, Campfire, Hamster, 5 seasonal characters (Snowman, Frost, Bullfinch,
+Gingerbread, Reindeer) and **11 original Woods pixel pets** — all completely free without subscriptions.
+
+<div align="center">
+<img src="assets/readme/characters.webp" width="812" alt="Woods Island characters and animations">
+</div>
+
+Nine optional Codex pets can be imported locally from an installed Codex app; their atlases stay strictly in
+your local profile.
+
+## Weather & Cities
+
+Current sky and conditions, 24-hour and 7-day forecasts, plus wind, humidity, pressure, sun arc, precipitation
+and UV tiles. Switch up to 8 saved cities in one click with IANA timezones and automatic MET Norway +
+Open-Meteo fallback — zero API keys required.
+
+<div align="center">
+<img src="assets/readme/en/tab-weather.png" width="760" alt="Woods Island Weather tab: current conditions, hourly forecast, wind, humidity, pressure, sun, precipitation and UV index">
+</div>
 
 ## Inside
 
 <table>
 <tr>
-<td width="50%" valign="top"><img src="assets/readme/en/clipboard.png" alt="Clipboard"><br><b>Clipboard.</b> Local SQLite history of text, images and files with search and pins.</td>
-<td width="50%" valign="top"><img src="assets/readme/en/shelf.png" alt="Shelf"><br><b>Shelf & Phone.</b> Drop files or transfer from your phone over local Wi-Fi via QR code.</td>
+<td width="50%" valign="top">
+<img src="assets/readme/en/tab-clipboard.png" alt="Clipboard tab">
+<b>Clipboard.</b> Local SQLite history of text, images and files with search, pins, one-click paste and instant QR generation.
+</td>
+<td width="50%" valign="top">
+<img src="assets/readme/en/tab-shelf.png" alt="Shelf and Wi-Fi phone transfer tab">
+<b>Shelf &amp; phone via QR.</b> Drop files on the island or send photos, videos and text from iPhone/Android over local Wi-Fi via QR — no cloud, no mobile app, persistent reconnect across restarts.
+</td>
 </tr>
 <tr>
-<td valign="top"><img src="assets/readme/en/text.png" alt="Text tools"><br><b>Text.</b> Layout, case, transliteration, JSON, Base64, URLs, styled QR codes and AI actions.</td>
-<td valign="top"><img src="assets/readme/en/chat.png" alt="AI chat"><br><b>AI & Web AI.</b> Streaming chat with files/images, your own API key, local model or built-in ChatGPT.</td>
+<td valign="top">
+<img src="assets/readme/en/tab-text.png" alt="Text tools tab">
+<b>Text.</b> Layout fix, case, transliteration, JSON, Base64, URLs, 6 styled QR presets and AI actions (translate, fix, shorten, explain, reply).
+</td>
+<td valign="top">
+<img src="assets/readme/en/tab-chat.png" alt="AI Chat tab">
+<b>AI Chat &amp; Web AI.</b> Context-aware AI chat with image/document attachments (PDF, Word, Excel, PowerPoint), voice input, your own API key / Ollama, or built-in ChatGPT, Gemini &amp; DeepSeek.
+</td>
 </tr>
 <tr>
-<td valign="top"><img src="assets/readme/en/note.png" alt="Notes and Obsidian"><br><b>Notes, Calendar & Obsidian.</b> Formatting, folders, timers, reminders and explicit Markdown export.</td>
-<td valign="top"><img src="assets/readme/en/controls.png" alt="Controls"><br><b>Controls.</b> Audio, microphone, network, Windows theme, system tray and quick actions.</td>
+<td valign="top">
+<img src="assets/readme/en/command-bar.png" alt="Command bar Alt+Space">
+<b>Command bar.</b> Launch apps, search files, calculate, convert units &amp; currencies, start labeled timers, set reminders, control system toggles or run shell commands after <code>&gt;</code>. <code>Alt+Space</code>.
+</td>
+<td valign="top">
+<img src="assets/readme/en/tab-note.png" alt="Notes, timer and reminders tab">
+<b>Notes, timer &amp; reminders.</b> Auto-saving formatted notes with checklists, folders and Obsidian Markdown export alongside a labeled timer and natural-language reminders.
+</td>
+</tr>
+<tr>
+<td valign="top">
+<img src="assets/readme/en/tab-controls.png" alt="Control center tab">
+<b>Control center.</b> Wi-Fi, Bluetooth, Ethernet, dark mode, VPN, on-demand CPU/GPU/RAM/network load, per-app audio mixer and DDC/CI display brightness.
+</td>
+<td valign="top">
+<img src="assets/readme/en/light.png" alt="Light theme">
+<b>Themes, scale &amp; holidays.</b> Dark, light or system theme, custom pill color, 80–200% scale, pill snow cap, contour-synced music garland and full-screen click-through snow.
+</td>
 </tr>
 </table>
 
+## What's new in 1.4.2
+
+- **Zero-freeze 165 FPS smoothness:** eliminated WebView2 Skia Graphite shader-compile stalls on first open and tab switching, moved sync IPC commands off the UI thread, eliminated open/close window resize churn, and frame-locked holiday garland to the liquid contour.
+- **24-band 30 Hz AGC equalizer:** responsive liquid wave and 4-zone mini equalizer tinted to album artwork with clean silence decay, plus improved LRCLIB synced lyrics fallback.
+- **Control center & devices:** adaptive cards, per-app audio mixer, DDC/CI monitor brightness, demand-driven CPU/GPU/RAM/network readings, labeled timers and compact peripheral batteries ([details](docs/peripheral-support.md)).
+- **Phone QR, shelf & full-screen snow:** refreshed phone panel with network/approval states, file preview cards on shelf, fixed full-screen snow overlay and click-through visual overscan.
+- **Full release notes:** [RELEASE_NOTES_1.4.2.md](RELEASE_NOTES_1.4.2.md).
+
 ## Install
 
-Download **Woods-Island-1.4.1-windows-x64-Setup.exe** from
-[release v1.4.1](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.4.1) (Windows 10/11 x64).
-FFmpeg is bundled for MP4/GIF capture; built-in updates verify signatures automatically.
-Compare SHA256 against **SHA256SUMS.txt** before running.
-A standalone **Woods-Island-1.4.1-windows-x64-portable.zip** is also provided.
+Download **Woods-Island-1.4.2-windows-x64-Setup.exe** from
+[release v1.4.2](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.4.2) (**Windows 10/11 x64**).
+FFmpeg is bundled for MP4/GIF capture and signed auto-updates are built in. Verify SHA256 against
+**SHA256SUMS.txt**, or use **Woods-Island-1.4.2-windows-x64-portable.zip**.
 
-Settings, SQLite and notes live locally in `%APPDATA%\woods-island`; API keys and phone session tokens are
-protected with Windows DPAPI.
+Settings, SQLite history and notes stay local in `%APPDATA%\woods-island`; API keys and phone session tokens
+are protected with Windows DPAPI.
 
 </details>
 

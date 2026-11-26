@@ -14,6 +14,7 @@ export const api: {
     o?: boolean,
     attachmentRight?: number,
     attachmentBottom?: number,
+    settling?: boolean,
   ) => Promise<Commands["report_island_rect"]["result"]>;
   uploadImage: (e: string | null) => Promise<Commands["upload_image"]["result"]>;
   notchPill: (e: number) => Promise<Commands["notch_pill"]["result"]>;
@@ -224,8 +225,8 @@ export const api: {
   editorSave: (e: string | null, t: boolean | null) => Promise<Commands["editor_save"]["result"]>;
 } = {
   bootstrap: () => T(`bootstrap`),
-  reportRect: (e, t, n, r, i, a = !1, o = !1, attachmentRight = 0, attachmentBottom = 0) =>
-    T(`report_island_rect`, { x: e, y: t, w: n, h: r, expanded: i, tucked: a, through: o, attachmentRight, attachmentBottom }),
+  reportRect: (e, t, n, r, i, a = !1, o = !1, attachmentRight = 0, attachmentBottom = 0, settling = !0) =>
+    T(`report_island_rect`, { x: e, y: t, w: n, h: r, expanded: i, tucked: a, through: o, attachmentRight, attachmentBottom, settling }),
   uploadImage: (e) => T(`upload_image`, { path: e }),
   notchPill: (e) => T(`notch_pill`, { height: e }),
   notchState: () => T(`notch_state`),

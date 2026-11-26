@@ -6,8 +6,8 @@ use windows::Win32::{
         Gdi::{EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITORINFO, MONITORINFOEXW},
     },
     UI::WindowsAndMessaging::{
-        GetClassNameW, GetForegroundWindow, GetWindowRect, IsIconic, IsWindowVisible,
-        MONITORINFOF_PRIMARY,
+        GetClassNameW, GetForegroundWindow, GetWindowRect, GetWindowThreadProcessId, IsIconic,
+        IsWindowVisible, MONITORINFOF_PRIMARY,
     },
 };
 #[link(name = "shcore")]
@@ -94,6 +94,12 @@ pub fn fullscreen(monitor: &Monitor, island: HWND) -> bool {
             || !IsWindowVisible(foreground).as_bool()
             || IsIconic(foreground).as_bool()
         {
+            return false;
+        }
+        // Never treat any window of our own process (snow overlay, settings, Web AI) as fullscreen.
+        let mut fg_pid = 0u32;
+        GetWindowThreadProcessId(foreground, Some(&mut fg_pid));
+        if fg_pid == std::process::id() {
             return false;
         }
         let mut class = [0u16; 256];

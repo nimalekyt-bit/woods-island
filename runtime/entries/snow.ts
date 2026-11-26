@@ -1,3 +1,4 @@
+import '../frame-guard';
 import { listen } from '@tauri-apps/api/event';
 import { snowDensity } from '../holidays/model';
 
@@ -25,19 +26,32 @@ function flake(initial:boolean):Flake{
   return {x:Math.random()*width,y:initial?Math.random()*height:-12-Math.random()*32,r:.8+z*2.3,v:18+z*52,phase:Math.random()*Math.PI*2,z};
 }
 function resize(){
-  width=window.innerWidth;height=window.innerHeight;scale=Math.max(1,Math.min(2,window.devicePixelRatio||1));
-  canvas.width=Math.ceil(width*scale);canvas.height=Math.ceil(height*scale);
-  canvas.style.width=`${width}px`;canvas.style.height=`${height}px`;sprites.clear();
+  const nextWidth=window.innerWidth,nextHeight=window.innerHeight,nextScale=Math.max(1,Math.min(2,window.devicePixelRatio||1));
+  if(nextWidth<=0||nextHeight<=0)return;
+  const resized=nextWidth!==width||nextHeight!==height||nextScale!==scale;
+  const expanded=width>0&&height>0&&(nextWidth>width*1.2||nextHeight>height*1.2);
+  if(resized){
+    width=nextWidth;height=nextHeight;scale=nextScale;
+    const pixelWidth=Math.ceil(width*scale),pixelHeight=Math.ceil(height*scale);
+    if(canvas.width!==pixelWidth)canvas.width=pixelWidth;
+    if(canvas.height!==pixelHeight)canvas.height=pixelHeight;
+    canvas.style.width=`${width}px`;canvas.style.height=`${height}px`;sprites.clear();
+  }
   const desired=Math.min(700,Math.round(width*height/22000*density));
-  if(flakes.length>desired)flakes=flakes.slice(0,desired);
-  while(flakes.length<desired)flakes.push(flake(true));
+  if(expanded){
+    flakes=Array.from({length:desired},()=>flake(true));
+  }else{
+    if(flakes.length>desired)flakes=flakes.slice(0,desired);
+    while(flakes.length<desired)flakes.push(flake(true));
+  }
 }
 function mayRun(){return enabled&&preference!=='reduce'&&(preference==='full'||!motion.matches)&&!document.hidden&&!!context;}
 function draw(now:number){
   frame=0;if(!mayRun()){last=0;return;}
-  frame=requestAnimationFrame(draw);if(now-painted<32)return;
+  frame=requestAnimationFrame(draw);if(now-painted<15)return;
+  if(window.innerWidth!==width||window.innerHeight!==height)resize();
   const dt=last?Math.min(.1,(now-last)/1000):0;last=now;painted=now;
-  if(!context)return;
+  if(!context||width<=0||height<=0)return;
   context.clearRect(0,0,canvas.width,canvas.height);
   const seconds=now/1000,wind=14*Math.sin(seconds*.07)+6*Math.sin(seconds*.23+1.3);
   for(let index=0;index<flakes.length;index++){
@@ -52,8 +66,13 @@ function draw(now:number){
   context.globalAlpha=1;paintCount++;
 }
 function resume(){
-  if(mayRun()){if(!frame){last=0;frame=requestAnimationFrame(draw);}}
-  else {if(frame)cancelAnimationFrame(frame);frame=0;last=0;context?.clearRect(0,0,canvas.width,canvas.height);}
+  if(mayRun()){
+    resize();
+    if(!frame){last=0;frame=requestAnimationFrame(draw);}
+  }else if(frame){
+    cancelAnimationFrame(frame);frame=0;last=0;
+    if(!enabled||preference==='reduce')context?.clearRect(0,0,canvas.width,canvas.height);
+  }
 }
 function accept(payload:unknown){
   if(!payload||typeof payload!=='object'||Array.isArray(payload))return;
@@ -64,7 +83,8 @@ function accept(payload:unknown){
   }
   enabled=value.enabled===true;
   preference=value.motion==='reduce'||value.motion==='full'?value.motion:'auto';
-  const next=snowDensity(value.amount);if(next!==density){density=next;resize();}
+  density=snowDensity(value.amount);
+  resize();
   resume();
 }
 window.__woodsSnow={setState:accept,status:()=>({enabled,running:frame!==0,revision,density,flakes:flakes.length,paintCount,width,height,scale})};

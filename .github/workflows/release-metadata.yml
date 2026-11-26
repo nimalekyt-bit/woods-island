@@ -14,7 +14,7 @@ permissions:
   contents: write
   actions: read
 concurrency:
-  group: website-release-metadata
+  group: accepted-application-release
   cancel-in-progress: false
 jobs:
   publish:

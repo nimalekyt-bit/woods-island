@@ -1,6 +1,12 @@
 import { React } from "../react";
 import { H as t } from "../compat/shared.js";
-import { RefreshCw, Check, ExternalLink, Monitor, Link2 } from "../components/settings-icons";
+import {
+  RefreshCw,
+  Check,
+  ExternalLink,
+  Link2,
+  Monitor,
+} from "../components/settings-icons";
 import {
   phoneState,
   phoneLinked,
@@ -15,7 +21,8 @@ const call = (command: string, args?: object) =>
 
 function formatFileSize(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return "";
-  if (bytes >= 1048576) return `${(bytes / 1048576).toFixed(1)} ${t("МБ", "MB")}`;
+  if (bytes >= 1048576)
+    return `${(bytes / 1048576).toFixed(1)} ${t("МБ", "MB")}`;
   if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} ${t("КБ", "KB")}`;
   return `${bytes} ${t("Б", "B")}`;
 }
@@ -128,7 +135,7 @@ export function PhonePanel({
   }, [waiting, onWaiting]);
 
   async function act(command: string, args?: object) {
-    if (busy) return;
+    if (busy) return false;
     const request = ++version.current;
     setBusy(command);
     setError("");
@@ -136,8 +143,10 @@ export function PhonePanel({
       const value = await call(command, args);
       if (mounted.current && version.current === request)
         onState(phoneState(value));
+      return true;
     } catch (reason) {
       if (mounted.current) setError(String(reason));
+      return false;
     } finally {
       if (mounted.current && version.current === request) setBusy(null);
     }
@@ -160,22 +169,30 @@ export function PhonePanel({
   const label = pending
     ? pending.device
     : state?.device || t("Телефон", "Phone");
-  const status = pending
-    ? t("нужно подтверждение", "needs approval")
-    : linked
-      ? state?.connected
-        ? t("на связи", "connected")
-        : t("в ожидании", "standby")
-      : running
-        ? t("ждём телефон…", "waiting for phone…")
-        : t("не подключён", "not connected");
-  const badgeTone = pending
-    ? "pending"
-    : linked && state?.connected
-      ? "connected"
-      : running
-        ? "waiting"
-        : "idle";
+  const status = state?.permissionRequired
+    ? t("нужно разрешение", "permission needed")
+    : pending
+      ? t("нужно подтверждение", "needs approval")
+      : linked
+        ? state?.connected
+          ? t("на связи", "connected")
+          : t("в ожидании", "standby")
+        : running
+          ? t("ждём телефон…", "waiting for phone…")
+          : t("не подключён", "not connected");
+  const badgeTone =
+    pending || state?.permissionRequired
+      ? "pending"
+      : linked && state?.connected
+        ? "connected"
+        : running
+          ? "waiting"
+          : "idle";
+  const networkHelp =
+    (help || state?.permissionRequired === true) &&
+    running &&
+    !linked &&
+    !pending;
   const fail = error || state?.problem || "";
   const uploadPct =
     upload?.active && upload.total && upload.total > 0
@@ -185,33 +202,74 @@ export function PhonePanel({
   return (
     <aside data-phone-panel className="wi-phone-panel">
       <header>
-        <span className="wi-phone-badge" data-tone={badgeTone} aria-hidden="true">
-          <PhoneIcon size={14} />
-          <i className="wi-phone-dot" />
+        <span
+          className="wi-phone-eyes"
+          data-tone={badgeTone}
+          aria-hidden="true"
+        >
+          <i />
+          <i />
         </span>
-        <div>
-          <strong title={label}>{label}</strong>
-          <span data-phone-status data-connected={state?.connected === true}>
-            {status}
+        <div className="wi-phone-heading">
+          <strong data-phone-device>{label}</strong>
+          <span
+            data-phone-status
+            data-tone={badgeTone}
+            data-connected={state?.connected === true}
+          >
+            <i aria-hidden="true" />
+            <span>{status}</span>
           </span>
         </div>
       </header>
       <div className="wi-phone-content">
-        {pending ? (
-          <div className="wi-phone-approval">
-            <div className="wi-phone-approval-icon">
-              <PhoneIcon size={20} />
-            </div>
+        {networkHelp ? (
+          <div data-phone-notice className="wi-phone-notice">
             <strong>
-              {t("Разрешить этому телефону?", "Allow this phone?")}
+              {state?.public
+                ? t("Домашняя сеть", "Home network")
+                : t("Нужно разрешение", "Permission needed")}
             </strong>
             <p>
+              {state?.public
+                ? t(
+                    "Для домашней сети выбери «Частная сеть» в параметрах Windows.",
+                    "Set your home network to Private in Windows settings.",
+                  )
+                : t(
+                    "Разреши подключение из домашней сети в окне Windows.",
+                    "Allow connections from your home network in the Windows prompt.",
+                  )}
+            </p>
+            <p>
               {t(
-                "Он сможет отправлять фото, файлы и текст на полку и забирать выбранные файлы.",
-                "It can send photos, files and text to the shelf and receive files you choose.",
+                "Подключи телефон и ПК к одному роутеру.",
+                "Connect the phone and PC to the same router.",
               )}
             </p>
-            <div>
+            {!state?.permissionRequired && (
+              <button className="wi-phone-help" onClick={() => setHelp(false)}>
+                {t("Вернуться к коду", "Back to the code")}
+              </button>
+            )}
+          </div>
+        ) : pending ? (
+          <div className="wi-phone-approval">
+            <div className="wi-phone-approval-heading">
+              <span className="wi-phone-approval-icon" aria-hidden="true">
+                <PhoneIcon size={15} />
+              </span>
+              <strong>
+                {t("Разрешить этому телефону?", "Allow this phone?")}
+              </strong>
+            </div>
+            <p>
+              {t(
+                "Сможет отправлять на полку и получать выбранные файлы.",
+                "It can send items to the shelf and receive selected files.",
+              )}
+            </p>
+            <div className="wi-phone-approval-actions">
               <button
                 data-phone-allow
                 disabled={busy !== null}
@@ -258,12 +316,12 @@ export function PhonePanel({
                     <RefreshCw size={16} />
                   )}
                 </div>
-                <p>{t("Наведи камеру телефона", "Scan with phone camera")}</p>
+                <p>{t("Наведи камеру на код", "Scan it with the camera")}</p>
                 <button
                   type="button"
                   className="wi-phone-url-btn"
                   onClick={copyLink}
-                  title={state.url}
+                  title={`${state.url}\n${state.network || t("Одна локальная сеть", "Same local network")}`}
                 >
                   <span data-phone-url>
                     {copied
@@ -272,11 +330,6 @@ export function PhonePanel({
                   </span>
                   <Link2 size={10} />
                 </button>
-                <p className="wi-phone-network">
-                  {state.network
-                    ? t(`Wi-Fi: ${state.network}`, `Wi-Fi: ${state.network}`)
-                    : t("Одна локальная сеть", "Same local network")}
-                </p>
               </>
             ) : (
               <p>
@@ -292,7 +345,9 @@ export function PhonePanel({
             {upload?.active && (
               <div className="wi-phone-receiving">
                 <div className="wi-phone-receiving-top">
-                  <span title={upload.name}>{upload.name || t("Загрузка…", "Receiving…")}</span>
+                  <span title={upload.name}>
+                    {upload.name || t("Загрузка…", "Receiving…")}
+                  </span>
                   <em>{uploadPct}%</em>
                 </div>
                 <div className="wi-phone-receiving-bar">
@@ -353,7 +408,29 @@ export function PhonePanel({
           </p>
         )}
       </div>
-      {running ? (
+      {networkHelp ? (
+        <button
+          data-phone-firewall
+          className="wi-phone-connect"
+          disabled={busy !== null}
+          onClick={() => {
+            onFocus?.();
+            const command = state?.public
+              ? act("phone_stop").then(
+                  (stopped) => stopped && act("phone_start"),
+                )
+              : act("phone_firewall");
+            void command.then((allowed) => {
+              if (allowed) setHelp(false);
+            });
+          }}
+        >
+          {state?.public
+            ? t("Проверить снова", "Check again")
+            : t("Разрешить", "Allow")}
+          <ExternalLink size={12} />
+        </button>
+      ) : running ? (
         <div className="wi-phone-actions">
           <button
             data-phone-renew
@@ -369,7 +446,18 @@ export function PhonePanel({
             title={t("Отключить телефон", "Disconnect phone")}
             onClick={() => void act("phone_stop")}
           >
-            ×
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+              aria-hidden="true"
+            >
+              <path d="m8 3 4 4-3 3-4-4M16 21l-4-4 3-3 4 4M2 2l20 20M6 12l-2 2 6 6 2-2M18 12l2-2-6-6-2 2" />
+            </svg>
           </button>
         </div>
       ) : (
@@ -383,7 +471,7 @@ export function PhonePanel({
           {busy ? t("Запускаю…", "Starting…") : t("Подключить", "Connect")}
         </button>
       )}
-      {running && !linked && !pending && (
+      {running && !linked && !pending && !networkHelp && (
         <button
           className="wi-phone-help"
           onClick={() => setHelp((value) => !value)}
@@ -391,27 +479,6 @@ export function PhonePanel({
         >
           {t("Нет соединения?", "Can’t connect?")}
         </button>
-      )}
-      {help && running && !linked && !pending && (
-        <div className="wi-phone-help-card">
-          <p>
-            {t(
-              "Телефон должен быть в той же сети. Если Windows блокирует связь, разреши Woods Island в брандмауэре.",
-              "The phone must be on the same network. If Windows blocks it, allow Woods Island through the firewall.",
-            )}
-          </p>
-          <button
-            data-phone-firewall
-            disabled={busy !== null}
-            onClick={() => {
-              onFocus?.();
-              void act("phone_firewall");
-            }}
-          >
-            {t("Разрешить в Windows", "Allow in Windows")}
-            <ExternalLink size={11} />
-          </button>
-        </div>
       )}
     </aside>
   );

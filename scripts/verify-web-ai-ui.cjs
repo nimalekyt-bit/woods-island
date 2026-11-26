@@ -94,6 +94,7 @@ let browser,server;
     const label=`${theme}-${width}-${service}-${motion}-${settingsDelay}-first`;
     await page.goto(`http://127.0.0.1:${server.address().port}/web-ai.html?service=${service}&motion=${motion}&settingsDelay=${settingsDelay}`);
     await page.locator('[data-preferences-ready=true]').waitFor();
+    await page.waitForFunction(theme=>document.documentElement.dataset.theme===theme,theme);
     const geometry=await page.evaluate(readWebAiPaintRects);
     const png=await page.screenshot({path:path.join(scratch,label+'.png')});
     await fs.writeFile(path.join(scratch,label+'.json'),JSON.stringify(geometry,null,2));

@@ -51,6 +51,54 @@ extern "system" {
         wParam: WPARAM,
         lParam: LPARAM,
     ) -> LRESULT;
+    fn RemoveWindowSubclass(hWnd: HWND, pfnSubclass: SubclassProc, uIdSubclass: usize) -> BOOL;
+}
+
+struct SettingsVisibility {
+    window: tauri::WebviewWindow,
+    last: Option<bool>,
+}
+
+unsafe extern "system" fn settings_visibility_proc(
+    hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM, id: usize, data: usize,
+) -> LRESULT {
+    use tauri::Emitter;
+    use windows::Win32::UI::WindowsAndMessaging::{IsIconic, IsWindowVisible};
+    if msg == 0x0082 { // WM_NCDESTROY: release this window's observer.
+        let _ = RemoveWindowSubclass(hwnd, settings_visibility_proc, id);
+        let result = DefSubclassProc(hwnd, msg, wparam, lparam);
+        drop(Box::from_raw(data as *mut SettingsVisibility));
+        return result;
+    }
+    if msg == WM_SHOWWINDOW || msg == 0x0005 { // WM_SIZE includes minimize/restore.
+        let state = &mut *(data as *mut SettingsVisibility);
+        let visible = if msg == WM_SHOWWINDOW {
+            wparam.0 != 0 && !IsIconic(hwnd).as_bool()
+        } else {
+            IsWindowVisible(hwnd).as_bool() && wparam.0 != 1
+        };
+        if state.last != Some(visible) {
+            state.last = Some(visible);
+            let _ = state.window.emit("settings:visible", visible);
+        }
+    }
+    DefSubclassProc(hwnd, msg, wparam, lparam)
+}
+
+/// WebView2 does not report document.hidden when only its parent HWND is hidden.
+/// Observe native transitions once; previews need no visibility polling loop.
+pub fn track_settings_visibility(window: &tauri::WebviewWindow) -> Result<(), String> {
+    let observed = window.clone();
+    window.run_on_main_thread(move || {
+        if let Ok(hwnd) = observed.hwnd() {
+            let state = Box::into_raw(Box::new(SettingsVisibility { window: observed, last: None }));
+            unsafe {
+                if !SetWindowSubclass(HWND(hwnd.0 as _), settings_visibility_proc, 1002, state as usize).as_bool() {
+                    drop(Box::from_raw(state));
+                }
+            }
+        }
+    }).map_err(|error| error.to_string())
 }
 
 static CURRENT_BOUNDS: Mutex<Option<(i32, i32, i32, i32)>> = Mutex::new(None);
@@ -60,6 +108,8 @@ static BASE_CANVAS: Mutex<Option<(i32, i32, i32, i32)>> = Mutex::new(None);
 static CANVAS_OVERSCAN: Mutex<(f64, f64)> = Mutex::new((0.0, 0.0));
 static ATTACHMENT_INSETS: Mutex<(f64, f64)> = Mutex::new((0.0, 0.0));
 static CLICK_THROUGH: AtomicBool = AtomicBool::new(false);
+static HOVER_PASSTHROUGH: AtomicBool = AtomicBool::new(false);
+static APPLIED_TRANSPARENT: AtomicBool = AtomicBool::new(false);
 static ISLAND_HWND: Mutex<isize> = Mutex::new(0);
 static PREVIOUS_FOCUS: Mutex<isize> = Mutex::new(0);
 static ISLAND_ZOOM: Mutex<f64> = Mutex::new(1.0);
@@ -132,7 +182,7 @@ unsafe extern "system" fn island_subclass_proc(
         }
         WM_NCHITTEST => {
             // If click-through mode is active, clicks always pass through to desktop/windows behind.
-            if CLICK_THROUGH.load(Ordering::Relaxed) {
+            if CLICK_THROUGH.load(Ordering::Relaxed) || WindowManager::qa_input_disabled() {
                 return LRESULT(HTTRANSPARENT);
             }
 
@@ -171,6 +221,11 @@ pub struct WindowManager;
 impl WindowManager {
     pub fn passive_qa() -> bool {
         std::env::var("WOODS_ISLAND_PASSIVE_QA").as_deref() == Ok("1")
+    }
+
+    /// Automated visual fixtures do not consume the owner's real mouse input.
+    pub fn qa_input_disabled()->bool {
+        Self::passive_qa()&&std::env::var("WOODS_ISLAND_QA_NO_INPUT").as_deref()==Ok("1")
     }
 
     /// Toggles whether clicking inside the island (e.g. an embedded Web AI child
@@ -300,7 +355,7 @@ impl WindowManager {
                 let monitor = MonitorFromWindow(foreground, MONITOR_DEFAULTTONEAREST);
                 let mut info = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
                 if !desktop && GetMonitorInfoW(monitor, &mut info).as_bool() {
-                    if let Some(rect) = Self::get_window_rect(foreground) {
+                    if let Some(rect) = Self::visible_window_rect(foreground) {
                         bounds = serde_json::json!([rect.left,rect.top,rect.right,rect.bottom]);
                         let m = info.rcMonitor;
                         fullscreen = MonitorFromWindow(island, MONITOR_DEFAULTTONEAREST)==monitor && rect.left <= m.left && rect.top <= m.top && rect.right >= m.right && rect.bottom >= m.bottom;
@@ -455,18 +510,36 @@ impl WindowManager {
         }
     }
 
-    /// Sets whether click-through mode is active
-    pub fn set_click_through(through: bool) {
-        if CLICK_THROUGH.swap(through, Ordering::Relaxed) == through { return; }
+    fn apply_input_transparent() {
+        let effective = CLICK_THROUGH.load(Ordering::Relaxed)
+            || HOVER_PASSTHROUGH.load(Ordering::Relaxed)
+            || Self::qa_input_disabled();
+        if APPLIED_TRANSPARENT.swap(effective, Ordering::Relaxed) == effective { return; }
         let value = *ISLAND_HWND.lock().unwrap();
         if value != 0 {
             unsafe {
                 let hwnd = HWND(value as _);
                 let old = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-                let next = if through {old | WS_EX_TRANSPARENT.0 as isize} else {old & !(WS_EX_TRANSPARENT.0 as isize)};
-                SetWindowLongPtrW(hwnd, GWL_EXSTYLE, next);
+                let next = if effective { old | WS_EX_TRANSPARENT.0 as isize } else { old & !(WS_EX_TRANSPARENT.0 as isize) };
+                if next != old {
+                    SetWindowLongPtrW(hwnd, GWL_EXSTYLE, next);
+                }
             }
         }
+    }
+
+    /// Sets whether click-through mode is active
+    pub fn set_click_through(through: bool) {
+        CLICK_THROUGH.store(through, Ordering::Relaxed);
+        Self::apply_input_transparent();
+    }
+
+    /// Pass clicks through the visual overscan zone (falling snow, garland, wave)
+    /// whenever the cursor is outside the actual pill hitbox so buttons behind it stay clickable.
+    pub fn set_hover_passthrough(outside_pill: bool) {
+        if Self::passive_qa() { return; }
+        HOVER_PASSTHROUGH.store(outside_pill, Ordering::Relaxed);
+        Self::apply_input_transparent();
     }
 
     /// Clip only the empty canvas, with space for antialiasing, ears and shadows.
@@ -481,6 +554,13 @@ impl WindowManager {
 
     /// Enlarge only the painted surface. HTCLIENT continues to use CURRENT_BOUNDS.
     pub fn update_island_region_with_insets(hwnd: HWND, rect: Option<(i32, i32, i32, i32)>, right: f64, bottom: f64) {
+        Self::update_island_region_ex(hwnd, rect, right, bottom, true);
+    }
+
+    /// During active open/close/tab animations, allow_shrink=false keeps the existing
+    /// larger DWM clip region until the spring settles — avoiding 60Hz SetWindowRgn stalls
+    /// while CURRENT_BOUNDS still updates HTCLIENT hit-testing immediately.
+    pub fn update_island_region_ex(hwnd: HWND, rect: Option<(i32, i32, i32, i32)>, right: f64, bottom: f64, allow_shrink: bool) {
         *ATTACHMENT_INSETS.lock().unwrap() = (right, bottom);
         unsafe {
             let mut client = RECT::default();
@@ -497,16 +577,34 @@ impl WindowManager {
             crate::audio::set_spectrum_rendered(visual.is_some_and(|(left,top,right,bottom)|right>left&&bottom>top));
             let mut bounds = CURRENT_BOUNDS.lock().unwrap();
             let mut painted = VISUAL_BOUNDS.lock().unwrap();
-            if *bounds == next && *painted == visual {return;}
+            let bounds_changed = *bounds != next;
             *bounds = next;
-            *painted = visual;
+            let region_needs_update = match (*painted, visual) {
+                (a, b) if a == b => false,
+                (Some((ol, ot, or_, ob)), Some((nl, nt, nr, nb))) if !allow_shrink => {
+                    nl < ol || nt < ot || nr > or_ || nb > ob
+                }
+                _ => true,
+            };
+            if !region_needs_update {
+                let _ = bounds_changed;
+                return;
+            }
+            let effective_visual = match (*painted, visual) {
+                (Some((ol, ot, or_, ob)), Some((nl, nt, nr, nb))) if !allow_shrink => {
+                    Some((ol.min(nl), ot.min(nt), or_.max(nr), ob.max(nb)))
+                }
+                _ => visual,
+            };
+            *painted = effective_visual;
             drop(bounds);
             drop(painted);
-            let region = match visual {
+            let region = match effective_visual {
                 Some((left,top,right,bottom)) => CreateRectRgn(left,top,right,bottom),
                 None => CreateRectRgn(0,0,0,0),
             };
-            if SetWindowRgn(hwnd, region, true) == 0 {let _ = DeleteObject(region);}
+            // bRedraw=false: DirectComposition/WebView2 composites asynchronously without synchronous GDI stalls.
+            if SetWindowRgn(hwnd, region, false) == 0 {let _ = DeleteObject(region);}
         }
     }
 
@@ -547,6 +645,17 @@ impl WindowManager {
     }
 
     /// Returns the window rect in screen coordinates
+    pub fn visible_window_rect(hwnd: HWND) -> Option<RECT> {
+        let mut rect = RECT::default();
+        unsafe {
+            if windows::Win32::Graphics::Dwm::DwmGetWindowAttribute(hwnd,
+                windows::Win32::Graphics::Dwm::DWMWA_EXTENDED_FRAME_BOUNDS,
+                (&mut rect as *mut RECT).cast(), std::mem::size_of::<RECT>() as u32).is_ok()
+                && rect.right > rect.left && rect.bottom > rect.top { return Some(rect); }
+        }
+        Self::get_window_rect(hwnd)
+    }
+
     pub fn get_window_rect(hwnd: HWND) -> Option<RECT> {
         unsafe {
             let mut rect = RECT { left: 0, top: 0, right: 0, bottom: 0 };

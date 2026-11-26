@@ -306,6 +306,7 @@ var useIslandStore = ce((e, t) => ({
     vdesk: null,
     battery: null,
     peripherals: null,
+    systemLoad: null,
     peripheralCardOpen: false,
     peripheralPanelHeight: 0,
     peripheralListHeight: 240,

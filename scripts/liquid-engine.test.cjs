@@ -4,7 +4,8 @@ const vm = require('node:vm');
 const { readFileSync } = require('node:fs');
 const path = require('node:path');
 const { loadTypeScript } = require('./load-runtime-typescript.cjs');
-const { mountLiquidIsland, measureLiquidIslands } = loadTypeScript('runtime/characters/liquid.ts');
+const { mountLiquidIsland, measureLiquidIslands, LIQUID_SPECTRUM_BOTTOM } = loadTypeScript('runtime/characters/liquid.ts');
+const { readLiquidContour } = loadTypeScript('runtime/characters/liquid-contour.ts');
 const { createEnvelope, updateEnvelope, smoothLiquidPath, liquidBottomAt } = loadTypeScript('runtime/characters/liquid-geometry.ts');
 const oldRegion = readFileSync(path.join(__dirname, 'fixtures/liquid-baseline.js'), 'utf8');
 const moods = ['idle', 'music', 'think', 'happy', 'eat', 'attn', 'sad', 'sleep'];
@@ -20,6 +21,7 @@ function fixture() {
   class Node {
     constructor(tag) { this.tag = tag; this.attrs = {}; this.style = {}; this.children = []; this.parentElement = null; allocations++; }
     setAttribute(name, value) { this.attrs[name] = String(value); }
+    closest(selector) { const attribute=/^\[([^\]]+)\]$/.exec(selector)?.[1];for(let node=this;node;node=node.parentElement){if(attribute&&Object.hasOwn(node.attrs,attribute))return node;}return null; }
     appendChild(child) { child.parentElement = this; this.children.push(child); return child; }
     append(...children) { children.forEach(child => this.appendChild(child)); }
     replaceChildren() { this.children.forEach(child => { child.parentElement = null; }); this.children = []; }
@@ -28,6 +30,7 @@ function fixture() {
     querySelector(selector) { return selector.includes('liquid-clip') ? clip : selector.includes('liquid-squash') ? squash : null; }
   }
   const parent = new Node('div'), svg = parent.appendChild(new Node('svg'));
+  parent.setAttribute('data-island','');
   const clip = new Node('div'), squash = new Node('div');
   const document = { createElementNS: (_namespace, tag) => new Node(tag) };
   const random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 2 ** 32; };
@@ -68,6 +71,47 @@ function apply(a, b, patch) {
     for (const key of ['now', 'width', 'height']) if (key in patch) f.state[key] = patch[key];
   }
 }
+
+test('Measured silence keeps the SVG calm after zero audio events stop repeating', () => {
+  const f=fixture();f.state.options.mood='music';f.state.audio={level:0,bands:Array(8).fill(0),bandsAt:1000,liquidSpectrum:true};
+  const engine=newEngine(f);
+  for(let i=0;i<1500;i++){f.state.now+=16;engine.draw(f.state.now);}
+  const paths=[];
+  for(let i=0;i<120;i++){f.state.now+=16;engine.draw(f.state.now);paths.push(f.svg.children.find(node=>node.tag==='path').attrs.d);}
+  assert.equal(new Set(paths).size,1,'Deduplicated silence must not restart the synthetic beat or repaint the SVG');
+  f.state.audio={...f.state.audio,level:.2,bands:[.7,.2,.1,.4,.8,.1,.3,.6],bandsAt:f.state.now};
+  for(let i=0;i<20;i++){f.state.now+=16;f.state.audio.bandsAt=f.state.now;engine.draw(f.state.now);}
+  assert.notEqual(f.svg.children.find(node=>node.tag==='path').attrs.d,paths[0],'A real signal must resume the spectrum');
+  engine.dispose();
+});
+
+test('Measured music contours track bass and treble positions and settle inside the native paint allowance', () => {
+  const f=fixture();
+  f.state.width=420;f.state.height=44;f.state.options={...f.state.options,mood:'music',smoothCorners:true};
+  f.state.audio={level:0,bands:Array(8).fill(0),bandsAt:1000,liquidSpectrum:true};
+  const engine=newEngine(f);
+  const render=(bands,frames)=>{
+    f.state.audio.bands=bands;
+    for(let i=0;i<frames;i++){
+      f.state.audio.bandsAt=f.state.now+=16;
+      engine.draw(f.state.now);
+    }
+    return readLiquidContour(f.svg.parentElement);
+  };
+  const strongest=contour=>contour.points.reduce((peak,point)=>point[1]>peak[1]?point:peak);
+  const bass=strongest(render([.7,.92,0,0,0,0,0,0],45));
+  const treble=strongest(render([0,0,0,0,0,0,.92,.7],45));
+  assert(bass[0]<-30&&treble[0]>30,'Strongest lobe follows the frequency position');
+  assert(bass[1]-44>10&&treble[1]-44>10,'Music has clear visual depth');
+  for(const peak of [bass,treble])assert(peak[1]-44<LIQUID_SPECTRUM_BOTTOM);
+  const balanced=render([.3,.3,.3,.3,.85,.3,.3,.3],45);
+  const strongestDepth=strongest(balanced)[1]-44;
+  const surroundingDepth=Math.max(...balanced.points.filter(([x])=>x< -50||x>115).map(([,y])=>y-44));
+  assert(strongestDepth>2*surroundingDepth,'A prominent frequency must stand out without lifting the entire rim');
+  const calm=render(Array(8).fill(0),120);
+  assert(Math.abs(strongest(calm)[1]-44)<0.1);
+  engine.dispose();
+});
 
 test('Liquid SVG engine preserves paths, particles, spectrum and clips for all moods', () => {
   const legacy = fixture(), current = fixture(), old = oldEngine(legacy), next = newEngine(current);

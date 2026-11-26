@@ -1,4 +1,11 @@
+import { AudioGlyph } from '../components/AudioGlyph';
+import { TrackArtwork } from '../components/TrackArtwork';
+import { AudioMixer } from '../controls/AudioMixer';
+import { CompactIndicators } from '../controls/CompactIndicators';
+import { compactIndicatorWidth } from '../controls/indicator-model';
+import { emptyTimer as bd, startTimer as Cd, readTimer as kd, timerLabel, parseTimerCommand } from '../timer/model';
 import { MediaSourcePicker } from '../media/MediaSources';
+import { invoke as typedInvoke } from '../ipc/client';
 import { CollapsedTrack, MediaTitle } from '../components/CollapsedTrack';
 import { PeripheralPanel } from '../peripherals/PeripheralPanel';
 import '../components/home-scroll.css';
@@ -149,20 +156,14 @@ var Z = 1e3,
   _d = 24 * hd,
   vd = [5, 10, 15, 25, 45],
   yd = (e) => Math.min(_d, Math.max(Z, Math.round(e)));
-function bd(e = gd) {
-  let t = yd(e);
-  return { base: t, total: t, endsAt: null, left: null, doneAt: null };
-}
+
 function xd(e) {
   return e.doneAt === null ? (e.endsAt === null ? (e.left === null ? `idle` : `paused`) : `running`) : `done`;
 }
 function Sd(e, t) {
   return e.doneAt === null ? (e.endsAt === null ? (e.left ?? e.total) : Math.max(0, e.endsAt - t)) : 0;
 }
-function Cd(e, t, n = e.base) {
-  let r = yd(n);
-  return { base: r, total: r, endsAt: t + r, left: null, doneAt: null };
-}
+
 function wd(e, t) {
   return xd(e) === `running` ? { ...e, endsAt: null, left: Sd(e, t) } : e;
 }
@@ -183,26 +184,7 @@ function Dd(e, t) {
 function Od(e, t) {
   return Math.ceil(Sd(e, t) / Z) * Z;
 }
-function kd(e) {
-  try {
-    let t = JSON.parse(e || `null`);
-    if (!t || typeof t != `object`) return bd();
-    let n = (e) => typeof e == `number` && Number.isFinite(e) && e >= Z && e <= 864e5,
-      r = (e) => (typeof e == `number` && Number.isFinite(e) && e > 0 ? e : null);
-    if (!n(t.base)) return bd();
-    let i = t.base,
-      a = n(t.total) ? Math.max(t.total, i) : i,
-      [o, s] = [r(t.endsAt), r(t.doneAt)],
-      c = typeof t.left == `number` && Number.isFinite(t.left) && t.left >= 0 && t.left <= a ? t.left : null;
-    return s === null
-      ? o === null
-        ? { base: i, total: a, endsAt: null, left: c, doneAt: null }
-        : { base: i, total: a, endsAt: o, left: null, doneAt: null }
-      : { base: i, total: a, endsAt: null, left: null, doneAt: s };
-  } catch {
-    return bd();
-  }
-}
+
 var Ad = [
   [/^(с|сек|секунд[аыу]?|s|sec|secs|seconds?)$/, Z],
   [/^(м|мин|минут[аыу]?|m|min|mins|minutes?)$/, md],
@@ -241,12 +223,7 @@ function Md(e) {
     ].filter(Boolean);
   return o.length ? o.join(` `) : r(`0 с`, `0 s`);
 }
-function Nd(e, t) {
-  let n = /^(таймер|timer|засеки|засечь)(?:\s+(?:на\s+|for\s+)?(.+))?$/.exec(
-    e.toLowerCase().replace(/ё/g, `е`).replace(/\s+/g, ` `).trim(),
-  );
-  return n ? (n[2] ? jd(n[2]) : t) : null;
-}
+function Nd(e,t){return parseTimerCommand(e,t,jd);}
 var Pd = 216e5,
   Fd = 3,
   Id = 2400,
@@ -275,14 +252,15 @@ var Hd = _e((e, t) => ({
       n = kd(await i.timerGet());
     } catch {}
     let r = n.doneAt ?? (n.endsAt !== null && n.endsAt <= Date.now() ? n.endsAt : null);
-    (r !== null && Date.now() - r > Pd && (n = bd(n.base)), e({ loaded: !0, timer: n }), Ud());
+    (r !== null && Date.now() - r > Pd && (n = bd(n.base,n.label)), e({ loaded: !0, timer: n }), Ud());
   },
-  start: (e) => zd(Cd(t().timer, Date.now(), e)),
+  start: (e,label) => zd(Cd(t().timer, Date.now(), e,label)),
+  setLabel: label => { const timer={...t().timer,label:timerLabel(label)}; e({timer}); i.timerSet(JSON.stringify(timer)).catch(error=>useIslandStore.getState().pushPeek({kind:"error",message:String(error)})); },
   pause: () => zd(wd(t().timer, Date.now())),
   resume: () => zd(Td(t().timer, Date.now())),
   add: (e) => zd(Ed(t().timer, Date.now(), e)),
-  reset: (e) => zd(bd(e ?? t().timer.base)),
-  dismiss: () => zd(bd(t().timer.base)),
+  reset: (e) => zd(bd(e ?? t().timer.base,t().timer.label)),
+  dismiss: () => zd(bd(t().timer.base,t().timer.label)),
 }));
 function Ud() {
   let { loaded: e, timer: t } = Hd.getState();
@@ -301,7 +279,7 @@ function Ud() {
   a.expanded ||
     a.palette ||
     a.peek?.kind === `timer` ||
-    a.pushPeek({ kind: `timer`, length: r.base, at: r.doneAt });
+    a.pushPeek({ kind: `timer`, length: r.base, at: r.doneAt, label:r.label.trim() });
 }
 function Wd() {
   return (
@@ -997,46 +975,18 @@ function Op({ children: e, active: t, className: n = ``, ...r }) {
     children: e,
   });
 }
-function kp({ size: e, radius: t, className: n = `` }) {
-  let r = useIslandStore((e) => e.cover),
-    i = useIslandStore((e) => e.accent);
-  return r
-    ? (0, jsxRuntime.jsx)(`img`, {
-        src: r,
-        alt: ``,
-        draggable: !1,
-        className: `shrink-0 object-cover ${n}`,
-        style: { width: e, height: e, borderRadius: t },
-      })
-    : (0, jsxRuntime.jsx)(`div`, {
-        className: `grid shrink-0 place-items-center bg-white/10 ${n}`,
-        style: { width: e, height: e, borderRadius: t, color: i ?? `var(--color-ink-2)` },
-        children: (0, jsxRuntime.jsx)(S, { size: e * 0.5 }),
-      });
+function kp({ size: e, radius: t, className: n = ``, showSpectrum = true }) {
+  const cover=useIslandStore(state=>state.cover),media=useIslandStore(state=>state.media),accent=useIslandStore(state=>state.accent);
+  return jsxRuntime.jsx(TrackArtwork,{cover,trackKey:media?.key??'',playing:media?.playing===true,size:e,radius:t,className:n,readBands:readMeasuredBands,accent,showSpectrum});
 }
-var Ap = [0.55, 1, 0.72, 0.88];
+function readMeasuredBands(){
+  const state=useIslandStore.getState();
+  if(state.bands?.length&&performance.now()-state.bandsAt<700)return state.bands;
+  return Array(24).fill(Math.max(0,Math.min(1,state.level??0)));
+}
 function jp({ height: e = 16 }) {
-  let t = useIslandStore((e) => e.level),
-    n = useIslandStore((e) => e.accent),
-    r = useIslandStore((e) => e.media?.playing ?? !1),
-    i = performance.now() / 1e3,
-    a = Math.min(1, t ** 0.6 * 1.6);
-  return (0, jsxRuntime.jsx)(`div`, {
-    className: `flex items-center gap-[3px]`,
-    style: { height: e },
-    children: Ap.map((e, t) => {
-      let o = 0.55 + 0.45 * Math.abs(Math.sin(i * (5.3 + t * 1.7) + t * 1.3)),
-        s = r ? Math.max(0.14, a * e * o) : 0.14;
-      return (0, jsxRuntime.jsx)(
-        `span`,
-        {
-          className: `w-[3px] rounded-full transition-[height] duration-100 ease-out`,
-          style: { height: `${s * 100}%`, background: n ?? `var(--color-ink)` },
-        },
-        t,
-      );
-    }),
-  });
+  const playing=useIslandStore(state=>state.media?.playing===true),accent=useIslandStore(state=>state.accent);
+  return jsxRuntime.jsx(AudioGlyph,{playing,readBands:readMeasuredBands,accent,height:e,width:21});
 }
 function Mp(e, t = 500) {
   let [, n] = (0, ReactRuntime.useState)(0);
@@ -1176,9 +1126,15 @@ function Bp({ clip: e, selected: t, onActivate: n, onChanged: a }) {
             (0, jsxRuntime.jsx)(`button`, {
               title: r(`В текст-тулзы`, `Open in text tools`),
               className: `press grid size-7 place-items-center rounded-lg text-ink-3 hover:bg-white/10 hover:text-ink`,
-              onClick: () => void i.clipPaste(e.id, !1).then(() => o(``)),
+              onClick: () => void typedInvoke('clip_text',{id:e.id}).then(text=>o(text)),
               children: (0, jsxRuntime.jsx)(g, { size: 14 }),
             }),
+          e.kind === `text` && (0,jsxRuntime.jsx)(`button`,{
+            'data-clip-qr':true,title:r(`QR-код этого текста`,`QR code of this text`),
+            className:`press grid size-7 place-items-center rounded-lg text-ink-3 hover:bg-white/10 hover:text-ink`,
+            onClick:()=>void typedInvoke('clip_text',{id:e.id}).then(text=>o(text,'qr')).catch(error=>useIslandStore.getState().pushPeek({kind:'error',message:String(error)})),
+            children:(0,jsxRuntime.jsx)(g,{size:14}),
+          }),
           u &&
             (0, jsxRuntime.jsx)(`button`, {
               "data-clip-open": !0,
@@ -1265,7 +1221,7 @@ function Vp() {
         className: `flex items-center gap-2`,
         children: [
           (0, jsxRuntime.jsxs)(`label`, {
-            className: `flex h-9 flex-1 items-center gap-2 rounded-xl bg-tile px-3 focus-within:bg-tile-hover`,
+            className: `flex h-9 min-w-0 flex-1 items-center gap-2 rounded-xl bg-tile px-3 focus-within:bg-tile-hover focus-within:ring-1 focus-within:ring-inset focus-within:ring-line`,
             children: [
               (0, jsxRuntime.jsx)(ie, { size: 15, className: `text-ink-3` }),
               (0, jsxRuntime.jsx)(`input`, {
@@ -1285,7 +1241,7 @@ function Vp() {
                 },
                 placeholder: r(`Поиск по истории`, `Search history`),
                 spellCheck: !1,
-                className: `min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-3`,
+                className: `min-w-0 flex-1 rounded-md border-0 bg-transparent p-0 text-[13px] text-ink outline-none ring-0 focus:outline-none focus:ring-0 placeholder:text-ink-3 selection:bg-white/15 selection:text-ink`,
               }),
             ],
           }),
@@ -1926,7 +1882,7 @@ function om() {
   let t = e[0],
     n = t.total ? Math.min(1, t.size / t.total) : null,
     r = 2 * Math.PI * 6,
-    i = e.map((e) => `${e.name}${e.total ? ` · ${Math.round((100 * e.size) / e.total)}%` : ``}`).join(`
+    i = e.map((e) => `${e.phase==='staging'?r('Подготовка: ','Preparing: '):''}${e.name}${e.total ? ` · ${Math.round((100 * e.size) / e.total)}%` : ``}`).join(`
 `);
   return (0, jsxRuntime.jsxs)(`span`, {
     "data-download-badge": !0,
@@ -1982,12 +1938,14 @@ function sm() {
       (e) => e.settings?.obsStatus === !0 && !!e.obs && (e.obs.recording || e.obs.streaming),
     ),
     a = im(),
+    extra = useIslandStore(e => compactIndicatorWidth(e.settings,e.peripherals)),
     o = useIslandStore((e) => e.downloads.length > 0 && e.settings?.downloadsInPill === `badge`);
-  return !t && !r && !i && !a && !o
+  return !t && !r && !i && !a && !o && !extra
     ? null
     : (0, jsxRuntime.jsxs)(`span`, {
         className: `flex items-center gap-1`,
         children: [
+          (0,jsxRuntime.jsx)(CompactIndicators,{}),
           o && (0, jsxRuntime.jsx)(om, {}),
           a && (0, jsxRuntime.jsx)(am, {}),
           i && (0, jsxRuntime.jsx)(nm, {}),
@@ -2014,6 +1972,7 @@ function cm() {
     "data-pill-timer": !0,
     className: `pop-in flex shrink-0 items-center gap-[5px] transition-opacity ${n === `paused` ? `opacity-55` : ``}`,
     children: [
+      e.label?.trim() && (0,jsxRuntime.jsx)(`span`,{"data-pill-timer-label":true,title:e.label,className:`truncate text-[12px] font-medium text-timer/75`,style:{maxWidth:96},children:e.label.trim()}),
       (0, jsxRuntime.jsxs)(`svg`, {
         width: `14`,
         height: `14`,
@@ -2091,12 +2050,15 @@ function dm() {
         ],
       });
 }
+function LiveCharacter(props) {
+  const level = useIslandStore((e) => e.level);
+  return (0, jsxRuntime.jsx)(ye, { ...props, level });
+}
 function fm() {
   let shelfCount = useIslandStore((e) => (e.settings?.moduleShelf === !1 ? 0 : e.shelf.length)),
     hasCharacter = be(),
     characterHasFace = ne().face === !0,
     accent = useIslandStore((e) => e.accent),
-    level = useIslandStore((e) => e.level),
     streaming = re((e) => e.streaming),
     playing = useIslandStore((e) => e.media?.playing === !0),
     clock = useIslandStore((e) => e.settings?.showClock !== !1) && (0, jsxRuntime.jsx)($p, {}),
@@ -2117,7 +2079,7 @@ function fm() {
     playing,
     hasCharacter,
     characterHasFace,
-    cover: (0, jsxRuntime.jsx)(kp, { size: 22, radius: 6 }),
+    cover: (0, jsxRuntime.jsx)(kp, { size: 22, radius: 6, showSpectrum: hasCharacter }),
     clock,
     battery: charge,
     weather: weatherWidget,
@@ -2130,10 +2092,9 @@ function fm() {
       ],
     }),
     character: hasCharacter
-      ? (0, jsxRuntime.jsx)(ye, {
+      ? (0, jsxRuntime.jsx)(LiveCharacter, {
           mood: streaming ? `think` : playing ? `music` : void 0,
           accent: streaming ? null : accent,
-          level,
           width: 52,
           height: 32,
         })
@@ -2160,7 +2121,7 @@ function pm() {
         (e.settings?.showPrivacy !== !1 && (e.privacy.mic.length > 0 || e.privacy.cam.length > 0)) ||
         (e.settings?.obsStatus === !0 && !!e.obs && (e.obs.recording || e.obs.streaming)) ||
         (e.settings?.agentsStatus !== !1 && e.agents.length > 0) ||
-        (e.downloads.length > 0 && e.settings?.downloadsInPill === `badge`),
+        (e.downloads.length > 0 && e.settings?.downloadsInPill === `badge`) || compactIndicatorWidth(e.settings,e.peripherals)>0,
     ),
     u = useIslandStore((e) => (e.settings?.moduleShelf === !1 ? 0 : e.shelf.length)),
     p = lm() && (0, jsxRuntime.jsx)(cm, {}),
@@ -2250,7 +2211,7 @@ function mm() {
   let e = useIslandStore((e) => e.downloads),
     t = e.reduce((e, t) => e + t.size, 0),
     n = e.reduce((e, t) => e + t.speed, 0),
-    i = e.length > 1 ? v(e.length, [`файл`, `файла`, `файлов`], [`file`, `files`]) : (e[0]?.name ?? ``),
+    i = (e.every(item=>item.phase==='staging')?r('Подготовка: ','Preparing: '):'')+(e.length > 1 ? v(e.length, [`файл`, `файла`, `файлов`], [`file`, `files`]) : (e[0]?.name ?? ``)),
     a = e.length > 0 && e.every((e) => (e.total ?? 0) > 0) ? e.reduce((e, t) => e + (t.total ?? 0), 0) : 0,
     o = a > 0 ? Math.min(1, t / a) : null,
     s = 2 * Math.PI * 9.5;
@@ -2445,6 +2406,7 @@ function usePlaybackPosition(e) {
       [],
     ),
     {
+      seekable: e.canSeek !== false,
       pos: i,
       frac: a,
       held: t,
@@ -2474,22 +2436,23 @@ function usePlaybackPosition(e) {
   );
 }
 function Am({ seek: e, tint: t, className: n = `` }) {
-  let { frac: r, held: i, handlers: a } = e;
+  let { frac: r, held: i, handlers: a, seekable } = e;
   return (0, jsxRuntime.jsxs)(`div`, {
     "data-media-bar": !0,
+    "data-seekable": String(seekable),
     "data-held": String(i !== null),
-    className: `group relative h-3 cursor-pointer touch-none py-1 ${n}`,
+    className: `group relative h-3 ${seekable ? 'cursor-pointer touch-none' : 'cursor-default'} py-1 ${n}`,
     onClick: (e) => e.stopPropagation(),
-    ...a,
+    ...(seekable ? a : {}),
     children: [
       (0, jsxRuntime.jsx)(`div`, {
-        className: `overflow-hidden rounded-full bg-white/15 transition-[height] ${i === null ? `h-1 group-hover:h-1.5` : `h-1.5`}`,
+        className: `overflow-hidden rounded-full bg-white/15 transition-[height] ${!seekable ? 'h-1' : i === null ? `h-1 group-hover:h-1.5` : `h-1.5`}`,
         children: (0, jsxRuntime.jsx)(`div`, {
           className: `h-full rounded-full`,
           style: { width: `${r * 100}%`, background: t },
         }),
       }),
-      (0, jsxRuntime.jsx)(`div`, {
+      seekable && (0, jsxRuntime.jsx)(`div`, {
         "data-media-handle": !0,
         className: `pointer-events-none absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow transition-[opacity,transform] duration-150 ${i === null ? `scale-75 opacity-0 group-hover:scale-100 group-hover:opacity-100` : `scale-125 opacity-100`}`,
         style: { left: `${r * 100}%` },
@@ -2535,8 +2498,14 @@ function Fm(e, t) {
   }
   return i;
 }
-function Im(e) {
-  return `${e.artist.trim().toLowerCase()}\n${e.title.trim().toLowerCase()}\n${Math.round(e.durationMs / 1e3)}`;
+function lyricsRequestKey(media) {
+  return JSON.stringify([
+    media.key,
+    media.artist.trim().toLowerCase(),
+    media.title.trim().toLowerCase(),
+    (media.album ?? '').trim().toLowerCase(),
+    Math.floor(media.durationMs / 1000),
+  ]);
 }
 var $ = _e(() => ({ key: null, status: `idle`, lyrics: null, widths: [], lineW: 0, wrap: !1 }));
 function Lm(e) {
@@ -2552,49 +2521,61 @@ function Lm(e) {
   }
 }
 function Rm() {
-  let e,
-    t = () => {
-      let t = useIslandStore.getState(),
-        n = t.media;
-      if (!t.settings?.lyrics || !n || !n.title.trim()) {
-        (clearTimeout(e),
-          $.getState().status !== `idle` &&
-            $.setState({ key: null, status: `idle`, lyrics: null, widths: [] }));
-        return;
+  let timer;
+  let generation = 0;
+  let activeKey = null;
+  const update = () => {
+    const { media, settings } = useIslandStore.getState();
+    const key = settings?.lyrics && media?.title.trim() ? lyricsRequestKey(media) : null;
+    if (key === activeKey && key === $.getState().key) return;
+
+    activeKey = key;
+    const request = ++generation;
+    clearTimeout(timer);
+    $.setState({ key, status: key ? 'loading' : 'idle', lyrics: null, widths: [], lineW: 0 });
+    if (!key) return;
+
+    const load = async (attempt) => {
+      try {
+        const lyrics = await i.lyricsGet(media.artist, media.title, media.album ?? '', media.durationMs);
+        if (request !== generation) return;
+        const found = lyrics?.found && (lyrics.instrumental || lyrics.synced.length || lyrics.plain.trim());
+        $.setState({ status: found ? 'ready' : 'none', lyrics: found ? lyrics : null, widths: found ? Lm(lyrics) : [] });
+      } catch {
+        if (request !== generation) return;
+        if (attempt < 5) timer = setTimeout(() => void load(attempt + 1), 2000);
+        else $.setState({ status: 'error' });
       }
-      let r = Im(n);
-      if ($.getState().key === r) return;
-      (clearTimeout(e), $.setState({ key: r, status: `loading`, lyrics: null, widths: [] }));
-      let a = (t) => {
-        i.lyricsGet(n.artist, n.title, n.album ?? ``, n.durationMs)
-          .then((e) => {
-            if ($.getState().key !== r) return;
-            let t = !!e && e.found && (e.instrumental || e.synced.length > 0 || e.plain.trim() !== ``);
-            $.setState({ status: t ? `ready` : `none`, lyrics: e ?? null, widths: t ? Lm(e) : [] });
-          })
-          .catch(() => {
-            $.getState().key === r &&
-              (t < 5 ? (e = setTimeout(() => a(t + 1), 2e3)) : $.setState({ status: `error`, lyrics: null }));
-          });
-      };
-      e = setTimeout(() => a(1), 700);
     };
-  t();
-  let n = useIslandStore.subscribe((e, n) => {
-    (e.media !== n.media || e.settings?.lyrics !== n.settings?.lyrics) && t();
+    timer = setTimeout(() => void load(1), 700);
+  };
+  update();
+  const unsubscribe = useIslandStore.subscribe((next, previous) => {
+    if (next.media !== previous.media || next.settings?.lyrics !== previous.settings?.lyrics) update();
   });
   return () => {
-    (clearTimeout(e), n());
+    generation += 1;
+    clearTimeout(timer);
+    unsubscribe();
   };
 }
+const emptyLyricLines = [];
 function zm() {
-  let e = useIslandStore((e) => e.media),
-    { status: t, lyrics: n } = $(),
-    r = t === `ready` && n ? n.synced : [],
-    i = r.length > 0 && !!e && e.durationMs > 0;
-  Mp(i && e?.playing === !0, 120);
-  let a = i && e ? Fm(r, _f(e)) : -1;
-  return { status: t, lyrics: n, lines: i ? r : [], index: a, synced: i };
+  const media = useIslandStore(state => state.media);
+  const enabled = useIslandStore(state => state.settings?.lyrics === true);
+  const { key, status, lyrics, widths } = $();
+  const current = enabled && media && key === lyricsRequestKey(media);
+  const lines = current && status === 'ready' && !lyrics?.instrumental ? lyrics?.synced ?? emptyLyricLines : emptyLyricLines;
+  const synced = lines.length > 0 && media.durationMs > 0;
+  Mp(synced && media.playing, 120);
+  return {
+    status: current ? status : 'idle',
+    lyrics: current ? lyrics : null,
+    lines,
+    widths: current ? widths : emptyLyricLines,
+    index: synced ? Fm(lines, _f(media)) : -1,
+    synced,
+  };
 }
 const Bm = MediaTitle;
 function Vm() {
@@ -2628,7 +2609,6 @@ var Hm = (e) => (t) => {
 function Um() {
   const media = useIslandStore(state => state.media);
   const accent = useIslandStore(state => state.accent);
-  const level = useIslandStore(state => state.level);
   const thinking = re(state => state.streaming);
   const hasCharacter = be();
   const { shelf, time, charge, now } = Vm();
@@ -2636,9 +2616,9 @@ function Um() {
   if (!media) return null;
   return jsxRuntime.jsx(CollapsedTrack, {
     media, accent, positionMs: _f(media),
-    cover: jsxRuntime.jsx(kp, { size: 28, radius: 7 }),
+    cover: jsxRuntime.jsx(kp, { size: 28, radius: 7, showSpectrum: hasCharacter }),
     extras: jsxRuntime.jsxs(jsxRuntime.Fragment, { children: [jsxRuntime.jsx(cm, {}), time, charge, now, jsxRuntime.jsx(dm, {}), jsxRuntime.jsx(sm, {}), shelf > 0 && jsxRuntime.jsx(gm, { count: shelf })] }),
-    character: hasCharacter ? jsxRuntime.jsx(ye, { mood: thinking ? 'think' : media.playing ? 'music' : undefined, accent: thinking ? null : accent, level, width: 52, height: 32 }) : jsxRuntime.jsx(jp, { height: 15 })
+    character: hasCharacter ? jsxRuntime.jsx(LiveCharacter, { mood: thinking ? 'think' : media.playing ? 'music' : undefined, accent: thinking ? null : accent, width: 52, height: 32 }) : jsxRuntime.jsx(jp, { height: 15 })
   });
 }
 function Wm() {
@@ -2649,7 +2629,6 @@ function Gm() {
     t = useIslandStore((e) => e.settings?.lyrics === !0),
     n = useIslandStore((e) => e.settings?.lyrics === !0 && e.settings.lyricsInPlayer !== !1),
     a = useIslandStore((e) => e.accent),
-    o = useIslandStore((e) => e.level),
     s = re((e) => e.streaming),
     c = useIslandStore((e) => e.media?.playing === !0),
     l = be(),
@@ -2677,7 +2656,7 @@ function Gm() {
           (0, jsxRuntime.jsxs)(`div`, {
             className: `flex h-[52px] items-center gap-3`,
             children: [
-              (0, jsxRuntime.jsx)(kp, { size: 52, radius: 10, className: `shadow-md shadow-neutral-950/40` }),
+              (0, jsxRuntime.jsx)(kp, { size: 52, radius: 10, showSpectrum: l, className: `shadow-md shadow-neutral-950/40` }),
               (0, jsxRuntime.jsx)(`div`, {
                 className: `flex min-w-0 flex-1 flex-col justify-center leading-snug`,
                 children: (0, jsxRuntime.jsx)(ml, {
@@ -2805,10 +2784,9 @@ function Gm() {
               l &&
                 (0, jsxRuntime.jsx)(`span`, {
                   className: `absolute right-0 bottom-0`,
-                  children: (0, jsxRuntime.jsx)(ye, {
+                  children: (0, jsxRuntime.jsx)(LiveCharacter, {
                     mood: s ? `think` : c ? `music` : void 0,
                     accent: s ? null : a,
-                    level: o,
                     width: 52,
                     height: 32,
                   }),
@@ -2892,12 +2870,22 @@ function LyricsPanel() {
                   className: `relative h-full`,
                   children: [
                     (0, jsxRuntime.jsx)(`div`, {
-                      className: `scroll-thin h-[calc(100%-14px)] overflow-y-auto pr-1 text-[12px] leading-snug whitespace-pre-line text-ink-2`,
+                      "data-lyrics-static": !0,
+                      tabIndex: 0,
+                      className: `scroll-none h-[calc(100%-14px)] overflow-y-auto pr-1 text-[12px] leading-snug text-ink-2`,
                       onClick: (e) => e.stopPropagation(),
-                      children:
-                        t.plain ||
-                        t.synced.map((e) => e.text).join(`
-`),
+                      children: [
+                        jsxRuntime.jsx('div', {
+                          className: 'mb-1 font-medium text-ink-3',
+                          children: t.synced.length
+                            ? r('Время трека недоступно', 'Track timing unavailable')
+                            : r('Текст без синхронизации', 'Unsynced lyrics'),
+                        }, 'status'),
+                        jsxRuntime.jsx('div', {
+                          className: 'whitespace-pre-line [overflow-wrap:anywhere]',
+                          children: t.plain || t.synced.map(line => line.text).join('\n'),
+                        }, 'text'),
+                      ],
                     }),
                     (0, jsxRuntime.jsx)(qm, {}),
                   ],
@@ -2910,21 +2898,20 @@ function publishLyricsLineWidth(lineW) {
 function Ym() {
   let media = useIslandStore((e) => e.media),
     accent = useIslandStore((e) => e.accent),
-    level = useIslandStore((e) => e.level),
     streaming = re((e) => e.streaming),
     playing = useIslandStore((e) => e.media?.playing === !0),
     hasCharacter = be(),
     { shelf, time, charge, now } = Vm(),
-    { lines, index } = zm(),
-    widths = $((e) => e.widths);
+    { lines, index, status, widths } = zm();
   return (0, jsxRuntime.jsx)(LyricsMediaPill, {
     media,
     activeIndex: index,
+    loading: status === 'loading' || status === 'idle',
     text: index >= 0 ? (lines[index]?.text ?? ``) : ``,
     widths,
     publishLineWidth: publishLyricsLineWidth,
-    cover: (0, jsxRuntime.jsx)(kp, { size: 28, radius: 7 }),
-    lineIcon: (0, jsxRuntime.jsx)(S, { size: 12, className: `shrink-0 text-ink-3` }),
+    cover: (0, jsxRuntime.jsx)(kp, { size: 28, radius: 7, showSpectrum: false }),
+    lineIcon: (0,jsxRuntime.jsx)(AudioGlyph,{playing:media.playing,readBands:readMeasuredBands,accent}),
     extras: (0, jsxRuntime.jsxs)(ReactRuntime.Fragment, {
       children: [
         (0, jsxRuntime.jsx)(cm, {}), time, charge, now,
@@ -2934,14 +2921,13 @@ function Ym() {
       ],
     }),
     character: hasCharacter
-      ? (0, jsxRuntime.jsx)(ye, {
+      ? (0, jsxRuntime.jsx)(LiveCharacter, {
           mood: streaming ? `think` : playing ? `music` : void 0,
           accent: streaming ? null : accent,
-          level,
           width: 52,
           height: 32,
         })
-      : (0, jsxRuntime.jsx)(jp, { height: 15 }),
+      : null,
   });
 }
 function Xm(e) {
@@ -3005,6 +2991,7 @@ function Zm() {
     "data-volume-strip": o ? `player` : `system`,
     className: `relative flex h-[38px] shrink-0 items-center gap-2 rounded-xl bg-tile pr-1.5 pl-1`,
     children: [
+      (0,jsxRuntime.jsx)(AudioMixer,{}),
       t &&
         (0, jsxRuntime.jsxs)(`div`, {
           className: `flex shrink-0 rounded-lg bg-white/6 p-0.5`,
@@ -3259,7 +3246,7 @@ function nh({ cover: e, narrow: t }) {
   return (0, jsxRuntime.jsxs)(`div`, {
     "data-home-mirror": !0,
     className: `pointer-events-none absolute -top-[25px] left-1/2 -z-10 h-[170px] -translate-x-1/2`,
-    style: { width: r, maskImage: n, WebkitMaskImage: n },
+    style: { width: r, maskImage: n, WebkitMaskImage: n, transform: `translateZ(0)`, contain: `strict` },
     children: [o(-i), o(i)],
   });
 }
@@ -3273,7 +3260,7 @@ function rh({ look: e }) {
     l = i ?? `var(--color-ink)`,
     u = useIslandStore((e) => e.settings?.lyrics === !0 && e.settings.lyricsInHome !== !1),
     d = $((e) => e.status === `ready` && !!e.lyrics && !e.lyrics.instrumental),
-    f = u && d,
+    f = u,
     p = e === `fill` && !!n,
     m = e === `soft` && !!n,
     h =
@@ -3404,7 +3391,7 @@ function HomePlayer() {
     c = t ?? `var(--color-ink)`,
     l = useIslandStore((e) => e.settings?.lyrics === !0 && e.settings.lyricsInHome !== !1),
     u = $((e) => e.status === `ready` && !!e.lyrics && !e.lyrics.instrumental),
-    d = l && u;
+    d = l;
   return (0, jsxRuntime.jsxs)(`div`, {
     className: `relative flex min-h-0 flex-1 gap-3.5 overflow-hidden rounded-2xl bg-tile p-3`,
     children: [
@@ -4422,3 +4409,5 @@ export {
   pf as z,
   qn as zt,
 };
+
+export function useTimerLabelCharacters(){return Hd(state => {const phase=xd(state.timer); return phase==="running"||phase==="paused"?Array.from(state.timer.label?.trim()??"").length:0;});}

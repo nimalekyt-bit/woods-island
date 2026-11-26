@@ -24,7 +24,14 @@ async function verifyPhoneTransport({invoke,directory,profile=process.env.WOODS_
     receiver=await invoke('phone_start');assert(receiver.running&&receiver.url);
     const link=new URL(receiver.url);assert.equal(link.hostname,'127.0.0.1','Phone acceptance requires WOODS_PHONE_QA_LOOPBACK=1 on a passive QA process');
     const token=link.hash.slice(1),origin=link.origin;
-    const page=await request(origin,'/phone/');assert.equal(page.status,200);assert(page.body.toString().includes('Woods Island'));assert.match(page.headers['content-security-policy'],/script-src 'self'/);assert(!page.body.toString().includes('https://'));
+    const androidHeaders={'User-Agent':'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',Accept:'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8','Sec-Fetch-Dest':'document','Sec-Fetch-Mode':'navigate','Sec-Fetch-Site':'none'};
+    const page=await request(origin,'/phone/',{headers:androidHeaders});assert.equal(page.status,200);assert(page.body.toString().includes('Woods Island'));assert.match(page.headers['content-security-policy'],/script-src 'self'/);assert(!page.body.toString().includes('https://'));
+    assert.equal(page.headers['content-type'],'text/html; charset=utf-8','Android navigation must render a page');
+    assert.equal(page.headers['content-disposition'],undefined,'The pairing page must never be downloaded as a file');
+    assert.equal(page.headers.location,undefined,'The QR landing page must not redirect to a file');
+    for(const [route,mime] of [['/phone/app.js','application/javascript'],['/phone/style.css','text/css']]){
+      const asset=await request(origin,route,{headers:androidHeaders});assert.equal(asset.status,200);assert(asset.headers['content-type'].startsWith(mime));assert.equal(asset.headers['content-disposition'],undefined);assert(asset.body.length>100);
+    }
     assert.equal((await request(origin,'/state')).status,403);
     assert.equal((await request(origin,'/pair',{method:'POST',body:JSON.stringify({token,device:'Woods QA phone'}),headers:{Origin:'http://external.example'}})).status,403);
     assert.equal((await request(origin,'/phone/',{headers:{Host:'external.example'}})).status,403);
@@ -50,13 +57,15 @@ async function verifyPhoneTransport({invoke,directory,profile=process.env.WOODS_
     await invoke('phone_unsend',{id:item.id});assert.equal((await request(origin,'/files/'+item.id,{ticket})).status,404);
     const changing=path.join(directory,'phone-changed.txt');await fs.writeFile(changing,'first');const changedOffer=(await invoke('phone_send',{paths:[changing]})).offered[0];await fs.writeFile(changing,'changed-and-longer');assert.equal((await request(origin,'/files/'+changedOffer.id,{ticket})).status,409,'Files changed after desktop selection must be offered again');await invoke('phone_unsend',{id:changedOffer.id});
     const renewed=await invoke('phone_renew');assert(renewed.url&&renewed.url!==receiver.url);assert.equal((await request(origin,'/state',{ticket})).status,403);
-    const nextToken=new URL(renewed.url).hash.slice(1),nextPair=await request(origin,'/pair',{method:'POST',body:JSON.stringify({token:nextToken,device:'Declined QA phone'})});assert.equal(nextPair.status,200);
-    const nextPending=await invoke('phone_state');await invoke('phone_deny',{id:nextPending.pending.id});assert.equal((await request(origin,'/approval',{ticket:nextPair.json.ticket})).status,410);
+    const longDevice='Declined QA phone with an unusually long device name';
+    const nextToken=new URL(renewed.url).hash.slice(1),nextPair=await request(origin,'/pair',{method:'POST',body:JSON.stringify({token:nextToken,device:longDevice})});assert.equal(nextPair.status,200);
+    const nextPending=await invoke('phone_state');assert.equal(nextPending.pending?.device,longDevice);
+    await invoke('phone_deny',{id:nextPending.pending.id});assert.equal((await request(origin,'/approval',{ticket:nextPair.json.ticket})).status,410);
     await invoke('phone_stop');assert.equal((await invoke('phone_state')).running,false);
     // The nonblocking listener observes stop on its next bounded accept tick.
     let closed=false;for(let attempt=0;attempt<20;attempt++){try{await request(origin,'/phone/');}catch{closed=true;break;}await pause(30);}assert(closed,'Stop must close the listener promptly');
     const restarted=await invoke('phone_start');assert(restarted.running&&restarted.url!==receiver.url,'Stopped sharing must restart with a fresh capability');assert.equal((await request(new URL(restarted.url).origin,'/phone/')).status,200);await invoke('phone_stop');
-    return {localHttp:true,desktopApproval:true,expiredAndRevokedCapabilities:true,localHostAndOriginChecks:true,pathTraversalRejected:true,unicodeTextAndFiles:true,shelfProvenance:true,bidirectionalBytes:true,takenAcknowledgment:true,unsend:true,cancelledUploadCleanup:true,changedFileRejected:true,stopClosesListener:true,freshRestart:true,clipboard:'isolated text fixture; actual Windows clipboard pending',firewall:'not modified',realPhone:'pending'};
+    return {localHttp:true,androidNavigationMime:true,pageIsNotAttachment:true,mobileAssets:true,desktopApproval:true,expiredAndRevokedCapabilities:true,localHostAndOriginChecks:true,pathTraversalRejected:true,unicodeTextAndFiles:true,shelfProvenance:true,bidirectionalBytes:true,takenAcknowledgment:true,unsend:true,cancelledUploadCleanup:true,changedFileRejected:true,stopClosesListener:true,freshRestart:true,clipboard:'isolated text fixture; actual Windows clipboard pending',firewall:'not modified',realPhone:'pending'};
   }finally{
     await invoke('phone_stop').catch(()=>{});
     const shelf=await invoke('shelf_list');for(const item of shelf)if(!priorShelf.some(prior=>prior.id===item.id))await invoke('shelf_remove',{id:item.id});

@@ -4,10 +4,10 @@
   z-index: 10;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
   min-height: 0;
-  padding: 12px;
+  padding: 9px 12px;
   border-radius: 16px;
   background: var(--color-sheet, #1c1c20);
   box-shadow: 0 0 0 1px var(--color-line, #ffffff12);
@@ -50,17 +50,16 @@
   gap: 6px;
   min-height: 0;
   overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-ink-3, #ffffff29) transparent;
+  scrollbar-width: none;
 }
 .wi-vpn-pick {
   display: flex;
   align-items: center;
   gap: 6px;
-  min-height: 32px;
+  min-height: 29px;
   min-width: 0;
   max-width: 100%;
-  padding: 6px 12px;
+  padding: 4px 10px;
   border-radius: 16px;
   background: var(--color-tile, #ffffff12);
   color: var(--color-ink, #eee);

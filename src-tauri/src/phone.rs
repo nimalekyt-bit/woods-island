@@ -119,6 +119,7 @@ pub struct PhoneState {
     pub url: Option<String>,
     pub network: Option<String>,
     pub public: Option<bool>,
+    pub permission_required: Option<bool>,
     pub connected: bool,
     pub device: Option<String>,
     pub problem: Option<String>,
@@ -154,6 +155,7 @@ struct Session {
     network: LocalNetwork,
     host: String,
     public: Option<bool>,
+    permission_required: Option<bool>,
     stopped: Arc<AtomicBool>,
     offers: Vec<Offer>,
     received_bytes: u64,
@@ -339,8 +341,15 @@ fn public_profile(interface: u32) -> Option<bool> {
         return Some(false);
     }
     let script=format!("Get-NetConnectionProfile -InterfaceIndex {interface} -ErrorAction Stop | Select-Object -First 1 -ExpandProperty NetworkCategory");
+    match read_network_policy(&script)?.as_str() {
+        "Public" => Some(true),
+        "Private" | "DomainAuthenticated" => Some(false),
+        _ => None,
+    }
+}
+fn read_network_policy(script: &str) -> Option<String> {
     let mut child = crate::system::command("powershell.exe")
-        .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+        .args(["-NoProfile", "-NonInteractive", "-Command", script])
         .stdout(std::process::Stdio::piped())
         .spawn()
         .ok()?;
@@ -351,11 +360,7 @@ fn public_profile(interface: u32) -> Option<bool> {
             if !output.status.success() {
                 return None;
             }
-            return match String::from_utf8_lossy(&output.stdout).trim() {
-                "Public" => Some(true),
-                "Private" | "DomainAuthenticated" => Some(false),
-                _ => None,
-            };
+            return Some(String::from_utf8_lossy(&output.stdout).trim().to_owned());
         }
         if start.elapsed() > Duration::from_secs(4) {
             let _ = child.kill();
@@ -363,6 +368,19 @@ fn public_profile(interface: u32) -> Option<bool> {
             return None;
         }
         std::thread::sleep(Duration::from_millis(40));
+    }
+}
+fn network_permission_required(public: Option<bool>) -> Option<bool> {
+    if crate::win::WindowManager::passive_qa() { return Some(false); }
+    if public == Some(true) { return Some(true); }
+    let executable = std::env::current_exe().ok()?;
+    let quoted = executable.to_string_lossy().replace('\'', "''");
+    // Read once per explicit start; no policy changes, elevation or background polling.
+    let script = format!("$ErrorActionPreference='Stop'; $p=Get-NetFirewallProfile -Name Private; if(-not $p.Enabled -or $p.DefaultInboundAction -eq 'Allow') {{ 'allowed'; exit }}; try {{ $filters=@(Get-NetFirewallApplicationFilter -PolicyStore ActiveStore -Program '{quoted}') }} catch {{ if($_.CategoryInfo.Category -eq 'ObjectNotFound') {{ 'required'; exit }}; throw }}; $rules=@($filters | Get-NetFirewallRule | Where-Object {{ $_.Enabled -eq 'True' -and $_.Direction -eq 'Inbound' -and $_.Action -eq 'Allow' -and ($_.Profile.ToString() -match 'Private|Any') }}); foreach($r in $rules) {{ $port=$r | Get-NetFirewallPortFilter; $address=$r | Get-NetFirewallAddressFilter; if($port.Protocol -in @('TCP','Any') -and $port.LocalPort -eq 'Any' -and (@($address.RemoteAddress) -contains 'Any' -or @($address.RemoteAddress) -contains 'LocalSubnet')) {{ 'allowed'; exit }} }}; 'required'");
+    match read_network_policy(&script)?.as_str() {
+        "allowed" => Some(false),
+        "required" => Some(true),
+        _ => None,
     }
 }
 impl PhoneService {
@@ -375,6 +393,7 @@ impl PhoneService {
                 url: None,
                 network: None,
                 public: None,
+                permission_required: None,
                 connected: false,
                 device: None,
                 problem: None,
@@ -387,10 +406,11 @@ impl PhoneService {
         let active = session.auth.active.as_ref();
         PhoneState {
             running: !session.stopped.load(Ordering::Acquire),
-            url: (!session.auth.link.is_empty())
+            url: (!session.auth.link.is_empty() && session.permission_required != Some(true))
                 .then(|| format!("http://{}/phone/#{}", session.host, session.auth.link)),
             network: Some(session.network.name.clone()),
             public: session.public,
+            permission_required: session.permission_required,
             connected: active
                 .is_some_and(|a| now.saturating_duration_since(a.seen) < Duration::from_secs(8)),
             device: active.map(|a| a.device.clone()),
@@ -436,6 +456,7 @@ impl PhoneService {
             .map_err(|_| "Phone listener address is unavailable")?
             .to_string();
         let public = public_profile(network.interface);
+        let permission_required = network_permission_required(public);
         let stopped = Arc::new(AtomicBool::new(false));
         let now = Instant::now();
         let auth = match saved {
@@ -459,6 +480,7 @@ impl PhoneService {
             network: network.clone(),
             host,
             public,
+            permission_required,
             stopped: stopped.clone(),
             offers: vec![],
             received_bytes: 0,
@@ -1290,7 +1312,9 @@ pub async fn phone_firewall() -> Result<PhoneState, String> {
         let rule_id=format!("Woods-Island-Phone-{:x}",Sha256::digest(executable.to_string_lossy().as_bytes()));
         // Private profile + local subnet + this exact binary. Never change a global firewall setting.
         let script=format!("$program='{quoted}'; $id='{rule_id}'; $rule=Get-NetFirewallRule -Name $id -ErrorAction SilentlyContinue; if($rule) {{ if(($rule | Get-NetFirewallApplicationFilter).Program -ne $program) {{ throw 'Unexpected firewall rule ownership' }}; $rule | Set-NetFirewallRule -Enabled True -Direction Inbound -Action Allow -Profile Private -ErrorAction Stop; $rule | Get-NetFirewallAddressFilter | Set-NetFirewallAddressFilter -RemoteAddress LocalSubnet -ErrorAction Stop; $rule | Get-NetFirewallPortFilter | Set-NetFirewallPortFilter -Protocol TCP -LocalPort Any -RemotePort Any -ErrorAction Stop }} else {{ New-NetFirewallRule -Name $id -DisplayName 'Woods Island Phone' -Program $program -Direction Inbound -Action Allow -Profile Private -RemoteAddress LocalSubnet -Protocol TCP -ErrorAction Stop | Out-Null }}");
-        crate::system::run_vpn_command(&script,true).map_err(|message|message.replace("VPN command","Phone network permission"))?;Ok(service.state())
+        crate::system::run_vpn_command(&script,true).map_err(|message|message.replace("VPN command","Phone network permission"))?;
+        if let Some(session)=service.session.lock().map_err(|_|"Phone state failed")?.as_mut(){session.permission_required=Some(false);}
+        service.emit();Ok(service.state())
     }).await.map_err(|_|"Phone worker failed".to_owned())?
 }
 

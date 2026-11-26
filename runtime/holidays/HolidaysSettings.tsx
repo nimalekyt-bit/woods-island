@@ -1,9 +1,10 @@
 import { React } from '../react';
 import type { ComponentType, ReactNode } from 'react';
 import { H as t } from '../compat/shared.js';
-import { HolidayEffects } from './HolidayEffects';
-import { HOLIDAY_DEFAULTS, recurringDay, type HolidaySettings } from './model';
+import { useHolidayClock } from './HolidayEffects';
+import { HOLIDAY_DEFAULTS, recurringDay, holidayDateActive, type HolidaySettings } from './model';
 import './holidays.css';
+const LiveStage=React.lazy(()=>import('../compat/stage.js'));
 
 function AnnualDate({value,fallback,onChange,label}: {value?:string;fallback:string;label:string;onChange:(value:string)=>void}) {
   const day=recurringDay(value,fallback),[month,date]=day.split('-').map(Number);
@@ -28,10 +29,16 @@ export function HolidaysSettings({settings,save,Row,Toggle,Choice,Slider}: {
   Slider:ComponentType<{value:number;min:number;max:number;step:number;unit:string;onChange:(value:number)=>void}>;
 }) {
   const enabled=settings.snow!=='off';
-  const light=settings.theme==='light'||settings.theme==='auto'&&matchMedia('(prefers-color-scheme: light)').matches;
+  const today=useHolidayClock();
+  const waits=(settings.snow??'auto')==='auto'&&!holidayDateActive(today,settings.snowFrom,settings.snowTo);
+  const [fromMonth,fromDay]=recurringDay(settings.snowFrom,HOLIDAY_DEFAULTS.snowFrom).split('-').map(Number);
+  const snowDate=new Date(2000,fromMonth-1,fromDay).toLocaleDateString(t('ru-RU','en-US'),{day:'numeric',month:'long'});
   return <div data-holidays-settings>
-    <div className="wi-holiday-preview">
-      <div className="wi-holiday-preview-pill" data-island-theme={light?'light':'dark'}><span>Woods Island</span><HolidayEffects settings={{...settings,snow:'on',snowScreen:false}} width={330} height={48} capsule visible={enabled}/></div>
+    <div data-holiday-live-preview style={{position:"relative",marginBottom:20}}>
+      <React.Suspense fallback={<div className="grid h-[180px] place-items-center rounded-2xl bg-[#1c1d22] text-[12px] text-white/50">{t('Загружаю остров…','Loading the island…')}</div>}>
+        <LiveStage scene="current" actual live pausable={false} s={{...settings,snow:enabled?'on':'off',snowScreen:false}}/>
+      </React.Suspense>
+      {waits&&<span data-stage-waits className="absolute right-3 bottom-2 rounded-full bg-black/55 px-2 py-1 text-[11px] text-white/70">{t(`На острове — с ${snowDate}`,`On the island from ${snowDate}`)}</span>}
     </div>
     <div className="divide-y divide-white/[0.06] overflow-hidden rounded-2xl bg-white/[0.045]">
       <Row title={t('Новый год на острове','New Year on the island')} hint={t('Снег и огоньки в выбранные дни или круглый год.','Snow and lights on selected days or all year round.')} stacked>
@@ -43,6 +50,10 @@ export function HolidaysSettings({settings,save,Row,Toggle,Choice,Slider}: {
           <span>{t('по','to')}</span><AnnualDate label={t('Конец','End')} value={settings.snowTo} fallback={HOLIDAY_DEFAULTS.snowTo} onChange={snowTo=>save({snowTo})}/>
         </div>
       </Row>}
+      {waits&&<div data-snow-waits className="flex items-center gap-3 px-4 py-3">
+        <p className="min-w-0 flex-1 text-[12px] leading-relaxed text-white/55">{t(`Снег начнётся ${snowDate}. Вверху — предварительный просмотр.`,`Snow starts on ${snowDate}. The image above is a preview.`)}</p>
+        <button data-snow-now onClick={()=>save({snow:'on'})} className="press h-8 shrink-0 rounded-full bg-white/10 px-3 text-[12px] text-white hover:bg-white/15">{t('Включить сейчас','Turn on now')}</button>
+      </div>}
       {enabled&&<>
         <Row title={t('Снег из-под острова','Snow beneath the island')} hint={t('Снежинки падают вниз и тают у нижнего края.','Flakes fall down and fade at the bottom.')}><Toggle value={settings.snowFall!==false} onChange={snowFall=>save({snowFall})}/></Row>
         <Row title={t('Шапка снега на острове','A cap of snow on the island')} hint={settings.style==='capsule'?t('Сугробы растягиваются с пилюлей, сужение стряхивает снег с краёв.','Drifts stretch with the pill; narrowing sheds snow from the edges.'):t('Появится в стиле «Капсула».','Available with the Capsule style.')}><Toggle value={settings.snowCap!==false} onChange={snowCap=>save({snowCap})}/></Row>

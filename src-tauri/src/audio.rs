@@ -12,7 +12,12 @@ use windows::{core::{GUID, Interface, PCWSTR, PWSTR}, Win32::{
 }};
 
 const FFT_SIZE: usize = 2048;
-const BAND_EDGES: [f32; 9] = [30., 80., 180., 400., 900., 2000., 4500., 9000., 20000.];
+const BAND_COUNT: usize = 24;
+const BAND_EDGES: [f32; BAND_COUNT + 1] = [
+    35., 48., 64., 85., 112., 148., 195., 256.,
+    336., 440., 575., 750., 980., 1280., 1670., 2180.,
+    2850., 3720., 4850., 6300., 8200., 10600., 13500., 16500., 19500.,
+];
 static SELECTED_OUTPUT: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 static SELECTED_INPUT: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 static SPECTRUM_PLAYING: AtomicBool = AtomicBool::new(false);
@@ -265,42 +270,90 @@ pub fn set_player_volume(level: Option<f64>, mute: Option<bool>) -> Result<(), S
 
 struct Spectrum {
     fft: Arc<dyn Fft<f32>>,
+    hann: Vec<f32>,
     samples: VecDeque<f32>,
     scratch: Vec<Complex<f32>>,
-    bands: [f32;8],
+    bands: [f32; BAND_COUNT],
+    peak_rms: f32,
+    peak_db: f32,
 }
 impl Spectrum {
     fn new() -> Self {
-        Self { fft:FftPlanner::<f32>::new().plan_fft_forward(FFT_SIZE), samples:VecDeque::with_capacity(FFT_SIZE), scratch:vec![Complex::default();FFT_SIZE], bands:[0.;8] }
+        let hann = (0..FFT_SIZE)
+            .map(|i| 0.5 - 0.5 * (2. * std::f32::consts::PI * i as f32 / (FFT_SIZE - 1) as f32).cos())
+            .collect();
+        Self {
+            fft: FftPlanner::<f32>::new().plan_fft_forward(FFT_SIZE),
+            hann,
+            samples: VecDeque::with_capacity(FFT_SIZE),
+            scratch: vec![Complex::default(); FFT_SIZE],
+            bands: [0.; BAND_COUNT],
+            peak_rms: 0.02,
+            peak_db: -42.,
+        }
     }
     fn push(&mut self, value: f32) {
-        if self.samples.len()==FFT_SIZE { self.samples.pop_front(); }
-        self.samples.push_back(if value.is_finite(){value.clamp(-1.,1.)}else{0.});
+        if self.samples.len() == FFT_SIZE { self.samples.pop_front(); }
+        self.samples.push_back(if value.is_finite() { value.clamp(-1., 1.) } else { 0. });
     }
-    fn measure(&mut self, rate: u32) -> ([f32;8],f32) {
-        let count=self.samples.len();
-        let rms=if count>0 {(self.samples.iter().map(|s|s*s).sum::<f32>()/count as f32).sqrt()}else{0.};
+    fn measure(&mut self, rate: u32) -> ([f32; BAND_COUNT], f32) {
+        let count = self.samples.len();
+        let rms = if count > 0 { (self.samples.iter().map(|s| s * s).sum::<f32>() / count as f32).sqrt() } else { 0. };
         // Exact silence needs only the same release envelope, not a 2048-bin FFT.
-        if rms == 0. {
+        if rms <= 1e-6 {
             for band in &mut self.bands { *band *= 0.65; if *band < 0.001 { *band = 0.; } }
+            self.peak_rms = (self.peak_rms * 0.985).max(0.02);
+            self.peak_db = (self.peak_db - 0.22).max(-42.);
             return (self.bands, 0.);
         }
-        for (i,bin) in self.scratch.iter_mut().enumerate() {
-            let sample=self.samples.get(i).copied().unwrap_or(0.);
-            let window=0.5-0.5*(2.*std::f32::consts::PI*i as f32/(FFT_SIZE-1) as f32).cos();
-            *bin=Complex::new(sample*window,0.);
+        for (i, bin) in self.scratch.iter_mut().enumerate() {
+            let sample = self.samples.get(i).copied().unwrap_or(0.);
+            *bin = Complex::new(sample * self.hann[i], 0.);
         }
         self.fft.process(&mut self.scratch);
-        for band in 0..8 {
-            let start=(BAND_EDGES[band]*FFT_SIZE as f32/rate.max(1) as f32).ceil() as usize;
-            let end=(BAND_EDGES[band+1]*FFT_SIZE as f32/rate.max(1) as f32).ceil() as usize;
-            let magnitude=self.scratch[start.min(FFT_SIZE/2)..end.min(FFT_SIZE/2)].iter().map(|c|c.norm()*4./FFT_SIZE as f32).fold(0.,f32::max);
-            let target=if magnitude>0.00001 {((20.*magnitude.log10()+60.)/60.).clamp(0.,1.)}else{0.};
-            let coefficient=if target>self.bands[band]{0.75}else{0.35};
-            self.bands[band]+=(target-self.bands[band])*coefficient;
-            if self.bands[band]<0.001 {self.bands[band]=0.;}
+        let half = FFT_SIZE / 2;
+        let bin_hz = rate.max(1) as f32 / FFT_SIZE as f32;
+        let mut band_db = [-100f32; BAND_COUNT];
+        let mut frame_peak_db = -100f32;
+        for band in 0..BAND_COUNT {
+            let start = ((BAND_EDGES[band] / bin_hz).floor() as usize).clamp(1, half - 1);
+            let end = ((BAND_EDGES[band + 1] / bin_hz).ceil() as usize).clamp(start + 1, half);
+            let mut max_mag = 0f32;
+            let mut sum_sq = 0f32;
+            for c in &self.scratch[start..end] {
+                let m = c.norm() * 4. / FFT_SIZE as f32;
+                if m > max_mag { max_mag = m; }
+                sum_sq += m * m;
+            }
+            let rms_mag = (sum_sq / (end - start) as f32).sqrt();
+            let magnitude = max_mag * 0.7 + rms_mag * 0.3;
+            // Gentle perceptual tilt (+8.5 dB from bass to air) counters natural pink-noise rolloff.
+            let tilt_db = (band as f32 / (BAND_COUNT - 1) as f32) * 8.5;
+            let db = if magnitude > 1e-5 { 20. * magnitude.log10() + tilt_db } else { -100. };
+            band_db[band] = db;
+            if db > frame_peak_db { frame_peak_db = db; }
         }
-        (self.bands,rms.clamp(0.,1.))
+        if frame_peak_db > self.peak_db {
+            self.peak_db += (frame_peak_db - self.peak_db) * 0.45;
+        } else {
+            self.peak_db = (self.peak_db - 0.20).max(-42.).max(frame_peak_db);
+        }
+        let ref_db = self.peak_db.max(-42.);
+        let floor_db = ref_db - 34.;
+        for band in 0..BAND_COUNT {
+            let raw = ((band_db[band] - floor_db) / 34.).clamp(0., 1.);
+            let target = raw.powf(1.3);
+            let coefficient = if target > self.bands[band] { 0.82 } else { 0.42 };
+            self.bands[band] += (target - self.bands[band]) * coefficient;
+            if self.bands[band] < 0.001 { self.bands[band] = 0.; }
+        }
+        if rms > self.peak_rms {
+            self.peak_rms += (rms - self.peak_rms) * 0.38;
+        } else {
+            self.peak_rms = (self.peak_rms * 0.985).max(0.02);
+        }
+        let level = (rms / self.peak_rms.max(0.02)).clamp(0., 1.);
+        (self.bands, level)
     }
 }
 
@@ -436,12 +489,12 @@ unsafe fn capture_session(app:&tauri::AppHandle, failed_pid: &mut Option<u32>)->
     let mut emitted=Instant::now();
     let mut checked=Instant::now();
     let mut received=Instant::now();
-    let mut last_sample: Option<([f32;8],f32)> = None;
+    let mut last_sample: Option<([f32; BAND_COUNT], f32)> = None;
     let mut quiet = false;
     let outcome=(||->Result<(),String>{
         loop {
             if !spectrum_active() { break; }
-            std::thread::sleep(Duration::from_millis(if quiet {32} else {10}));
+            std::thread::sleep(Duration::from_millis(if quiet {32} else {8}));
             while capture.GetNextPacketSize().map_err(|e|e.to_string())?>0 {
                 let mut data=std::ptr::null_mut();let mut frames=0;let mut flags=0;
                 capture.GetBuffer(&mut data,&mut frames,&mut flags,None,None).map_err(|e|e.to_string())?;
@@ -459,15 +512,15 @@ unsafe fn capture_session(app:&tauri::AppHandle, failed_pid: &mut Option<u32>)->
                 }
                 capture.ReleaseBuffer(frames).map_err(|e|e.to_string())?;
             }
-            if emitted.elapsed()>=Duration::from_millis(80) {
-                let sample=if received.elapsed()>Duration::from_millis(100) {
+            if emitted.elapsed()>=Duration::from_millis(33) {
+                let sample=if received.elapsed()>Duration::from_millis(120) {
                     for _ in 0..FFT_SIZE{spectrum.push(0.);}
-                    ([0.;8],0.)
+                    ([0.; BAND_COUNT],0.)
                 } else { spectrum.measure(parsed.rate) };
                 quiet=sample.1 < 0.00001;
                 // The UI uses bandsAt to distinguish live audio from a stopped capture.
                 // Keep steady nonzero signals fresh; only deduplicate complete silence.
-                if sample != ([0.;8],0.) || last_sample != Some(sample) {
+                if sample != ([0.; BAND_COUNT],0.) || last_sample != Some(sample) {
                     let _=app.emit("media:bands",sample.0);let _=app.emit("media:level",sample.1);
                     last_sample=Some(sample);
                 }
@@ -596,7 +649,7 @@ pub fn start_loopback(app:tauri::AppHandle) {
             let outcome=unsafe{capture_session(&app, &mut failed_pid)};
             let failed=outcome.is_err();
             if let Err(error)=outcome {let _=app.emit("audio:error",error);}
-            let _=app.emit("media:bands",[0.;8]);let _=app.emit("media:level",0.);
+            let _=app.emit("media:bands",[0.; BAND_COUNT]);let _=app.emit("media:level",0.);
             if failed { std::thread::sleep(Duration::from_secs(1)); }
         }
     });
@@ -670,9 +723,28 @@ pub fn capture_pcm_channels(
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test] fn silence_has_zero_spectrum_and_level(){let mut s=Spectrum::new();for _ in 0..FFT_SIZE{s.push(0.);}let(b,l)=s.measure(48000);assert_eq!(b,[0.;8]);assert_eq!(l,0.);}
-    #[test] fn sine_is_measured_in_its_frequency_band(){let mut s=Spectrum::new();for i in 0..FFT_SIZE{s.push((2.*std::f32::consts::PI*1000.*i as f32/48000.).sin()*0.5);}let(b,l)=s.measure(48000);let dominant=b.iter().enumerate().max_by(|a,b|a.1.total_cmp(b.1)).unwrap().0;assert_eq!(dominant,4);assert!((l-0.3535).abs()<0.02);}
+    #[test] fn silence_has_zero_spectrum_and_level(){let mut s=Spectrum::new();for _ in 0..FFT_SIZE{s.push(0.);}let(b,l)=s.measure(48000);assert_eq!(b,[0.; BAND_COUNT]);assert_eq!(l,0.);}
+    #[test] fn sine_is_measured_in_its_frequency_band(){
+        let mut s=Spectrum::new();
+        for i in 0..FFT_SIZE{s.push((2.*std::f32::consts::PI*1000.*i as f32/48000.).sin()*0.5);}
+        let(b,l)=s.measure(48000);
+        let dominant=b.iter().enumerate().max_by(|a,b|a.1.total_cmp(b.1)).unwrap().0;
+        assert_eq!(dominant,12,"1000 Hz falls in band 12 (980..1280 Hz)");
+        assert!(b[dominant]>0.7 && l>0.5 && l<=1.);
+    }
+    #[test] fn bass_and_treble_separate_cleanly_at_normal_volume(){
+        let mut bass=Spectrum::new();
+        for i in 0..FFT_SIZE{bass.push((2.*std::f32::consts::PI*95.*i as f32/48000.).sin()*0.08);}
+        let (bb,bl)=bass.measure(48000);
+        let bass_idx=bb.iter().enumerate().max_by(|a,b|a.1.total_cmp(b.1)).unwrap().0;
+        assert!(bass_idx<=4 && bb[bass_idx]>0.6 && bl>0.5,"Quiet bass should still register strongly via adaptive gain");
+        let mut treble=Spectrum::new();
+        for i in 0..FFT_SIZE{treble.push((2.*std::f32::consts::PI*6800.*i as f32/48000.).sin()*0.08);}
+        let (tb,tl)=treble.measure(48000);
+        let treble_idx=tb.iter().enumerate().max_by(|a,b|a.1.total_cmp(b.1)).unwrap().0;
+        assert!(treble_idx>=18 && tb[treble_idx]>0.6 && tl>0.5,"Quiet treble should register cleanly via tilt + adaptive gain");
+    }
     #[test] fn sample_formats_preserve_sign(){assert_eq!(decode_sample(&[0,128],false),-1.);assert_eq!(decode_sample(&[0,0,128],false),-1.);assert_eq!(decode_sample(&1f32.to_le_bytes(),true),1.);}
     #[test] fn invalid_samples_never_poison_spectrum(){let mut s=Spectrum::new();s.push(f32::NAN);s.push(f32::INFINITY);let(b,l)=s.measure(48000);assert!(b.iter().all(|v|v.is_finite()));assert!(l.is_finite());}
-    #[test] fn silence_releases_previous_bands_without_fft(){let mut s=Spectrum::new();s.bands=[1.;8];for _ in 0..FFT_SIZE{s.push(0.);}let(b,l)=s.measure(48000);assert_eq!(b,[0.65;8]);assert_eq!(l,0.);for _ in 0..24{s.measure(48000);}assert_eq!(s.bands,[0.;8]);}
+    #[test] fn silence_releases_previous_bands_without_fft(){let mut s=Spectrum::new();s.bands=[1.; BAND_COUNT];for _ in 0..FFT_SIZE{s.push(0.);}let(b,l)=s.measure(48000);assert_eq!(b,[0.65; BAND_COUNT]);assert_eq!(l,0.);for _ in 0..24{s.measure(48000);}assert_eq!(s.bands,[0.; BAND_COUNT]);}
 }

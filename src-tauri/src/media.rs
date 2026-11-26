@@ -1,5 +1,6 @@
 pub mod legacy;
 pub mod names;
+mod cover_retry;
 
 use std::collections::HashMap;
 use std::sync::{
@@ -332,19 +333,70 @@ fn read_stream_thumbnail_from_props(
     let mut buf = vec![0u8; loaded as usize];
     reader.ReadBytes(&mut buf).ok()?;
 
-    use base64::Engine;
-    let b64 = base64::engine::general_purpose::STANDARD.encode(&buf);
-    let mime = stream.ContentType().ok().map(|s| s.to_string()).filter(|s|s.starts_with("image/")).unwrap_or_else(|| {
-        if buf.starts_with(&[137,80,78,71]) {"image/png".into()} else {"image/jpeg".into()}
-    });
-    Some(format!("data:{};base64,{}", mime, b64))
+    decode_artwork(&buf)
+}
+
+fn decode_artwork(bytes:&[u8])->Option<String> {
+    if bytes.is_empty()||bytes.len()>10*1024*1024{return None;}
+    let mut reader=image::ImageReader::new(std::io::Cursor::new(bytes)).with_guessed_format().ok()?;
+    let mut limits=image::Limits::default();limits.max_image_width=Some(4096);limits.max_image_height=Some(4096);limits.max_alloc=Some(64*1024*1024);reader.limits(limits);
+    let image=reader.decode().ok()?.thumbnail(256,256).into_rgba8();
+    crate::capture::data_url(&image).ok()
+}
+
+static ARTWORK_FAILURES:Mutex<(String,u8)>=Mutex::new((String::new(),0));
+pub async fn recover_cover(app:&tauri::AppHandle,key:String,failed_cover:String)->bool {
+    let current=cached_media();
+    if !current.as_ref().is_some_and(|media|media["key"]==key&&media["cover"]==failed_cover){return false;}
+    {
+        let mut failures=ARTWORK_FAILURES.lock().unwrap();
+        if failures.0!=key{*failures=(key.clone(),0);}
+        if failures.1>=2{return false;}failures.1+=1;
+    }
+    let artwork=async {
+        let url=reqwest::Url::parse(&failed_cover).ok()?;
+        if url.scheme()!="https"||!url.username().is_empty()||url.password().is_some(){return None;}
+        let client=reqwest::Client::builder().timeout(Duration::from_secs(3)).build().ok()?;
+        let mut response=client.get(url).send().await.ok()?.error_for_status().ok()?;
+        if response.content_length().is_some_and(|size|size>10*1024*1024){return None;}
+        let mut bytes=Vec::new();while let Some(chunk)=response.chunk().await.ok()? {if bytes.len()+chunk.len()>10*1024*1024{return None;}bytes.extend_from_slice(&chunk);}
+        tauri::async_runtime::spawn_blocking(move||decode_artwork(&bytes)).await.ok()?
+    }.await;
+    let mut media=CACHED_MEDIA.lock().unwrap();
+    let Some(current)=media.as_mut().filter(|media|media["key"]==key&&media["cover"]==failed_cover)else{return false;};
+    let mut cache=LAST_COVER_CACHE.lock().unwrap();
+    if let Some(artwork)=artwork {
+        current["cover"]=json!(artwork);*cache=Some((key.clone(),artwork.clone()));
+        drop(cache);drop(media);let _=app.emit("media:cover",json!({"key":key,"cover":artwork}));true
+    }else {
+        current["cover"]=Value::Null;
+        if cache.as_ref().is_some_and(|(cached_key,_)|cached_key==&key){*cache=None;}
+        drop(cache);drop(media);notify_wake();false
+    }
 }
 
 /// Fallback online cover fetcher using iTunes Search API
-async fn fetch_online_artwork(artist: &str, title: &str) -> Option<String> {
+fn matching_online_artwork(data: &Value, artist: &str, title: &str, duration_ms: u64) -> Option<String> {
+    let normalize = |text: &str| text.chars().filter(|ch| ch.is_alphanumeric()).flat_map(char::to_lowercase).collect::<String>();
+    let artist = normalize(artist);
+    let title = normalize(title);
+    if artist.is_empty() || title.is_empty() { return None; }
+    data.get("results")?.as_array()?.iter().find_map(|song| {
+        if normalize(song["artistName"].as_str()?) != artist || normalize(song["trackName"].as_str()?) != title { return None; }
+        if duration_ms > 0 && song["trackTimeMillis"].as_u64().is_none_or(|duration| duration.abs_diff(duration_ms) > 3000) { return None; }
+        let artwork = song["artworkUrl100"].as_str()?;
+        let url = reqwest::Url::parse(artwork).ok()?;
+        if url.scheme() != "https" || !url.username().is_empty() || url.password().is_some() { return None; }
+        Some(artwork.replace("100x100bb", "600x600bb"))
+    })
+}
+
+async fn fetch_online_artwork(artist: &str, title: &str, duration_ms: u64) -> Option<String> {
+    // Synthetic native fixtures must not search public catalogs for made-up tracks.
+    if crate::win::WindowManager::passive_qa() { return None; }
     let term = format!("{} {}", artist, title);
     let url = format!(
-        "https://itunes.apple.com/search?term={}&entity=song&limit=1",
+        "https://itunes.apple.com/search?term={}&entity=song&limit=5",
         urlencoding::encode(&term)
     );
 
@@ -354,18 +406,9 @@ async fn fetch_online_artwork(artist: &str, title: &str) -> Option<String> {
         .build()
         .ok()?;
 
-    let resp = client.get(&url).send().await.ok()?;
+    let resp = client.get(&url).send().await.ok()?.error_for_status().ok()?;
     let data = resp.json::<Value>().await.ok()?;
-    let results = data.get("results")?.as_array()?;
-    if let Some(first) = results.first() {
-        if let Some(art) = first.get("artworkUrl100").and_then(|v| v.as_str()) {
-            // Replace with 600x600 for sharp Hi-Fi artwork
-            let hd = art.replace("100x100bb", "600x600bb");
-            return Some(hd);
-        }
-    }
-
-    None
+    matching_online_artwork(&data, artist, title, duration_ms)
 }
 
 fn advance_cached_media_position() -> Option<Value> {
@@ -408,7 +451,7 @@ fn poll_current_media_with_manager(
     mgr: Option<&GlobalSystemMediaTransportControlsSessionManager>,
     force_legacy: bool,
 ) -> (Option<Value>, Option<GlobalSystemMediaTransportControlsSession>, bool) {
-    let bridge = crate::music_bridge::current().filter(|_| !is_hidden(crate::music_bridge::APP_ID));
+    let mut bridge = crate::music_bridge::current().filter(|_| !is_hidden(crate::music_bridge::APP_ID));
     let legacy_visible: Vec<Value> = cached_legacy_snapshots(force_legacy)
         .into_iter()
         .filter(|m| m["app"].as_str().is_some_and(|id| !is_hidden(id)))
@@ -440,6 +483,9 @@ fn poll_current_media_with_manager(
         let (gsmtc, sess, ok) = read_current_media_from_manager(mgr);
         rpc_ok = ok;
         active_session = sess;
+        if let (Some(bridge),Some(native))=(bridge.as_mut(),gsmtc.as_ref()) {
+            merge_matching_cover(bridge,native);
+        }
         let legacy_playing = legacy_visible.iter().find(|m| m["playing"] == true).cloned();
         let legacy_any = legacy_visible.first().cloned();
         current = if bridge.as_ref().is_some_and(|m| m["playing"] == true) {
@@ -452,7 +498,16 @@ fn poll_current_media_with_manager(
             gsmtc.or(bridge).or(legacy_any)
         };
     }
+    if current.as_ref().is_some_and(|media|media["app"]==crate::music_bridge::APP_ID&&media["cover"].is_null())&&active_session.is_none() {
+        let (native,session,ok)=read_current_media_from_manager(mgr);rpc_ok&=ok;active_session=session;
+        if let (Some(media),Some(native))=(current.as_mut(),native.as_ref()){merge_matching_cover(media,native);}
+    }
     if let Some(ref mut media) = current {
+        if media["cover"].as_str().is_none() {
+            if let Some((key,cover))=LAST_COVER_CACHE.lock().unwrap().as_ref().filter(|(key,_)|media["key"]==*key) {
+                let _=key;media["cover"]=json!(cover);
+            }
+        }
         let extra = usize::from(crate::music_bridge::current().is_some()) + legacy_visible.len();
         let existing = media["sources"].as_u64().unwrap_or(1) as usize;
         if existing < extra.max(1) {
@@ -463,6 +518,18 @@ fn poll_current_media_with_manager(
         *LAST_COVER_CACHE.lock().unwrap() = None;
     }
     (current, active_session, rpc_ok)
+}
+
+fn merge_matching_cover(target:&mut Value,source:&Value) {
+    let normalized=|value:&Value|value.as_str().unwrap_or("").split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase();
+    let title=normalized(&target["title"]);
+    let artist=normalized(&target["artist"]);
+    let duration_matches=match(target["durationMs"].as_u64(),source["durationMs"].as_u64()){
+        (Some(a),Some(b))if a>0&&b>0=>a.abs_diff(b)<=5000,_=>true,
+    };
+    if target["cover"].as_str().is_none()&&!title.is_empty()&&!artist.is_empty()
+        &&title==normalized(&source["title"])&&artist==normalized(&source["artist"])&&duration_matches
+        &&source["cover"].as_str().is_some() {target["cover"]=source["cover"].clone();}
 }
 
 fn read_current_media_from_manager(
@@ -496,7 +563,9 @@ fn read_current_media_from_manager(
     let album = props.AlbumTitle().unwrap_or_default().to_string();
 
     let mut is_playing = false;
+    let mut can_seek = false;
     if let Ok(playback) = session.GetPlaybackInfo() {
+        can_seek = playback.Controls().and_then(|controls| controls.IsPlaybackPositionEnabled()).unwrap_or(false);
         if let Ok(status) = playback.PlaybackStatus() {
             is_playing = status == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
         }
@@ -565,6 +634,7 @@ fn read_current_media_from_manager(
             "playing": is_playing,
             "positionMs": position_ms,
             "durationMs": duration_ms,
+            "canSeek": can_seek,
             "cover": cover_url,
             "updatedAt": now,
             "sources": sources_count
@@ -575,10 +645,11 @@ fn read_current_media_from_manager(
 }
 
 pub fn get_current_cover() -> Option<String> {
-    if let Some(media)=get_current_media().filter(|m|m["app"]==crate::music_bridge::APP_ID) {return media["cover"].as_str().map(str::to_owned);}
-    let current_key = PLAYBACK_TRACKER.lock().unwrap().as_ref().map(|t|t.key.clone());
+    let current=get_current_media()?;
+    if let Some(cover)=current["cover"].as_str(){return Some(cover.to_owned());}
+    let current_key = current["key"].as_str();
     let cache_guard = LAST_COVER_CACHE.lock().unwrap();
-    cache_guard.as_ref().filter(|(key,_)|current_key.as_ref()==Some(key)).map(|(_, c)| c.clone())
+    cache_guard.as_ref().filter(|(key,_)|current_key==Some(key.as_str())).map(|(_, c)| c.clone())
 }
 
 pub fn get_media_sources() -> Vec<Value> {
@@ -898,6 +969,7 @@ pub fn start_media_loop(app: tauri::AppHandle) {
             let mut last_playing = false;
             let mut last_cover = None;
             let mut last_payload = Value::Null;
+            let mut cover_retry = cover_retry::CoverRetry::default();
 
             loop {
                 let low_power = crate::is_low_power();
@@ -915,6 +987,7 @@ pub fn start_media_loop(app: tauri::AppHandle) {
                         } else {
                             Duration::from_secs(4)
                         };
+                        let wait = cover_retry.wait(Instant::now()).map_or(wait, |delay| delay.min(wait));
                         let (mut guard, _) = cvar
                             .wait_timeout(dirty, wait)
                             .unwrap_or_else(|e| e.into_inner());
@@ -933,6 +1006,7 @@ pub fn start_media_loop(app: tauri::AppHandle) {
                     Duration::from_secs(6)
                 };
                 let need_full_poll = woken_by_event
+                    || cover_retry.take_due(Instant::now())
                     || last_full_poll.elapsed() >= safety_interval
                     || (manager_binding.is_none() && Instant::now() >= next_manager_retry);
 
@@ -997,6 +1071,11 @@ pub fn start_media_loop(app: tauri::AppHandle) {
 
                 let key_changed = key != last_key;
                 let play_changed = is_playing != last_playing;
+                let missing_native_cover = current.as_ref().is_some_and(|media| {
+                    media["cover"].as_str().is_none() && (media["app"]==crate::music_bridge::APP_ID || session_binding.as_ref().is_some_and(|binding|
+                        media["app"].as_str() == Some(binding.app_id.as_str())))
+                });
+                cover_retry.observe(&key, missing_native_cover, Instant::now());
                 let cover = current
                     .as_ref()
                     .and_then(|m| m["cover"].as_str())
@@ -1020,17 +1099,20 @@ pub fn start_media_loop(app: tauri::AppHandle) {
                         if let Some(ref cur) = current {
                             let artist = cur.get("artist").and_then(|v| v.as_str()).unwrap_or("").to_string();
                             let title = cur.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                            let duration_ms = cur["durationMs"].as_u64().unwrap_or(0);
                             let key_for_task = key.clone();
                             let app_for_task = app_clone.clone();
 
                             tauri::async_runtime::spawn(async move {
-                                if let Some(artwork) = fetch_online_artwork(&artist, &title).await {
-                                    {
-                                        let mut cache_guard = LAST_COVER_CACHE.lock().unwrap();
-                                        if PLAYBACK_TRACKER.lock().unwrap().as_ref().map(|t| &t.key) == Some(&key_for_task) {
-                                            *cache_guard = Some((key_for_task.clone(), artwork.clone()));
-                                        }
-                                    }
+                                // Prefer the player's own late thumbnail before an online fallback.
+                                tokio::time::sleep(Duration::from_millis(1400)).await;
+                                if !cached_media().is_some_and(|media| media["key"] == key_for_task && media["cover"].is_null()) { return; }
+                                if let Some(artwork) = fetch_online_artwork(&artist, &title, duration_ms).await {
+                                    let mut current = CACHED_MEDIA.lock().unwrap();
+                                    let Some(media) = current.as_mut().filter(|media| media["key"] == key_for_task && media["cover"].is_null()) else { return; };
+                                    media["cover"] = json!(artwork);
+                                    *LAST_COVER_CACHE.lock().unwrap() = Some((key_for_task.clone(), artwork.clone()));
+                                    drop(current);
                                     let _ = app_for_task.emit(
                                         "media:cover",
                                         json!({
@@ -1068,6 +1150,26 @@ pub fn start_media_loop(app: tauri::AppHandle) {
 
 #[cfg(test)]
 mod tests {
+    #[test] fn online_artwork_rejects_unrelated_results_and_other_recordings() {
+        let song=json!({"artistName":"Автор", "trackName":"Песня!", "trackTimeMillis":180000, "artworkUrl100":"https://example.test/100x100bb.jpg"});
+        let data=json!({"results":[{"artistName":"Другой", "trackName":"Песня", "trackTimeMillis":180000, "artworkUrl100":"https://example.test/wrong.jpg"},song]});
+        assert_eq!(super::matching_online_artwork(&data," автор ","ПЕСНЯ",181000).as_deref(),Some("https://example.test/600x600bb.jpg"));
+        assert!(super::matching_online_artwork(&data,"Fixture","Pause fixture",300000).is_none());
+        assert!(super::matching_online_artwork(&data,"Автор","Песня",240000).is_none());
+        assert!(super::matching_online_artwork(&data,"","Песня",180000).is_none());
+        let insecure=json!({"results":[{"artistName":"Автор","trackName":"Песня","trackTimeMillis":180000,"artworkUrl100":"http://example.test/art.jpg"}]});
+        assert!(super::matching_online_artwork(&insecure,"Автор","Песня",180000).is_none());
+    }
+    #[test] fn connector_artwork_uses_only_the_same_song_and_never_replaces_its_own_cover() {
+        let source=serde_json::json!({"title":"Песня","artist":"Автор","durationMs":180000,"cover":"native"});
+        let mut target=serde_json::json!({"title":" Песня ","artist":"автор","durationMs":181000,"cover":null});
+        super::merge_matching_cover(&mut target,&source);assert_eq!(target["cover"],"native");
+        target["cover"]=serde_json::json!("connector");super::merge_matching_cover(&mut target,&source);assert_eq!(target["cover"],"connector");
+        for (key,value) in [("title",serde_json::json!("Другая")),("artist",serde_json::json!("Другой")),("durationMs",serde_json::json!(240000))] {
+            let mut different=source.clone();different["cover"]=serde_json::Value::Null;different[key]=value;
+            super::merge_matching_cover(&mut different,&source);assert!(different["cover"].is_null());
+        }
+    }
     use super::*;
     fn progress()->PlaybackProgress {PlaybackProgress{key:"track".into(),base_pos_ms:1000,last_tick:10000,duration_ms:100000,playing:true,raw_pos_ms:1000,timeline_at:1}}
     #[test] fn stale_timeline_does_not_rewind_every_three_seconds(){let mut p=progress();assert_eq!(p.advance(1000,100000,1,14000,true),5000);assert_eq!(p.advance(1000,100000,1,18000,true),9000);}

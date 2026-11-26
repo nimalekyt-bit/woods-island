@@ -2,8 +2,13 @@
 <html lang="ru">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-    <meta name="color-scheme" content="dark light" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <meta name="color-scheme" content="only light" />
+    <meta name="theme-color" content="#8ea2ff" />
+    <meta name="robots" content="noindex" />
     <meta name="referrer" content="no-referrer" />
     <title>Woods Island · Phone</title>
     <link rel="stylesheet" href="/phone/style.css" />
@@ -11,88 +16,145 @@
   </head>
   <body>
     <main>
-      <header class="hero">
-        <div class="brand">
-          <div class="pill-mark" aria-hidden="true">
-            <span class="pill-wave"><i></i><i></i><i></i></span>
+      <section class="phone-top">
+        <div class="wrap">
+          <header class="hero">
+            <div class="brand">
+              <div id="phone-eyes" class="pill-mark" aria-hidden="true">
+                <i></i><i></i>
+              </div>
+              <div class="brand-text">
+                <h1 data-i18n="toComputer"></h1>
+              </div>
+            </div>
+          </header>
+
+          <section class="connection" data-state="pending" aria-live="polite">
+            <span id="connection-dot" aria-hidden="true"></span>
+            <div class="connection-copy">
+              <strong id="connection-title"></strong>
+              <p id="connection-detail"></p>
+            </div>
+          </section>
+
+          <section class="send-section">
+            <p class="sr-only" data-i18n="localHint"></p>
+            <div class="actions">
+              <button
+                id="pick-files"
+                class="action-tile primary"
+                disabled
+                aria-describedby="file-limit"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="3" y="3" width="18" height="18" rx="3" />
+                  <circle cx="9" cy="9" r="2" />
+                  <path d="m21 15-5-5L6 21" />
+                </svg>
+                <span data-i18n="photosFiles"></span>
+              </button>
+              <button
+                id="pick-options"
+                class="pick-options"
+                disabled
+                aria-expanded="false"
+                aria-controls="gallery-menu"
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  aria-hidden="true"
+                >
+                  <circle cx="5" cy="12" r="1.6" />
+                  <circle cx="12" cy="12" r="1.6" />
+                  <circle cx="19" cy="12" r="1.6" />
+                </svg>
+              </button>
+              <div id="gallery-menu" class="gallery-menu" hidden>
+                <button id="pick-photos" disabled data-i18n="photos"></button>
+              </div>
+            </div>
+            <input
+              id="photos"
+              type="file"
+              accept="image/*,video/*"
+              multiple
+              hidden
+            />
+            <input id="files" type="file" multiple hidden />
+            <div id="upload-progress" class="progress-box" hidden>
+              <div class="progress-top">
+                <span id="progress-label"></span>
+                <button
+                  id="cancel-upload"
+                  class="cancel-btn"
+                  data-i18n="cancel"
+                ></button>
+              </div>
+              <progress id="progress" max="100" value="0"></progress>
+            </div>
+            <div id="sent-list" class="sent-list" hidden></div>
+            <p id="file-limit" class="sr-only" data-i18n="fileLimit"></p>
+          </section>
+
+          <section class="text-section">
+            <label class="sr-only" for="text" data-i18n="textTitle"></label>
+            <div class="compose">
+              <textarea
+                id="text"
+                rows="1"
+                maxlength="32000"
+                disabled
+              ></textarea>
+              <button id="send-text" class="send-btn" disabled>
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.6"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="m5 12 7-7 7 7M12 19V5" />
+                </svg>
+                <span class="sr-only" data-i18n="sendText"></span>
+              </button>
+            </div>
+          </section>
+
+          <p id="message" role="status"></p>
+        </div>
+      </section>
+      <div class="phone-edge" aria-hidden="true">
+        <svg viewBox="0 0 780 76" preserveAspectRatio="none">
+          <path
+            d="M0 76 L0.0 24.5 L6.5 25.2 L13.0 25.8 L19.5 26.3 L26.0 26.6 L32.5 26.9 L39.0 27.0 L45.5 27.0 L52.0 26.9 L58.5 26.7 L65.0 26.5 L71.5 26.3 L78.0 26.1 L84.5 25.9 L91.0 25.7 L97.5 25.5 L104.0 25.4 L110.5 25.3 L117.0 25.3 L123.5 25.3 L130.0 25.3 L136.5 25.4 L143.0 25.5 L149.5 25.6 L156.0 25.6 L162.5 25.7 L169.0 25.6 L175.5 25.5 L182.0 25.3 L188.5 24.9 L195.0 24.5 L201.5 24.0 L208.0 23.3 L214.5 22.6 L221.0 21.8 L227.5 20.9 L234.0 19.9 L240.5 18.9 L247.0 18.0 L253.5 17.0 L260.0 16.2 L266.5 15.4 L273.0 14.7 L279.5 14.1 L286.0 13.7 L292.5 13.5 L299.0 13.4 L305.5 13.6 L312.0 13.9 L318.5 14.3 L325.0 14.9 L331.5 15.7 L338.0 16.6 L344.5 17.6 L351.0 18.6 L357.5 19.7 L364.0 20.7 L370.5 21.8 L377.0 22.8 L383.5 23.7 L390.0 24.5 L396.5 25.2 L403.0 25.8 L409.5 26.3 L416.0 26.6 L422.5 26.9 L429.0 27.0 L435.5 27.0 L442.0 26.9 L448.5 26.7 L455.0 26.5 L461.5 26.3 L468.0 26.1 L474.5 25.9 L481.0 25.7 L487.5 25.5 L494.0 25.4 L500.5 25.3 L507.0 25.3 L513.5 25.3 L520.0 25.3 L526.5 25.4 L533.0 25.5 L539.5 25.6 L546.0 25.6 L552.5 25.7 L559.0 25.6 L565.5 25.5 L572.0 25.3 L578.5 24.9 L585.0 24.5 L591.5 24.0 L598.0 23.3 L604.5 22.6 L611.0 21.8 L617.5 20.9 L624.0 19.9 L630.5 18.9 L637.0 18.0 L643.5 17.0 L650.0 16.2 L656.5 15.4 L663.0 14.7 L669.5 14.1 L676.0 13.7 L682.5 13.5 L689.0 13.4 L695.5 13.6 L702.0 13.9 L708.5 14.3 L715.0 14.9 L721.5 15.7 L728.0 16.6 L734.5 17.6 L741.0 18.6 L747.5 19.7 L754.0 20.7 L760.5 21.8 L767.0 22.8 L773.5 23.7 L780.0 24.5 L780 76 Z"
+          />
+        </svg>
+      </div>
+      <section class="phone-bottom">
+        <div class="wrap">
+          <div class="card-head">
+            <h2 data-i18n="fromComputer"></h2>
+            <button
+              id="disconnect"
+              class="ghost-btn"
+              disabled
+              data-i18n="disconnect"
+            ></button>
           </div>
-          <div class="brand-text">
-            <span class="eyebrow">WOODS ISLAND · WI-FI</span>
-            <h1>Woods Island</h1>
-            <p data-i18n="tagline"></p>
-          </div>
-        </div>
-        <button id="disconnect" class="ghost-btn" disabled data-i18n="disconnect"></button>
-      </header>
-
-      <section class="connection" data-state="pending" aria-live="polite">
-        <span id="connection-dot" aria-hidden="true"></span>
-        <div class="connection-copy">
-          <strong id="connection-title"></strong>
-          <p id="connection-detail"></p>
+          <p id="files-empty" class="empty-copy" data-i18n="empty"></p>
+          <div id="offered"></div>
+          <footer>
+            <p data-i18n="footer"></p>
+          </footer>
         </div>
       </section>
-
-      <section class="card">
-        <div class="card-head">
-          <h2 data-i18n="toComputer"></h2>
-          <span class="chip" data-i18n="localBadge"></span>
-        </div>
-        <p data-i18n="localHint"></p>
-        <div class="actions">
-          <button id="pick-photos" class="action-tile primary" disabled>
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <rect x="3" y="5" width="18" height="14" rx="3" />
-              <circle cx="9" cy="10.5" r="1.7" />
-              <path d="M21 15.5l-4.5-4.5-6 6" />
-            </svg>
-            <span data-i18n="photos"></span>
-          </button>
-          <button id="pick-files" class="action-tile" disabled>
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
-              <path d="M14 3v5h5" />
-              <path d="M12 12v5" />
-              <path d="M9.5 14.5L12 12l2.5 2.5" />
-            </svg>
-            <span data-i18n="files"></span>
-          </button>
-        </div>
-        <input id="photos" type="file" accept="image/*,video/*" multiple hidden />
-        <input id="files" type="file" multiple hidden />
-        <div id="upload-progress" class="progress-box" hidden>
-          <div class="progress-top">
-            <span id="progress-label"></span>
-            <button id="cancel-upload" class="cancel-btn" data-i18n="cancel"></button>
-          </div>
-          <progress id="progress" max="100" value="0"></progress>
-        </div>
-        <div id="sent-list" class="sent-list" hidden></div>
-        <p class="limit" data-i18n="fileLimit"></p>
-      </section>
-
-      <section class="card">
-        <div class="card-head">
-          <h2 data-i18n="textTitle"></h2>
-        </div>
-        <label class="sr-only" for="text" data-i18n="textTitle"></label>
-        <textarea id="text" rows="3" maxlength="32000" disabled></textarea>
-        <button id="send-text" class="send-btn" disabled data-i18n="sendText"></button>
-      </section>
-
-      <section class="card">
-        <div class="card-head">
-          <h2 data-i18n="fromComputer"></h2>
-        </div>
-        <p id="files-empty" class="empty-copy" data-i18n="empty"></p>
-        <div id="offered"></div>
-      </section>
-
-      <p id="message" role="status"></p>
-
-      <footer>
-        <p data-i18n="footer"></p>
-      </footer>
     </main>
   </body>
 </html>

@@ -1035,6 +1035,9 @@ pub fn start_controls_monitor(app: tauri::AppHandle, state: std::sync::Arc<crate
         };
         if changed {
             let _ = app.emit("controls:changed", &current);
+            let enabled=state.settings.lock().unwrap()["showVpn"]!=false;
+            let profiles=current["vpns"].as_array().map(Vec::as_slice).unwrap_or_default();
+            let _=app.emit("vpn:status",if enabled{vpn_summary(profiles)}else{Value::Null});
         }
         std::thread::sleep(Duration::from_secs(3));
     });

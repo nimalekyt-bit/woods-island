@@ -14,7 +14,7 @@ fn steam_path()->Option<PathBuf>{
     None
 }
 const ACTIVITY_GRACE:Duration=Duration::from_secs(15);
-struct Progress{bytes:u64,total:u64,moved_at:Option<Instant>}
+struct Progress{bytes:u64,total:u64,moved_at:Option<Instant>,staging:bool}
 #[derive(Default)]pub struct Downloads{previous:HashMap<String,Progress>,last:Option<Instant>}
 fn library_key(path:&Path)->String{path.to_string_lossy().replace('/',"\\").trim_end_matches('\\').to_lowercase()}
 impl Downloads{
@@ -33,21 +33,36 @@ impl Downloads{
         let mut active=Vec::new();let mut done=Vec::new();let mut observed=HashMap::new();
         for library in libraries{for file in std::fs::read_dir(&library).into_iter().flatten().flatten().take(3000){let path=file.path();if path.extension()!=Some(std::ffi::OsStr::new("acf")){continue;}let Ok(text)=std::fs::read_to_string(path)else{continue;};let data:HashMap<_,_>=pairs(&text).into_iter().collect();
             let get=|key:&str|data.get(key).cloned().unwrap_or_default();let number=|key:&str|get(key).parse::<u64>().unwrap_or(0);
-            let total=number("BytesToDownload");let bytes=number("BytesDownloaded").min(total);if total==0{continue;}
+            let total=number("BytesToDownload");let bytes=number("BytesDownloaded").min(total);
+            let stage_total=number("BytesToStage");let staged=number("BytesStaged").min(stage_total);if total==0&&stage_total==0{continue;}
             let appid=get("appid");if appid.is_empty(){continue;}let id=format!("steam:{appid}");let name=get("name");if name.is_empty()||observed.contains_key(&id){continue;}let target=library.join("common").join(get("installdir"));
             let previous=self.previous.get(&id);let compatible=previous.filter(|p|p.total==total&&bytes>=p.bytes);
             let moved=compatible.is_some_and(|p|bytes>p.bytes);
             let moved_at=if moved{Some(now)}else{compatible.and_then(|p|p.moved_at)};
-            let flags=number("StateFlags");let downloading=flags&(1024|65536)!=0&&flags&(131072|8192)==0;
+            let flags=number("StateFlags");
+            let staging=flags&(2097152|4194304)!=0&&flags&(512|8388608)==0;
+            let downloading=flags&(1024|65536|1048576)!=0&&flags&(131072|8192|512|8388608)==0&&!staging;
             let recent=moved_at.is_some_and(|at|now.saturating_duration_since(at)<ACTIVITY_GRACE);
             let speed=compatible.map(|p|bytes.saturating_sub(p.bytes) as f64/elapsed).unwrap_or(0.);
-            let payload=json!({"id":id,"name":name,"path":target.to_string_lossy(),"size":bytes,"total":total,"speed":speed,"source":"steam","icon":null});
-            if bytes<total&&downloading&&recent{active.push(payload);}else if bytes==total&&compatible.is_some_and(|p|p.bytes<p.total&&p.moved_at.is_some()){done.push(payload);}
-            observed.insert(id,Progress{bytes,total,moved_at});
+            let payload=json!({"id":id,"name":name,"path":target.to_string_lossy(),"size":if staging{staged}else{bytes},"total":if staging{(stage_total>0).then_some(stage_total)}else{Some(total)},"speed":if staging{0.}else{speed},"phase":if staging{"staging"}else{"download"},"source":"steam","icon":null});
+            if staging||bytes<total&&downloading&&recent{active.push(payload);}
+            else if flags&4!=0&&flags&(256|1024|65536|1048576|8388608)==0&&bytes==total&&compatible.is_some_and(|p|p.staging||p.bytes<p.total&&p.moved_at.is_some()){done.push(payload);}
+            observed.insert(id,Progress{bytes,total,moved_at,staging});
         }}self.previous=observed;(active,done)
     }
 }
 #[cfg(test)]mod tests{use super::*;
+    #[test]fn downloaded_bytes_do_not_finish_a_game_while_steam_is_staging_it(){
+        let root=fixture();let now=Instant::now();let mut d=Downloads::default();
+        write(&root,400,1024);d.poll_root(root.clone(),now);
+        write(&root,500,2097152|1024);let (active,done)=d.poll_root(root.clone(),now+Duration::from_secs(1));
+        assert!(done.is_empty());assert_eq!(active[0]["phase"],"staging");assert!(active[0]["total"].is_null());
+        let manifest=root.join("steamapps/appmanifest_42.acf");
+        let text=std::fs::read_to_string(&manifest).unwrap().replace("}","\"BytesToStage\" \"1000\" \"BytesStaged\" \"450\" }");std::fs::write(&manifest,text).unwrap();
+        let active=d.poll_root(root.clone(),now+Duration::from_secs(2)).0;assert_eq!(active[0]["total"],1000);assert_eq!(active[0]["size"],450);assert_eq!(active[0]["speed"],0.);
+        write(&root,500,4);assert_eq!(d.poll_root(root.clone(),now+Duration::from_secs(3)).1.len(),1);assert!(d.poll_root(root.clone(),now+Duration::from_secs(4)).1.is_empty());
+        std::fs::remove_dir_all(root).unwrap();
+    }
     fn fixture()->PathBuf{static SEQUENCE:std::sync::atomic::AtomicU64=std::sync::atomic::AtomicU64::new(0);let root=std::env::temp_dir().join("woodscorp_obs/fixtures").join(format!("steam-{}-{}-{}",std::process::id(),crate::media::now_ms(),SEQUENCE.fetch_add(1,std::sync::atomic::Ordering::Relaxed)));std::fs::create_dir_all(root.join("steamapps")).unwrap();root}
     fn write(root:&Path,bytes:u64,flags:u64){std::fs::write(root.join("steamapps/appmanifest_42.acf"),format!("\"AppState\" {{ \"appid\" \"42\" \"name\" \"Test\" \"installdir\" \"test\" \"BytesToDownload\" \"500\" \"BytesDownloaded\" \"{bytes}\" \"StateFlags\" \"{flags}\" }}")).unwrap();}
     #[test]fn queued_and_stale_counters_are_not_transfers(){let root=fixture();let now=Instant::now();let mut d=Downloads::default();write(&root,100,518);assert!(d.poll_root(root.clone(),now).0.is_empty());assert!(d.poll_root(root.clone(),now+Duration::from_secs(1)).0.is_empty());write(&root,100,1574);assert!(d.poll_root(root.clone(),now+Duration::from_secs(2)).0.is_empty());std::fs::remove_dir_all(root).unwrap();}

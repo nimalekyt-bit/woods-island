@@ -1,6 +1,9 @@
 //! Pure watchdog decisions. All timestamps are active milliseconds, excluding sleep.
+use std::collections::VecDeque;
+
 pub const PROBE_INTERVAL_MS: u64 = 2_000;
 pub const PROBE_EXPIRES_MS: u64 = 5_000;
+const DELAYED_REPLY_MS: u64 = 15_000;
 pub const STARTUP_GRACE_MS: u64 = 60_000;
 pub const STALE_MS: u64 = 30_000;
 pub const AFTER_RECOVERY_MS: u64 = 60_000;
@@ -41,8 +44,8 @@ pub struct Monitor {
     native_at: u64,
     next_probe: u64,
     sequence: u64,
-    last_probe_at: u64,
     pending: Option<(u64, u64)>,
+    issued: VecDeque<(u64, u64)>,
     ready: bool,
     navigated: bool,
     recover_after: u64,
@@ -57,8 +60,8 @@ impl Monitor {
             native_at: now,
             next_probe: now,
             sequence: 0,
-            last_probe_at: now,
             pending: None,
+            issued: VecDeque::new(),
             ready: false,
             navigated: false,
             recover_after: now.saturating_add(STARTUP_GRACE_MS),
@@ -76,39 +79,34 @@ impl Monitor {
         }
         self.pending = None;
         if ready {
-            self.page_at = now;
-            self.ready = true;
-            self.navigated = false;
+            self.accept_ready(sequence, now);
         }
         true
     }
-    /// Accepts a delayed `ready == true` reply for the latest issued probe when
-    /// the page was already ready and WebView2 was temporarily throttled under
-    /// heavy CPU load, preventing false restarts while still rejecting stale or
-    /// mismatched sequences.
-    pub fn reply_tolerant(&mut self, sequence: u64, ready: bool, now: u64, max_late_ms: u64) -> bool {
-        if self.reply(sequence, ready, now) {
-            return true;
-        }
-        if !self.stopped
-            && !self.blocked
-            && self.ready
-            && ready
-            && sequence != 0
-            && sequence == self.sequence
-            && now.saturating_sub(self.last_probe_at) <= max_late_ms
-        {
+    fn accept_ready(&mut self, sequence: u64, now: u64) {
+        self.issued.retain(|&(issued, _)| issued > sequence);
+        self.page_at = now;
+        self.ready = true;
+        self.navigated = false;
+    }
+    /// A delayed response can arrive after a newer challenge was sent.
+    pub fn reply_tolerant(&mut self, sequence: u64, ready: bool, now: u64) -> bool {
+        if self.stopped || self.blocked { return false; }
+        if self.reply(sequence, ready, now) { return true; }
+        if !self.ready || !ready || !self.issued.iter().any(|&(sent, at)| {
+            sent == sequence && now.saturating_sub(at) <= DELAYED_REPLY_MS
+        }) { return false; }
+        if self.pending.is_some_and(|(pending, _)| pending == sequence) {
             self.pending = None;
-            self.page_at = now;
-            self.navigated = false;
-            return true;
         }
-        false
+        self.accept_ready(sequence, now);
+        true
     }
     pub fn resume(&mut self, now: u64) {
         self.page_at = now;
         self.native_at = now;
         self.pending = None;
+        self.issued.clear();
         self.recover_after = now.saturating_add(RESUME_GRACE_MS);
         self.next_probe = now;
     }
@@ -118,6 +116,7 @@ impl Monitor {
     pub fn stop(&mut self) {
         self.stopped = true;
         self.pending = None;
+        self.issued.clear();
     }
     pub fn status(&self) -> &'static str {
         if self.stopped {
@@ -159,6 +158,7 @@ impl Monitor {
         if protected {
             self.deferred = true;
             self.pending = None;
+            self.issued.clear();
             self.page_at = now;
             self.native_at = now;
             self.recover_after = now.saturating_add(RESUME_GRACE_MS);
@@ -191,6 +191,7 @@ impl Monitor {
             self.navigated = true;
             self.recover_after = now.saturating_add(AFTER_RECOVERY_MS);
             self.pending = None;
+            self.issued.clear();
             return Action::Recover(recovery, reason);
         }
         if self
@@ -200,8 +201,11 @@ impl Monitor {
             self.pending = None;
         }
         if can_probe && self.pending.is_none() && now >= self.next_probe {
-            self.sequence = self.sequence.wrapping_add(1).max(1);
-            self.last_probe_at = now;
+            self.sequence += 1;
+            while self.issued.front().is_some_and(|&(_, at)| now.saturating_sub(at) > DELAYED_REPLY_MS) {
+                self.issued.pop_front();
+            }
+            self.issued.push_back((self.sequence, now));
             self.pending = Some((self.sequence, now));
             self.next_probe = now.saturating_add(PROBE_INTERVAL_MS);
             return Action::Probe(self.sequence);
@@ -376,9 +380,14 @@ mod tests {
         let Action::Probe(seq) = m.poll(10_000, true, false, true) else {
             panic!("Expected probe");
         };
-        assert!(!m.reply_tolerant(seq + 1, true, 17_000, 15_000));
-        assert!(!m.reply_tolerant(seq, false, 17_000, 15_000));
-        assert!(m.reply_tolerant(seq, true, 17_000, 15_000));
+        assert!(!m.reply_tolerant(seq + 1, true, 17_000));
+        assert!(!m.reply_tolerant(seq, false, 17_000));
+        let Action::Probe(newer) = m.poll(16_000, true, false, true) else {
+            panic!("Expected a newer probe");
+        };
+        assert!(m.reply_tolerant(seq, true, 17_000));
+        assert!(!m.reply_tolerant(seq, true, 17_000), "A duplicate is not fresh evidence");
+        assert!(m.reply_tolerant(newer, true, 17_000), "The newer probe is still pending");
         assert_eq!(m.ages(17_000).0, 0);
         assert_eq!(m.status(), "watching");
     }

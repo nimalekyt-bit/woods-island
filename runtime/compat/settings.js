@@ -3,6 +3,7 @@ import { freeLicense } from '../free';
 import { MediaVisibilitySettings } from '../media/MediaSources';
 import { ObsidianVaultSettings } from '../components/ObsidianVaultSettings';
 import { PeripheralSettings } from '../peripherals/PeripheralSettings';
+import { IndicatorSettings } from '../controls/IndicatorSettings';
 import { React as WoodsReact } from '../react';
 import { ConnectionSettings, UpdateSettings, UploadKeySettings } from '../components/ReliabilitySettings';
 import { AboutSettings, AboutContact, ReleaseHistory } from '../components/AboutSettings';
@@ -13,6 +14,7 @@ import { placePatch } from '../weather/places';
 import { HotkeyRecorder } from '../keyboard/HotkeyRecorder';
 import { AppListPicker } from '../components/AppListPicker';
 import { AiProxySettings } from '../components/AiProxySettings';
+import { SitePermissions } from '../web-ai/SitePermissions';
 import { shortcutBindings } from '../keyboard/shortcuts';
 import { PetLibrarySettings } from '../components/PetLibrarySettings';
 import { usePetLibrary } from '../characters/pet-library';
@@ -1100,7 +1102,8 @@ function St({ version: e }) {
           ],
         }),
         (0, U.jsx)(`nav`, {
-          className: `scroll-thin flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2.5 pb-3`,
+          "data-settings-nav-list": true,
+          className: `scroll-none flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2.5 pb-3`,
           children: t.map((e) => {
             let t = e.icon,
               n = i === e.id;
@@ -2102,7 +2105,8 @@ function zt() {
             (0, U.jsx)(St, { version: x }),
             (0, U.jsx)(`div`, {
               ref: ae,
-              className: `scroll-thin min-w-0 flex-1 overflow-y-auto`,
+              "data-settings-content": true,
+              className: `scroll-none min-w-0 flex-1 overflow-y-auto`,
               children: (0, U.jsxs)(`div`, {
                 className: `mx-auto flex max-w-[580px] flex-col gap-6 px-6 py-6`,
                 children: [
@@ -2323,6 +2327,8 @@ function zt() {
                         ),
                         children: (0, U.jsx)(Y, { value: e.autoHide, onChange: (e) => H({ autoHide: e }) }),
                       }),
+                      e.autoHide &&
+                        (0,U.jsx)(J,{title:n(`Не прятать, пока играет музыка`,`Stay visible while music plays`),hint:n(`Плеер и текст песни остаются на виду. Программы из списка «Прятать» сохраняют приоритет.`,`The player and lyrics stay visible. Applications in the Hide list still take priority.`),children:(0,U.jsx)(Y,{value:e.autoHideMusic===true,onChange:value=>H({autoHideMusic:value})})}),
                       e.autoHide &&
                         e.notchBar === !0 &&
                         (0, U.jsx)(`p`, {
@@ -2926,6 +2932,7 @@ function zt() {
                         }),
                       }),
                       (0,U.jsx)(J,{title:n(`Скрытие над полным экраном: вкл. / выкл.`,`Toggle hiding over fullscreen apps`),children:(0,U.jsx)($,{value:e.hotkeyFullscreen??``,onChange:value=>H({hotkeyFullscreen:value})})}),
+                      (0,U.jsx)(J,{title:n(`Автоскрытие: вкл. / выкл.`,`Auto-hide: on / off`),children:(0,U.jsx)($,{value:e.hotkeyAutoHide??``,onChange:value=>H({hotkeyAutoHide:value})})}),
                       (0, U.jsx)(It, { onProblems: f }),
                       De &&
                         he([
@@ -3069,6 +3076,7 @@ function zt() {
                         ],
                       }),
                       y === `ai` && (0,U.jsx)(AiProxySettings,{value:e.aiProxy||``,Row:J}),
+                      y === `ai` && (0,U.jsx)(J,{title:n(`Разрешения сайтов ИИ`,`AI site permissions`),hint:n(`Микрофон, камера и уведомления. После сброса сайт спросит снова; вход в аккаунт сохраняется.`,`Microphone, camera and notifications. The site asks again after reset; you stay signed in.`),children:(0,U.jsx)(SitePermissions,{})}),
                       (0, U.jsxs)(`div`, {
                         className: `flex items-center gap-3 px-4 py-3`,
                         children: [
@@ -3886,6 +3894,7 @@ function zt() {
                         stacked: !0,
                         children: (0, U.jsx)(at, { s: e, save: H }),
                       }),
+                      (0,U.jsx)(IndicatorSettings,{settings:e,save:H,Row:J,Choice:X}),
                       (0, U.jsx)(PeripheralSettings, {
                         preferences: e, save: H, ru: n('ru', 'en') === 'ru', Row: J, Toggle: Y,
                       }),

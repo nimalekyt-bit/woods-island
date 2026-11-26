@@ -4,6 +4,7 @@ export type CharacterBox = readonly [x: number, y: number, width: number, height
 export type MediaPill = 'normal' | 'title' | 'lyrics' | 'player';
 
 export interface WidgetSizing {
+  compact?: number;
   character?: boolean;
   face?: boolean;
   big?: boolean;
@@ -22,6 +23,7 @@ export interface WidgetSizing {
   shelf?: number;
   /** Number of characters in the displayed timer label. */
   timer?: number;
+  timerLabel?: number;
   words?: number;
   seekable?: boolean;
   lyrics?: boolean;
@@ -66,21 +68,21 @@ const append = (width: number, extra: number) => extra > 0 ? width + (width > 0 
 const desktopWidth = (count: number) => count > 0 ? 8 + Math.ceil(Math.min(count, 12) * 6.4) : 0;
 const inputWidth = (options: WidgetSizing) => append(append(desktopWidth(options.desk ?? 0), options.layout ? 22 : 0), options.caps ? 16 : 0);
 const privacyWidth = (dots: number) => dots > 0 ? dots * 7 + (dots - 1) * 4 : 0;
-const statusWidth = (options: WidgetSizing) => append(append(append(privacyWidth(options.dots ?? 0), options.obs ? 34 : 0), options.agent ? 16 : 0), options.download ? 16 : 0);
+const statusWidth = (options: WidgetSizing) => append(append(append(append(privacyWidth(options.dots ?? 0), options.obs ? 34 : 0), options.agent ? 16 : 0), options.download ? 16 : 0), options.compact ?? 0);
 const shelfWidth = (count: number) => count > 9 ? 38 : count > 0 ? 31 : 0;
 
 export function timerTextWidth(length: number): number {
   const narrow = length > 5 ? 2 : 1;
   return Math.ceil((length - narrow) * 7.2 + narrow * 3.6);
 }
-const timerWidth = (length: number) => length > 0 ? 19 + timerTextWidth(length) : 0;
+const timerWidth = (length: number, labelLength=0) => length > 0 ? 19 + timerTextWidth(length) + (labelLength>0?5+Math.min(96,labelLength*6):0) : 0;
 function sideWidth(widgets: SideWidget[], clock = CLOCK): number {
   return widgets.reduce((sum, widget) => sum + (widget === 'clock' ? clock : widget === 'battery' ? BATTERY : WEATHER), 0) + Math.max(0, widgets.length - 1) * 8;
 }
 
 export function idleSize(options: WidgetSizing): Size {
   const input = append(inputWidth(options), shelfWidth(options.shelf ?? 0));
-  const status = statusWidth(options), clock = clockWidth(options), timer = timerWidth(options.timer ?? 0);
+  const status = statusWidth(options), clock = clockWidth(options), timer = timerWidth(options.timer ?? 0, options.timerLabel ?? 0);
   if (options.face && !options.character && (options.clock || options.battery || input > 0 || status > 0 || timer > 0)) {
     const sides = distributeFaceWidgets(options);
     const occupied = Math.max(append(append(sideWidth(sides.left, clock), timer), input), append(sideWidth(sides.right, clock), status));
@@ -101,7 +103,7 @@ export function idleSize(options: WidgetSizing): Size {
 export function normalMediaSize(options: WidgetSizing): Size {
   const withLeadingGaps = (widths: number[], gap: number) => widths.filter(width => width > 0).reduce((sum, width) => sum + gap + width, 0);
   const extras = [inputWidth(options), statusWidth(options), shelfWidth(options.shelf ?? 0)];
-  const timer = timerWidth(options.timer ?? 0), character = options.character ? 60 : 41;
+  const timer = timerWidth(options.timer ?? 0, options.timerLabel ?? 0), character = options.character ? 60 : 41;
   if (options.face && !options.character) {
     const left = 30 + withLeadingGaps([clockWidth(options), options.battery ? BATTERY : 0], 8);
     const right = character + withLeadingGaps([options.weather ? WEATHER : 0, timer, ...extras], GAP);
@@ -117,7 +119,7 @@ export function resolveMediaPill(value: unknown): MediaPill {
 
 export function titleMediaSize(options: WidgetSizing): Size {
   const extras = [inputWidth(options), statusWidth(options), shelfWidth(options.shelf ?? 0)];
-  const occupied = [timerWidth(options.timer ?? 0), clockWidth(options), options.battery ? BATTERY : 0,
+  const occupied = [timerWidth(options.timer ?? 0, options.timerLabel ?? 0), clockWidth(options), options.battery ? BATTERY : 0,
     options.weather ? WEATHER : 0, ...extras, options.character ? 52 : 27]
     .filter(width => width > 0).reduce((sum, width) => sum + GAP + width, 0);
   return [Math.max(TITLE[0], 218 + occupied + 12), TITLE[1]];
@@ -125,7 +127,7 @@ export function titleMediaSize(options: WidgetSizing): Size {
 
 function lyricsNaturalWidth(options: WidgetSizing): number {
   const [width] = titleMediaSize(options);
-  return options.words ? width - 170 + Math.max(170, 22 + Math.ceil(options.words)) : width;
+  return options.words ? width - 170 + Math.max(96, 22 + Math.ceil(options.words)) : width;
 }
 export function lyricsMediaSize(options: WidgetSizing): Size {
   return [Math.min(680, lyricsNaturalWidth(options)), TITLE[1]];
@@ -136,7 +138,7 @@ export function lyricsNeedWrap(options: WidgetSizing): boolean {
 export function playerMediaSize(options: WidgetSizing): Size {
   const joined = (widths: number[]) => widths.filter(width => width > 0).reduce((sum, width, index) => sum + (index > 0 ? 8 : 0) + width, 0);
   const side = Math.max(joined([inputWidth(options), statusWidth(options), shelfWidth(options.shelf ?? 0), options.character ? 0 : 27]),
-    joined([timerWidth(options.timer ?? 0), clockWidth(options)]), joined([options.weather ? WEATHER : 0, options.battery ? BATTERY : 0]));
+    joined([timerWidth(options.timer ?? 0, options.timerLabel ?? 0), clockWidth(options)]), joined([options.weather ? WEATHER : 0, options.battery ? BATTERY : 0]));
   const width = Math.max(360, 228 + (side > 0 ? 12 + side : 0) + 14);
   return [width + (options.lyrics ? 268 : 0), 74 + (options.seekable ? 22 : 0) + 32 + 12];
 }

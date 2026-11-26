@@ -14,8 +14,8 @@ export const LATEST_SHOWCASE_SLIDES: ShowcaseSlide[] = [
     badge: { ru: "Телефон", en: "Phone" },
     title: { ru: "Передача с телефона по QR", en: "QR transfer from your phone" },
     caption: {
-      ru: "Фото, файлы и текст летят напрямую по локальной сети на ступенчатую полку с превью — без облака и приложений.",
-      en: "Photos, files and text travel over your local network to a tiered shelf with previews — no cloud or extra apps.",
+      ru: "Отправляй фото, файлы и текст с телефона на полку с превью и забирай файлы с компьютера.",
+      en: "Send photos, files and text from your phone to the shelf with previews, and receive files from your computer.",
     },
     accent: "#7fa7ff",
   },

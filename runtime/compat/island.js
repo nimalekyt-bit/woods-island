@@ -1,13 +1,19 @@
+import { useTimerLabelCharacters } from './home.js';
 import { AnimatedWeatherValue, useWeatherTween } from '../weather/AnimatedWeatherValue';
 import { WEATHER_GAUGE_TWEEN } from '../weather/animation';
 import { webChatProviders } from '../web-ai/providers';
 import { freeLicense } from '../free';
 import { normalizeVoiceCommand, canRunVoiceResult } from '../keyboard/voice-command';
+import { qrCommand, brightnessCommand, keepPlayingMusic } from '../keyboard/quick-commands';
+import { BrightnessControls } from '../controls/BrightnessControls';
+import { SystemLoadPanel } from '../controls/SystemLoad';
+import { compactIndicatorWidth } from '../controls/indicator-model';
 import { calendarDate, shiftReminder, validRepeat, hasInvalidCalendarDate } from '../reminders/calendar';
 import { ReminderAdjustments } from '../reminders/ReminderAdjustments';
 import { VpnPicker } from '../vpn/VpnPicker';
 import { vpnErrorMessage } from '../vpn/profiles';
 import { PhonePanel, PhoneIcon } from '../phone/PhonePanel';
+import { ProviderIcon } from '../web-ai/ProviderIcon';
 import { ShelfObject, ShelfRow } from '../phone/ShelfArtwork';
 import { phoneState, phoneLinked } from '../phone/state';
 import { HolidayEffects } from '../holidays/HolidayEffects';
@@ -16,7 +22,9 @@ import { WeatherPlaces } from '../weather/WeatherPlaces';
 import { focusInputAfterActivation } from '../island/input-focus';
 import { useWebAiStatus } from '../web-ai/use-status';
 import { statusText } from '../web-ai/status';
+import { SitePermissions } from '../web-ai/SitePermissions';
 import { LIQUID_FOLDED, updateSizeHistory, selectSizeTransition } from '../island/transitions';
+import { LIQUID_SPECTRUM_BOTTOM } from '../characters/liquid';
 import { k as subscribeEvent } from './shared.js';
 import { createMediaEventController } from '../media/events';
 import { createIslandInteractions, hasPersistentActivity } from '../island/interactions';
@@ -3004,6 +3012,7 @@ function lc() {
     "data-chat-switch": !0,
     className: `flex shrink-0 items-center gap-1.5`,
     children: [
+      e !== 'island' && (0,jsxRuntime.jsx)(SitePermissions,{service:e,compact:true}),
       (0, jsxRuntime.jsx)(`div`, {
         className: `flex items-center gap-0.5 rounded-full bg-tile p-0.5`,
         children: r.map((t) =>
@@ -3028,7 +3037,7 @@ function lc() {
               children: [
                 t.id === `island`
                   ? (0, jsxRuntime.jsx)(fr, { size: 11 })
-                  : (0, jsxRuntime.jsx)(co, { size: 11 }),
+                  : (0, jsxRuntime.jsx)(ProviderIcon, { service: t.id, size: 13 }),
                 t.label,
               ],
             },
@@ -4059,9 +4068,11 @@ function Sc() {
     ];
   (0, ReactRuntime.useEffect)(() => { if (!S) d(!1); }, [S]);
   return (0, jsxRuntime.jsxs)(`div`, {
-    className: `flex h-full flex-col gap-2.5`,
+    "data-control-center":true,
+    className: `scroll-thin wi-control-center`,
     children: [
       (0, jsxRuntime.jsxs)(`div`, {
+        "data-control-grid":true,
         className: `relative flex min-h-0 flex-1 gap-2.5`,
         children: [
           l && S && (0, jsxRuntime.jsx)(VpnPicker, { profiles: x, busy: n === `vpn`, language: o(`ru`, `en`), onClose: () => d(!1), onOpen: path => u.openPath(path), onPick: (profile, on) => b(`vpn:${profile.id}`, on) }),
@@ -4200,6 +4211,7 @@ function Sc() {
             }),
         ],
       }),
+      (0,jsxRuntime.jsxs)(`div`,{"data-controls-strip":true,className:'wi-controls-strip',children:[(0,jsxRuntime.jsx)(SystemLoadPanel,{}),(0,jsxRuntime.jsx)(BrightnessControls,{})]}),
       (0, jsxRuntime.jsx)(`div`, {
         className: `flex h-[76px] shrink-0 gap-2.5`,
         children: k.map((e) => {
@@ -4644,6 +4656,8 @@ function rk() {
     "data-timer-phase": t,
     className: `flex shrink-0 flex-col gap-2`,
     children: [
+      t === `idle` && n === null && (0,jsxRuntime.jsx)(`input`,{ "data-timer-label":true,value:e.label??"",maxLength:40,placeholder:o(`На что таймер?`,`What is the timer for?`),onChange:event=>wt.getState().setLabel(event.target.value),onMouseDown:()=>u.takeFocus(),className:`h-8 min-w-0 rounded-xl bg-tile px-3 text-[12px] text-ink outline-none placeholder:text-ink-3` }),
+      e.label?.trim() && t !== `idle` && (0,jsxRuntime.jsx)(`div`,{"data-timer-note-label":true,className:`truncate text-[12px] font-medium text-ink-2`,children:e.label}),
       (0, jsxRuntime.jsxs)(`div`, {
         className: `flex items-center gap-3`,
         children: [
@@ -5221,7 +5235,7 @@ function sk() {
               ),
               footer: (e) =>
                 (0, jsxRuntime.jsxs)(`div`, {
-                  className: `flex shrink-0 items-center gap-1`,
+                  className: `ml-auto flex max-w-full shrink-0 flex-wrap items-center justify-end gap-1`,
                   children: [
                     (0, jsxRuntime.jsx)(`span`, {
                       "data-note-saved": String(i),
@@ -5285,9 +5299,11 @@ function sk() {
                       children: (0, jsxRuntime.jsx)(A, { size: 13 }),
                     }),
                     (0, jsxRuntime.jsx)(`button`, {
+                      "data-note-clear": true,
                       title: o(`Очистить`, `Clear`),
-                      onClick: () => g(``),
-                      className: `press grid size-6 place-items-center rounded-md text-ink-3 hover:bg-tile hover:text-danger`,
+                      "aria-label": o(`Очистить заметку`, `Clear note`),
+                      onClick: () => { if (e) e.commands.clearContent(); else g(``); },
+                      className: `press grid size-7 shrink-0 place-items-center rounded-md text-ink-3 hover:bg-tile hover:text-danger focus-visible:bg-tile focus-visible:text-danger`,
                       children: (0, jsxRuntime.jsx)(Se, { size: 13 }),
                     }),
                   ],
@@ -5433,10 +5449,10 @@ function mk() {
     'data-phone-shelf': true,
     className: `flex h-full min-h-0 gap-3`,
     children: [
-      (0, jsxRuntime.jsx)(`div`, { className: `min-w-0 flex-1`, children: (0, jsxRuntime.jsx)(ShelfFiles, {}) }),
       (0, jsxRuntime.jsx)(PhonePanel, { state: phone, onState: acceptPhoneState, makeQr: makePhoneQr, onWaiting: setPhoneWaiting,
         onFocus: () => void u.takeFocus(),
       }),
+      (0, jsxRuntime.jsx)(`div`, { className: `min-w-0 flex-1`, children: (0, jsxRuntime.jsx)(ShelfFiles, {}) }),
     ],
   });
 }
@@ -6915,8 +6931,12 @@ function fA() {
       (clearTimeout(s.current), r({ ok: e, text: t }), (s.current = setTimeout(() => r(null), 1800)));
     },
     x = () => void u.clipCurrentText().then((e) => t(e ?? ``));
+  const currentTextSeed = useIslandStore(state => state.textSeed), initializedSeed = ReactRuntime.useRef(false);
   (0, ReactRuntime.useEffect)(() => {
-    let e = useIslandStore.getState().textSeed;
+    const e = currentTextSeed;
+    if (!e && initializedSeed.current) return;
+    initializedSeed.current = true;
+    if (e?.then === 'qr') l('qr');
     e?.text ? t(e.text) : x();
     let n = _n.find((e) => e.id === `translate`);
     return (
@@ -6927,7 +6947,7 @@ function fA() {
         (clearTimeout(s.current), y.current?.());
       }
     );
-  }, []);
+  }, [currentTextSeed?.n]);
   let S = (n, r, i) => {
       let a = i ?? e;
       if (!a.trim())
@@ -7573,7 +7593,7 @@ function xA({ w: e }) {
         ],
       }),
       (0, jsxRuntime.jsx)(`span`, { className: `flex-1` }),
-      t > 0 &&
+      t > 0 && Number.isFinite(e.now.pressureTrend) &&
         (0, jsxRuntime.jsx)(`div`, {
           className: `text-[10.5px] text-ink-2`,
           children: Ne(e.now.pressureTrend),
@@ -7648,6 +7668,7 @@ function SA({ w: e }) {
 }
 function CA({ w: e }) {
   const factor = useWeatherTween(1, { delay: 350 });
+  if(!Number.isFinite(e.days[0]?.precip))return (0,jsxRuntime.jsx)(_A,{mark:'precip',title:o('Осадки','Precipitation'),children:o('Нет данных у источника','No data from the provider')});
   let [t, ...n] = Fe((e.days[0]?.precip ?? 0) * factor, e.units, !0).split(` `),
     r = Math.max(1, ...e.hours.map((e) => e.precip));
   return (0, jsxRuntime.jsxs)(_A, {
@@ -7702,7 +7723,7 @@ function wA({ w: e }) {
   return (0, jsxRuntime.jsxs)(_A, {
     mark: `uv`,
     title: o(`УФ-индекс`, `UV index`),
-    hint: o(`Индекс при ясном небе: облака его снижают`, `The index under a clear sky: clouds bring it down`),
+    hint: e.source==='Open-Meteo' ? o(`УФ-индекс по прогнозу`, `Forecast UV index`) : o(`Индекс при ясном небе: облака его снижают`, `The index under a clear sky: clouds bring it down`),
     children: [
       (0, jsxRuntime.jsxs)(`div`, {
         className: `mt-1 flex items-baseline gap-1.5`,
@@ -8083,13 +8104,8 @@ function jA() {
     }
     ((n = Math.ceil(n)),
       Math.abs(useIslandStore.getState().headerMin - n) > 2 && useIslandStore.setState({ headerMin: n }));
-  });
-  let [h, g] = (0, ReactRuntime.useState)(!1);
+  }, [p.length, f, a]);
   return (
-    (0, ReactRuntime.useEffect)(() => {
-      let e = requestAnimationFrame(() => (0, ReactRuntime.startTransition)(() => g(!0)));
-      return () => cancelAnimationFrame(e);
-    }, []),
     (0, jsxRuntime.jsxs)(`div`, {
       className: `flex h-full flex-col px-4 pt-3 pb-4`,
       children: [
@@ -8170,16 +8186,16 @@ function jA() {
         (0, jsxRuntime.jsx)(`div`, {
           className: `relative mt-3 min-h-0 flex-1`,
           children: (0, jsxRuntime.jsx)(Wt, {
-            mode: `wait`,
+            mode: `popLayout`,
             initial: !1,
             children: (0, jsxRuntime.jsx)(
               Et.div,
               {
                 className: `absolute inset-0`,
-                initial: { opacity: 0, y: 6 },
-                animate: { opacity: 1, y: 0, transition: { duration: 0.18, ease: [0.2, 0.8, 0.2, 1] } },
-                exit: { opacity: 0, y: -4, transition: { duration: 0.08 } },
-                children: h && (0, jsxRuntime.jsx)(OA, { tab: f }),
+                initial: { opacity: 0, y: 5 },
+                animate: { opacity: 1, y: 0, transition: { duration: 0.14, ease: [0.2, 0.8, 0.2, 1] } },
+                exit: { opacity: 0, y: -3, transition: { duration: 0.06 } },
+                children: (0, jsxRuntime.jsx)(OA, { tab: f }),
               },
               f,
             ),
@@ -8618,9 +8634,6 @@ function ij({ onResize: e }) {
     E = S?.showVpn !== !1,
     D = S?.paletteFiles !== !1;
   ((0, ReactRuntime.useEffect)(() => {
-    D && u.filesWarm();
-  }, [D]),
-    (0, ReactRuntime.useEffect)(() => {
       let e = n.trim();
       if (!D || e.length < 2 || e.startsWith(`>`)) {
         h({ q: e, list: [] });
@@ -8639,7 +8652,7 @@ function ij({ onResize: e }) {
     (0, ReactRuntime.useEffect)(
       () => (
         u.paletteApps().then(apps => { c(apps); setWoodsAppsReady(true); }).catch(() => setWoodsAppsReady(true)),
-        u.paletteRecent().then(d),
+        u.paletteRecent().then(d).catch(() => {}),
         u
           .rates()
           .then(p)
@@ -8693,8 +8706,14 @@ function ij({ onResize: e }) {
         )
         .catch((e) => n.pushPeek({ kind: `error`, message: String(e) }));
     },
+    showQuickQr = (text) => {
+      const state = useIslandStore.getState();
+      state.closePalette(); state.sendToText(text, 'qr'); state.open('hotkey', 'text');
+    },
     ae = (0, ReactRuntime.useMemo)(
       () => [
+        {t:o(`Автоскрытие: вкл. / выкл.`,`Auto-hide: on / off`),k:`автоскрытие прятать скрывать auto hide autohide`,i:(0,jsxRuntime.jsx)(rs,{size:17}),run:()=>{O();peripheralInvoke('auto_hide_toggle').catch(error=>useIslandStore.getState().pushPeek({kind:'error',message:String(error)}));}},
+        {t:o(`QR-код из скопированного текста`,`QR code from copied text`),k:`qr куар кьюар код создать ссылка qrcode generate code text link`,i:(0,jsxRuntime.jsx)(En,{size:17}),run:()=>showQuickQr('')},
         {
           t: o(`Скриншот области`, `Screenshot of an area`),
           k: `скрин снимок область screenshot area snip`,
@@ -9017,6 +9036,10 @@ function ij({ onResize: e }) {
           r
         );
       }
+      const quickQr = qrCommand(e);
+      if (quickQr !== null) r.push({key:'qr-text',icon:(0,jsxRuntime.jsx)(En,{size:17}),title:o(`QR-код: «${quickQr.slice(0,60)}»`,`QR code: “${quickQr.slice(0,60)}”`),sub:o(`Enter — показать код`,`Enter to show the code`),score:995,run:()=>showQuickQr(quickQr)});
+      const brightness = brightnessCommand(e);
+      if(brightness!==null)r.push({key:'brightness',icon:(0,jsxRuntime.jsx)(`span`,{children:'☀'}),title:o(`Яркость мониторов: ${brightness}%`,`Monitor brightness: ${brightness}%`),sub:o(`Enter — применить`,`Enter to apply`),score:995,run:()=>{O();peripheralInvoke('brightness_set',{id:'all',level:brightness}).then(()=>useIslandStore.getState().pushPeek({kind:'done',label:o(`Яркость: ${brightness}%`,`Brightness: ${brightness}%`)})).catch(()=>useIslandStore.getState().pushPeek({kind:'error',message:o(`Не удалось изменить яркость. Проверь DDC/CI в меню монитора.`,`Could not change brightness. Check DDC/CI in the monitor menu.`)}));}});
       let i = FA(e);
       if (i !== null) {
         let e = IA(i);
@@ -9054,16 +9077,16 @@ function ij({ onResize: e }) {
         });
       let d = Rt(e, wt.getState().timer.base);
       if (d !== null) {
-        let e = gt(d);
+        let e = gt(d.length);
         r.push({
           key: `timer`,
           icon: (0, jsxRuntime.jsx)(_o, { size: 17 }),
-          title: o(`Запустить таймер: ${e}`, `Start a timer: ${e}`),
+          title: o(`Запустить таймер: ${e}${d.label ? " · "+d.label : ""}`, `Start a timer: ${e}${d.label ? " · "+d.label : ""}`),
           sub: o(`Таймер · Enter — запустить`, `Timer · Enter to start`),
           score: 995,
           run: () => {
             (O(),
-              wt.getState().start(d),
+              wt.getState().start(d.length,d.label),
               useIslandStore.getState().pushPeek({ kind: `done`, label: o(`Таймер: ${e}`, `Timer: ${e}`) }));
           },
         });
@@ -9729,7 +9752,7 @@ function _j({ peek: e }) {
         children: [
           (0, jsxRuntime.jsx)(`div`, {
             className: `truncate text-[13px] font-semibold text-ink`,
-            children: o(`Время вышло`, `Time is up`),
+            "data-timer-card-label":true,children:e.label?.trim() || o(`Время вышло`, `Time is up`),
           }),
           (0, jsxRuntime.jsxs)(`div`, {
             className: `truncate text-[11.5px] text-ink-3`,
@@ -10462,13 +10485,13 @@ var Bj = 700,
   Vj = { type: `spring`, stiffness: 420, damping: 34, mass: 0.9 },
   Hj = { type: `spring`, stiffness: 300, damping: 34, mass: 0.9 },
   Uj = {
-    initial: { opacity: 0, filter: `blur(6px)` },
+    initial: { opacity: 0, scale: 0.985 },
     animate: {
       opacity: 1,
-      filter: `blur(0px)`,
-      transition: { delay: 0.07, duration: 0.24, ease: [0.2, 0.8, 0.2, 1] },
+      scale: 1,
+      transition: { delay: 0.03, duration: 0.18, ease: [0.2, 0.8, 0.2, 1] },
     },
-    exit: { opacity: 0, filter: `blur(4px)`, transition: { duration: 0.1 } },
+    exit: { opacity: 0, scale: 0.99, transition: { duration: 0.08 } },
   };
 function useIslandGeometry(e) {
   let t = useIslandStore((e) => e.palette),
@@ -10544,7 +10567,7 @@ function useIslandGeometry(e) {
     be = useIslandStore(qj),
     xe = useIslandStore((e) => (e.media?.durationMs ?? 0) > 0),
     Se = useIslandStore((e) => e.settings?.lyrics === !0 && e.settings.lyricsInPlayer !== !1),
-    Ce = Yt((e) => (e.status === `ready` ? e.lineW : 0)),
+    Ce = Yt((e) => e.lineW),
     we = xe ? Ce : 0;
   const listHeight = peripheralListHeight(C?.[1] ?? 336, l);
   ReactRuntime.useEffect(() => {
@@ -10565,6 +10588,8 @@ function useIslandGeometry(e) {
     } : null,
     mediaPill: be, devicePixelRatio: window.devicePixelRatio,
     widgets: {
+      compact: useIslandStore(state=>compactIndicatorWidth(state.settings,state.peripherals)),
+      timerLabel: useTimerLabelCharacters(),
       character: ee, slot: ie, big: te, face: se, weather: w,
       clock: T, seconds: E, battery: k, caps: me, layout: D, desk: O,
       dots: he, obs: ge, agent: _e, download: A, shelf: le, timer: ye,
@@ -10581,7 +10606,8 @@ function useRuntimeEvents() {
     let e = useIslandStore,
       c = () => e.getState().settings;
     let disposed = false;
-    let phoneObserved = false, shelfObserved = false;
+    let vpnLookupTimer;
+    let phoneObserved = false, shelfObserved = false, launcherObserved=false;
     peripheralInvoke('phone_state').then(payload => {
       if (!disposed && !phoneObserved) acceptPhoneState(payload);
     }).catch(() => {});
@@ -10623,7 +10649,7 @@ function useRuntimeEvents() {
         (e.setState({
           settings: t.settings,
           shelf: shelfObserved ? e.getState().shelf : t.shelf,
-          launcher: t.launcher,
+          launcher: launcherObserved?e.getState().launcher:t.launcher,
           media: t.media,
           mediaLive: t.media?.playing ?? !1,
           cover: t.cover,
@@ -10643,6 +10669,7 @@ function useRuntimeEvents() {
             t.news.from !== t.news.version &&
             (e.getState().pushPeek({ kind: `news`, version: t.version }), u.newsTold()),
           mediaEvents.seed(t.media, t.cover));
+        if(t.settings?.showVpn!==false)void u.vpnRefresh().catch(()=>{});
       }),
       u
         .agentsNow()
@@ -10651,6 +10678,13 @@ function useRuntimeEvents() {
     let l = (e) => c()?.[e] !== !1,
       d = [
         T('peripherals:update', acceptPeripherals),
+        T('system:load', payload => e.setState({systemLoad:payload})),
+        T('vpn:status', payload=>{
+          const previous=e.getState().vpn;
+          const changed=!!payload&&(!previous||previous.active!==payload.active||previous.via!==payload.via);
+          e.setState({vpn:payload?{...previous,...payload,country:changed?null:previous?.country,countryCode:changed?null:previous?.countryCode,ip:changed?null:previous?.ip}:null});
+          if(changed&&c()?.showVpn!==false&&c()?.vpnLookupIp!==false){clearTimeout(vpnLookupTimer);vpnLookupTimer=setTimeout(()=>{if(!disposed)void u.vpnRefresh().catch(()=>{});},1500);}
+        }),
         T(`hover`, interactions.hover),
         T(`outside-click`, interactions.outsideClick),
         T(`island:palette`, interactions.togglePalette),
@@ -10809,13 +10843,15 @@ function useRuntimeEvents() {
         T(`settings:changed`, (t) => {
           const state = e.getState();
           e.setState({settings: t, queue: state.queue.filter(n => n.kind !== 'peripheralEvent' || peripheralEventEnabled(n, t))});
+          if(t.showVpn===false){clearTimeout(vpnLookupTimer);e.setState({vpn:null});}
+          else if(t.showVpn!==state.settings?.showVpn||t.vpnLookupIp!==state.settings?.vpnLookupIp){clearTimeout(vpnLookupTimer);if(t.vpnLookupIp===false&&state.vpn)e.setState({vpn:{...state.vpn,ip:null,country:null,countryCode:null}});void u.vpnRefresh().catch(()=>{});}
           if (state.peek?.kind === 'peripheralEvent' && !peripheralEventEnabled(state.peek, t)) e.getState().nextPeek();
         }),
         T(`shelf:changed`, (t) => { shelfObserved = true; e.setState({ shelf: t }); }),
         T(`phone:state`, (value) => { phoneObserved = true; if (!disposed) acceptPhoneState(value); }),
         T(`phone:got`, (value) => e.getState().pushPeek({ kind: `phone`, direction: `received`, receivedKind: value.kind, name: value.name, text: value.text })),
         T(`phone:taken`, (value) => e.getState().pushPeek({ kind: `phone`, direction: `taken`, name: typeof value === `string` ? value : value.name })),
-        T(`launcher:changed`, (t) => e.setState({ launcher: t })),
+        T(`launcher:changed`, (t) => {launcherObserved=true;e.setState({ launcher: t });}),
         xr().onDragDropEvent((n) => {
           let r = n.payload,
             i = e.getState(),
@@ -10868,6 +10904,7 @@ function useRuntimeEvents() {
       g = yt();
     return () => {
       (disposed = true,
+        clearTimeout(vpnLookupTimer),
         g(),
         mediaEvents.dispose(),
         interactions.dispose(),
@@ -10911,9 +10948,10 @@ function qj(e) {
 }
 const Jj = hasPersistentActivity;
 function IslandHolidayEffects({ width, height, capsule, visible, mode }) {
-  const settings=useIslandStore(state=>state.settings),level=useIslandStore(state=>state.level),still=useIslandStore(state=>state.asleep);
-  return jsxRuntime.jsx(HolidayEffects,{settings:settings??{},width,height,capsule,visible,musicLevel:level,still,falling:['idle','liveStatus','liveMedia','liveShelf','liveDownloads'].includes(mode)});
+  const settings=useIslandStore(state=>state.settings),still=useIslandStore(state=>state.asleep);
+  return jsxRuntime.jsx(HolidayEffects,{settings:settings??{},width,height,capsule,visible,readMusicLevel:readHolidayMusicLevel,still,falling:['idle','liveStatus','liveMedia','liveShelf','liveDownloads'].includes(mode)});
 }
+function readHolidayMusicLevel(){return useIslandStore.getState().level??0;}
 function IslandApp() {
   useRuntimeEvents();
   let e = Kj(),
@@ -10935,6 +10973,8 @@ function IslandApp() {
     w = useIslandStore((e) => e.settings?.moduleWeather !== !1),
     T = C && w,
     E = a === `drop` ? `eat` : a === `peek` && d ? (Ln(d.kind) ?? v) : v,
+    spectrumBottom = useIslandStore(state => state.settings?.liquidSpectrum === true) && g && E === 'music'
+      ? LIQUID_SPECTRUM_BOTTOM : 0,
     D = p ? 8 : 0,
     k = a === `expanded` || a === `drop` || a === `palette`,
     ee = useIslandStore((e) =>
@@ -10944,7 +10984,7 @@ function IslandApp() {
           showOnDesktop: e.settings?.showOnDesktop === !0 || e.settings?.hideOnlyUnder === !0,
           desktop: e.desktop,
           shy: e.shy,
-          keep: e.keep,
+          keep: e.keep || keepPlayingMusic(e),
         }),
         mode: a,
         hovered: e.hovered,
@@ -10954,7 +10994,7 @@ function IslandApp() {
     [te, ne] = (0, ReactRuntime.useState)(!1),
     veNotch = useIslandStore((e) => e.settings?.notchBar === !0);
   ((0, ReactRuntime.useEffect)(() => {
-    veNotch && a === `idle` && u.notchPill(c);
+    veNotch && (a === `idle` || a === `liveMedia`) && u.notchPill(c);
   }, [veNotch, a, c]),
     (0, ReactRuntime.useEffect)(() => {
     if (ee) {
@@ -11029,64 +11069,88 @@ function IslandApp() {
     (0, ReactRuntime.useEffect)(() => {
       let e = 0,
         t = "",
+        lastSentAt = 0,
+        settledSent = false,
         reportSequence = 0,
         disposed = false,
-        activeUntil = performance.now() + 800;
+        activeUntil = performance.now() + 700;
+      const sendRect = (r, args, settling) => {
+        const key = [...args, settling ? 1 : 0, window.innerWidth, window.innerHeight].join(",");
+        if (key === t) return;
+        t = key;
+        lastSentAt = performance.now();
+        const sequence = ++reportSequence;
+        void u.reportRect(...args, settling).then(result => {
+          if (disposed || sequence !== reportSequence) return;
+          const height = result?.layoutViewportHeight;
+          if (typeof height === 'number' && Number.isFinite(height) && height > 0) {
+            const root = document.documentElement;
+            const previous = Number(root.dataset.layoutViewportHeight);
+            root.dataset.layoutViewportHeight = String(height);
+            root.dataset.canvasOverscanWidth = String(result.canvasOverscanWidth ?? 0);
+            root.dataset.canvasOverscanBottom = String(result.canvasOverscanBottom ?? 0);
+            if (previous !== height) window.dispatchEvent(new Event('woods:layout-viewport'));
+          }
+        }).catch(() => {});
+      };
+      const measureArgs = (islandEl, r, preExpand) => {
+        const attachment = islandEl.querySelector(":scope > [data-attached-character]");
+        const inset = name => Math.max(0, Math.min(128, Number(attachment?.dataset[name]) || 0));
+        const snow = islandEl.querySelector(":scope > [data-holiday-effects]");
+        const snowBottom = Math.max(0, Math.min(128, Number(snow?.dataset.snowBottom) || 0));
+        let x = r.x, y = r.y, w = r.width, h = r.height;
+        if (preExpand && !te) {
+          const targetW = Math.max(w, s);
+          const targetH = Math.max(h, c);
+          if (targetW > w) { x -= (targetW - w) / 2; w = targetW; }
+          if (targetH > h) { h = targetH; }
+        }
+        return [Math.floor(x), Math.floor(y), Math.ceil(w), Math.ceil(h), k, te, re,
+          inset('attachmentRight'), Math.max(inset('attachmentBottom'), snowBottom, spectrumBottom)];
+      };
       const n = () => {
         e = 0;
         if (disposed) return;
+        const nowMs = performance.now();
         const islandEl = document.querySelector("[data-island]");
         const r = islandEl?.getBoundingClientRect();
-        if (r) {
-          const attachment = islandEl.querySelector(":scope > [data-attached-character]");
-          const inset = name => Math.max(0, Math.min(128, Number(attachment?.dataset[name]) || 0));
-          const snow = islandEl.querySelector(":scope > [data-holiday-effects]");
-          const snowBottom = Math.max(0, Math.min(128, Number(snow?.dataset.snowBottom) || 0));
-          const args = [Math.floor(r.x), Math.floor(r.y), Math.ceil(r.width), Math.ceil(r.height), k, te, re,
-            inset('attachmentRight'), Math.max(inset('attachmentBottom'), snowBottom)];
-          const key = [...args, window.innerWidth, window.innerHeight].join(",");
-          if (key !== t) {
-            t = key;
-            activeUntil = Math.max(activeUntil, performance.now() + 650);
-            const sequence = ++reportSequence;
-            void u.reportRect(...args).then(result => {
-              if (disposed || sequence !== reportSequence) return;
-              const height = result?.layoutViewportHeight;
-              if (typeof height === 'number' && Number.isFinite(height) && height > 0) {
-                const root = document.documentElement;
-                const previous = Number(root.dataset.layoutViewportHeight);
-                root.dataset.layoutViewportHeight = String(height);
-                root.dataset.canvasOverscanWidth = String(result.canvasOverscanWidth ?? 0);
-                root.dataset.canvasOverscanBottom = String(result.canvasOverscanBottom ?? 0);
-                if (previous !== height) window.dispatchEvent(new Event('woods:layout-viewport'));
-              }
-            }).catch(() => {});
+        if (r && islandEl) {
+          const isSettled = nowMs >= activeUntil;
+          if (isSettled) {
+            sendRect(r, measureArgs(islandEl, r, false), true);
+            settledSent = true;
+            return;
+          }
+          // Pre-expand region immediately on first frame; throttle mid-spring hit-rect updates to avoid IPC/DWM stalls.
+          if (lastSentAt === 0 || nowMs - lastSentAt >= 55) {
+            sendRect(r, measureArgs(islandEl, r, lastSentAt === 0), false);
           }
         }
-        if (performance.now() < activeUntil) {
+        if (nowMs < activeUntil) {
           e = requestAnimationFrame(n);
         }
       };
       const wake = (ms = 650) => {
         if (disposed) return;
+        settledSent = false;
         activeUntil = Math.max(activeUntil, performance.now() + ms);
         if (!e) e = requestAnimationFrame(n);
       };
-      wake(800);
+      wake(700);
       const islandEl = document.querySelector("[data-island]");
-      const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => wake(650)) : null;
+      const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => wake(550)) : null;
       if (ro && islandEl) ro.observe(islandEl);
       const mo = typeof MutationObserver === 'function' && islandEl
-        ? new MutationObserver(() => wake(450))
+        ? new MutationObserver(() => wake(400))
         : null;
       if (mo && islandEl) {
         mo.observe(islandEl, {
           childList: true,
           attributes: true,
-          attributeFilter: ['style', 'data-attachment-right', 'data-attachment-bottom', 'data-snow-bottom'],
+          attributeFilter: ['data-attachment-right', 'data-attachment-bottom', 'data-snow-bottom'],
         });
       }
-      const onResize = () => wake(700);
+      const onResize = () => wake(650);
       window.addEventListener('resize', onResize);
       return () => {
         disposed = true;
@@ -11095,7 +11159,7 @@ function IslandApp() {
         mo?.disconnect();
         window.removeEventListener('resize', onResize);
       };
-    }, [s, c, D, k, te, re]));
+    }, [s, c, D, k, te, re, spectrumBottom]));
   let A = useIslandStore(qj),
     me = useIslandStore((e) => e.settings?.lyrics === !0 && e.settings.lyricsInPlayer !== !1),
     he = a === `liveMedia` && A === `player` && me ? y : null,
@@ -11183,7 +11247,6 @@ function IslandApp() {
         onClick: ve ? () => f(`click`) : void 0,
         onWheel: be,
         children: [
-          jsxRuntime.jsx(IslandHolidayEffects, { width: s, height: c, capsule: p, visible: ee && !te, mode: a }),
           g &&
             (0, jsxRuntime.jsx)(ar, {
               mood: E,
@@ -11193,6 +11256,7 @@ function IslandApp() {
               rain: T && a === `idle` && !te,
               tint: he,
             }),
+          jsxRuntime.jsx(IslandHolidayEffects, { width: s, height: c, capsule: p, visible: ee && !te, mode: a }),
           m.kind === `attach` &&
             (0, jsxRuntime.jsx)(tr, {
               id: m.id,
@@ -11223,7 +11287,7 @@ function IslandApp() {
                     Et.div,
                     {
                       className: `absolute top-0 left-1/2`,
-                      style: { width: s, height: c, x: `-50%` },
+                      style: { width: s, height: c, x: `-50%`, willChange: `transform, opacity` },
                       variants: Uj,
                       initial: `initial`,
                       animate: `animate`,

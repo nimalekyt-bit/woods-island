@@ -7,7 +7,7 @@ import { verifyWindowsIcons } from './verify-windows-icons.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const output = join(root, 'dist-portable');
-const source = join(root, 'src-tauri', 'resources', 'bin');
+const source = resolve(process.env.WOODS_RECORDING_TOOLS_DIR || join(root, 'src-tauri', 'resources', 'bin'));
 const version = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).version;
 const executable = join(process.env.CARGO_TARGET_DIR ? resolve(process.env.CARGO_TARGET_DIR) : join(root, 'src-tauri', 'target'), 'release', 'woods-island.exe');
 const versionCheck = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
@@ -25,6 +25,11 @@ const assets = [
   ['THIRD_PARTY_NOTICES.md', join(root, 'THIRD_PARTY_NOTICES.md')],
 ];
 for (const program of ['ffmpeg.exe', 'ffprobe.exe']) {
+  const pinnedHash = program === 'ffmpeg.exe'
+    ? '3256173f3f8bffd7df12227c68adf68025edb1832273a9530688a7bb1ed8edec'
+    : 'f0d36ecbbdd3bcfac3efa078c96c7271c2e68b3810595552ac3b7f17e9a65c52';
+  const actualHash = createHash('sha256').update(await readFile(join(source, program))).digest('hex');
+  if (actualHash !== pinnedHash) throw new Error(`${program} differs from the pinned recording tool`);
   const check = spawnSync(join(source, program), ['-version'], { windowsHide: true, encoding: 'utf8' });
   if (check.status !== 0) throw new Error(`${program} failed verification: ${check.stderr || check.error}`);
 }

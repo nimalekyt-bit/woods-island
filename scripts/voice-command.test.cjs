@@ -16,3 +16,11 @@ test('Voice runs recognized tools and matching app/actions, while ambiguous resu
   for(const key of ['web','ai','f:report','shell','shutdown'])assert(!canRunVoiceResult(key,'Open command','Open command'));
   assert(!canRunVoiceResult('p:app','A','A'));
 });
+test('Application filler is removed around spoken app names without changing ordinary queries',()=>{
+  assert.equal(normalizeVoiceCommand('открой приложение Discord'),'Discord');
+  assert.equal(normalizeVoiceCommand('open the Discord app'),'Discord');
+  assert.equal(normalizeVoiceCommand('запусти игру Warface'),'Warface');
+  assert.equal(normalizeVoiceCommand('Open Game Bar'),'Game Bar');
+  assert.equal(normalizeVoiceCommand('Game Bar'),'Game Bar');
+  assert.equal(normalizeVoiceCommand('таймер 30 мин игра'),'таймер 30 мин игра');
+});

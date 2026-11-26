@@ -15,14 +15,14 @@ fn endpoint(settings:&Value,path:&str)->Result<String,String>{
     }
     Ok(format!("{raw}/{path}"))
 }
-fn client()->Result<reqwest::Client,String>{reqwest::Client::builder().connect_timeout(std::time::Duration::from_secs(10)).timeout(std::time::Duration::from_secs(120)).build().map_err(|e|e.to_string())}
+fn client(settings:&Value)->Result<reqwest::Client,String>{crate::ai_http::client_for(settings,"sttBaseUrl",120)}
 fn auth(request:reqwest::RequestBuilder)->reqwest::RequestBuilder{
     match crate::storage::load_secret("stt").filter(|s|!s.is_empty()){Some(key)=>request.bearer_auth(key),None=>request}
 }
 pub async fn test(settings:&Value)->Result<bool,String>{
-    let response=auth(client()?.get(endpoint(settings,"models")?)).send().await.map_err(|e|e.to_string())?;
-    if !response.status().is_success(){return Err(format!("STT-провайдер вернул HTTP {}. Проверь адрес и личный API-ключ.",response.status()));}
-    let data:Value=response.json().await.map_err(|e|e.to_string())?;
+    let response=auth(client(settings)?.get(endpoint(settings,"models")?)).send().await.map_err(|e|crate::ai_http::network_error(settings,&e))?;
+    if !response.status().is_success(){return Err(crate::ai_http::status_error(settings,response.status()));}
+    let data:Value=response.json().await.map_err(|e|crate::ai_http::network_error(settings,&e))?;
     let model=settings["sttModel"].as_str().unwrap_or("whisper-large-v3-turbo");
     if data["data"].as_array().map(|models|models.iter().any(|m|m["id"].as_str()==Some(model))).unwrap_or(false){Ok(true)}
     else{Err(format!("STT-модель {model} отсутствует у провайдера"))}
@@ -53,11 +53,11 @@ async fn transcribe(settings:&Value,wave:Vec<u8>,token:&Session)->Result<String,
     let part=reqwest::multipart::Part::bytes(wave).file_name("dictation.wav").mime_str("audio/wav").map_err(|e|e.to_string())?;
     let mut form=reqwest::multipart::Form::new().part("file",part).text("model",model.to_owned()).text("response_format","json");
     if let Some(language)=settings["sttLanguage"].as_str().filter(|s|!s.is_empty()){form=form.text("language",language.to_owned());}
-    let request=auth(client()?.post(endpoint(settings,"audio/transcriptions")?)).multipart(form);
+    let request=auth(client(settings)?.post(endpoint(settings,"audio/transcriptions")?)).multipart(form);
     if token.cancelled.load(Ordering::SeqCst){return Err("Диктовка отменена".into());}
-    let response=tokio::select!{r=request.send()=>r.map_err(|e|e.to_string())?,_=token.wake.notified()=>return Err("Диктовка отменена".into())};
-    if !response.status().is_success(){return Err(format!("Распознавание недоступно: HTTP {}. Проверь STT-модель и ключ.",response.status()));}
-    let data:Value=tokio::select!{r=response.json()=>r.map_err(|e|e.to_string())?,_=token.wake.notified()=>return Err("Диктовка отменена".into())};
+    let response=tokio::select!{r=request.send()=>r.map_err(|e|crate::ai_http::network_error(settings,&e))?,_=token.wake.notified()=>return Err("Диктовка отменена".into())};
+    if !response.status().is_success(){return Err(crate::ai_http::status_error(settings,response.status()));}
+    let data:Value=tokio::select!{r=response.json()=>r.map_err(|e|crate::ai_http::network_error(settings,&e))?,_=token.wake.notified()=>return Err("Диктовка отменена".into())};
     data["text"].as_str().map(|s|s.trim().to_owned()).filter(|s|!s.is_empty()).ok_or("Провайдер не распознал текст".into())
 }
 

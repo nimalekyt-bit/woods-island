@@ -492,6 +492,7 @@
   height: 104px;
   display: grid;
   place-items: center;
+  color: var(--color-ink);
 }
 .webai-provider-mark > img {
   width: 72px;

@@ -1,11 +1,18 @@
 use serde_json::Value;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Bounds {
     pub left: i32,
     pub top: i32,
     pub right: i32,
     pub bottom: i32,
+}
+
+/// Tucking animates the native hit rectangle. Visibility must use its unfolded
+/// local rectangle or hiding itself would erase the overlap and reveal it again.
+pub fn unfolded_bounds(current: Bounds, tucked: bool, previous: &mut Option<Bounds>) -> Bounds {
+    if !tucked && current.right > current.left && current.bottom > current.top { *previous = Some(current); }
+    if tucked { previous.unwrap_or(current) } else { current }
 }
 impl Bounds {
     pub fn from_json(value: &Value) -> Option<Self> {
@@ -74,6 +81,16 @@ pub fn shortcut_settings(settings: &Value, suspended: bool) -> Value {
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test] fn tucked_rectangle_does_not_oscillate_under_a_window() {
+        let visible=Bounds{left:100,top:8,right:400,bottom:52};let mut previous=None;
+        assert_eq!(unfolded_bounds(visible,false,&mut previous),visible);
+        let tucked=Bounds{bottom:9,..visible};
+        let window=Bounds{left:120,top:25,right:300,bottom:500};
+        assert!(unfolded_bounds(tucked,true,&mut previous).intersects(window));
+        assert!(unfolded_bounds(tucked,true,&mut previous).intersects(window));
+        let moved=Bounds{left:500,right:800,..visible};
+        assert!(!unfolded_bounds(moved,false,&mut previous).intersects(window));
+    }
     #[test]
     fn recorder_key_names_match_the_native_shortcut_parser() {
         for key in [

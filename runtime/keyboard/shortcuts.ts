@@ -31,6 +31,7 @@ const labels: Record<string, [string, string]> = {
   hotkeyWebAi: ["Окно веб-чата", "Web chat window"],
   hotkeyTheme: ["Тема острова", "Island theme"],
   hotkeyFullscreen: ["Скрытие над полным экраном", "Fullscreen visibility"],
+  hotkeyAutoHide: ["Автоскрытие", "Auto-hide"],
 };
 export function shortcutBindings(
   settings: Record<string, unknown>,

@@ -2,4 +2,5 @@
 export { ot, A as characterCatalog, k as setCharacterCursor } from './compat/island-store.js';
 export { s as lyricsStore } from './compat/home.js';
 export { api as O } from './ipc/legacy-api';
-export { suspendCharacterAnimations } from './characters/scheduler';
+export { suspendCharacterAnimations, isCharacterAnimationSuspended } from './characters/scheduler';
+export { garlandPoints } from './holidays/garland';

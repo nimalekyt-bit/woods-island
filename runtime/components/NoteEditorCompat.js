@@ -322,7 +322,7 @@ function $O({ editor: e }) {
     i = (t) => t(e.chain().focus()).run();
   return (0, jsxRuntime.jsxs)(`div`, {
     "data-note-toolbar": !0,
-    className: `relative flex items-center gap-0.5`,
+    className: `relative flex flex-wrap items-center gap-0.5`,
     children: [
       (0, jsxRuntime.jsx)(QO, {
         data: `bold`,
@@ -440,7 +440,7 @@ function ek({ text: e, onChange: t, placeholder: n, footer: r }) {
     content: Vc(e),
     editorProps: {
       attributes: {
-        class: `note-editor scroll-thin h-full overflow-y-auto rounded-2xl bg-tile p-3.5 text-[13px] leading-relaxed text-ink outline-none focus:bg-tile-hover`,
+        class: `note-editor scroll-none h-full overflow-y-auto rounded-2xl bg-tile p-3.5 text-[13px] leading-relaxed text-ink outline-none [overflow-wrap:anywhere] focus:bg-tile-hover`,
         spellcheck: `true`,
         lang: `ru`,
         "data-note-editor": ``,
@@ -463,7 +463,7 @@ function ek({ text: e, onChange: t, placeholder: n, footer: r }) {
           children: (0, jsxRuntime.jsx)(OC, { editor: o, className: `h-full` }),
         }),
         (0, jsxRuntime.jsxs)(`div`, {
-          className: `flex items-center justify-between gap-2 px-1`,
+          className: `flex shrink-0 flex-wrap items-center justify-between gap-x-2 gap-y-1 px-1`,
           children: [o ? (0, jsxRuntime.jsx)($O, { editor: o }) : (0, jsxRuntime.jsx)(`span`, {}), r(o)],
         }),
       ],

@@ -16,13 +16,13 @@ export interface ShelfLook {
   color?: string;
 }
 const documents: [RegExp, string][] = [
-  [/\.pdf$/i, "#bf525a"],
-  [/\.(docx?|rtf|odt)$/i, "#547eb7"],
-  [/\.(xlsx?|xlsm|csv|ods)$/i, "#548b6d"],
-  [/\.(pptx?|odp|key)$/i, "#bb8053"],
+  [/\.pdf$/i, "#e5484d"],
+  [/\.(docx?|rtf|odt)$/i, "#3e63dd"],
+  [/\.(xlsx?|xlsm|csv|ods)$/i, "#2f9e5b"],
+  [/\.(pptx?|odp|key)$/i, "#f76b15"],
   [/\.(zip|rar|7z|tar|gz|tgz|bz2|xz)$/i, "#777d8b"],
   [/\.(mp3|m4a|wav|flac|ogg|aac|opus|wma)$/i, "#a78a51"],
-  [/\.(txt|md|log|json|xml|ya?ml|ini)$/i, "#65758a"],
+  [/\.(txt|md|log|json|xml|ya?ml|ini)$/i, "#596578"],
 ];
 export function shelfLook(item: Pick<ShelfItem, "name" | "icon" | "isDir">): ShelfLook {
   const dot = item.name.lastIndexOf("."),

@@ -15,6 +15,7 @@ export interface PhoneState {
   url: string | null;
   network: string | null;
   public: boolean | null;
+  permissionRequired: boolean | null;
   connected: boolean;
   device: string | null;
   problem: string | null;
@@ -27,6 +28,7 @@ export const EMPTY_PHONE: PhoneState = Object.freeze({
   url: null,
   network: null,
   public: null,
+  permissionRequired: null,
   connected: false,
   device: null,
   problem: null,
@@ -90,6 +92,7 @@ export function phoneState(value: unknown): PhoneState {
     url: phoneUrl(source.url),
     network: text(source.network, 200),
     public: typeof source.public === "boolean" ? source.public : null,
+    permissionRequired: typeof source.permissionRequired === "boolean" ? source.permissionRequired : null,
     connected: source.connected === true,
     device: text(source.device, 60),
     problem: text(source.problem, 500),
