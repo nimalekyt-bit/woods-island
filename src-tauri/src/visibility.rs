@@ -77,6 +77,84 @@ pub fn shortcut_settings(settings: &Value, suspended: bool) -> Value {
     }
     result
 }
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MonitorDescriptor {
+    pub name: String,
+    pub left: i32,
+    pub top: i32,
+    pub width: i32,
+    pub height: i32,
+    pub primary: bool,
+}
+
+impl MonitorDescriptor {
+    pub fn bounds(&self) -> Bounds {
+        Bounds {
+            left: self.left,
+            top: self.top,
+            right: self.left + self.width.max(1),
+            bottom: self.top + self.height.max(1),
+        }
+    }
+
+    pub fn contains_point(&self, x: i32, y: i32) -> bool {
+        let b = self.bounds();
+        x >= b.left && x < b.right && y >= b.top && y < b.bottom
+    }
+}
+
+/// Picks the active monitor index for the island, honoring user preference,
+/// optional cursor-following, and automatic evacuation away from a fullscreen
+/// game/video onto a free secondary display.
+pub fn select_target_monitor(
+    monitors: &[MonitorDescriptor],
+    preferred_name: &str,
+    follow_cursor: bool,
+    cursor_pos: Option<(i32, i32)>,
+    fullscreen_move: bool,
+    fullscreen_monitor: Option<Bounds>,
+    island_expanded: bool,
+) -> Option<usize> {
+    if monitors.is_empty() {
+        return None;
+    }
+    let preferred_idx = (!preferred_name.is_empty())
+        .then(|| monitors.iter().position(|m| m.name == preferred_name))
+        .flatten()
+        .or_else(|| monitors.iter().position(|m| m.primary))
+        .unwrap_or(0);
+
+    if monitors.len() == 1 {
+        return Some(preferred_idx);
+    }
+
+    let mut target = preferred_idx;
+    if follow_cursor && !island_expanded {
+        if let Some((cx, cy)) = cursor_pos {
+            if let Some(cursor_idx) = monitors.iter().position(|m| m.contains_point(cx, cy)) {
+                target = cursor_idx;
+            }
+        }
+    }
+
+    if fullscreen_move {
+        if let Some(fs_bounds) = fullscreen_monitor {
+            if monitors[target].bounds() == fs_bounds {
+                // Prefer the user's preferred monitor if it is free, then primary, else any free display.
+                if monitors[preferred_idx].bounds() != fs_bounds {
+                    target = preferred_idx;
+                } else if let Some(primary_idx) = monitors.iter().position(|m| m.primary && m.bounds() != fs_bounds) {
+                    target = primary_idx;
+                } else if let Some(free_idx) = monitors.iter().position(|m| m.bounds() != fs_bounds) {
+                    target = free_idx;
+                }
+            }
+        }
+    }
+
+    Some(target)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -176,5 +254,36 @@ mod tests {
         let filtered=shortcut_settings(&s,false);
         assert!(filtered["hotkeyVpn"].is_null());assert_eq!(filtered["hotkeyToggle"],"Alt+I");
         assert_eq!(s["hotkeyVpn"],"Ctrl+Shift+V");
+    }
+    #[test]
+    fn smart_multimonitor_evacuates_fullscreen_and_returns_when_exited() {
+        let monitors = vec![
+            MonitorDescriptor { name: "DISPLAY1".into(), left: 0, top: 0, width: 3840, height: 2160, primary: true },
+            MonitorDescriptor { name: "DISPLAY2".into(), left: -1920, top: 0, width: 1920, height: 1080, primary: false },
+        ];
+        let fs_on_main = Some(monitors[0].bounds());
+        // Fullscreen on primary evacuates to secondary without oscillation.
+        assert_eq!(select_target_monitor(&monitors, "", false, None, true, fs_on_main, false), Some(1));
+        assert_eq!(select_target_monitor(&monitors, "DISPLAY1", false, None, true, fs_on_main, false), Some(1));
+        // Exiting fullscreen returns smoothly to preferred primary.
+        assert_eq!(select_target_monitor(&monitors, "DISPLAY1", false, None, true, None, false), Some(0));
+        // Disabled fullscreen_move keeps primary.
+        assert_eq!(select_target_monitor(&monitors, "DISPLAY1", false, None, false, fs_on_main, false), Some(0));
+    }
+    #[test]
+    fn smart_multimonitor_follow_cursor_respects_expanded_panel_and_negative_coords() {
+        let monitors = vec![
+            MonitorDescriptor { name: "DISPLAY1".into(), left: 0, top: 0, width: 1920, height: 1080, primary: true },
+            MonitorDescriptor { name: "DISPLAY2".into(), left: -1920, top: 0, width: 1920, height: 1080, primary: false },
+        ];
+        // Cursor on left negative-coord display moves island there when folded.
+        assert_eq!(select_target_monitor(&monitors, "", true, Some((-500, 300)), false, None, false), Some(1));
+        // Do not yank away while expanded.
+        assert_eq!(select_target_monitor(&monitors, "", true, Some((-500, 300)), false, None, true), Some(0));
+        // Fullscreen evacuation overrides cursor if cursor is inside fullscreen monitor.
+        let fs_left = Some(monitors[1].bounds());
+        assert_eq!(select_target_monitor(&monitors, "", true, Some((-500, 300)), true, fs_left, false), Some(0));
+        // Single monitor never fails.
+        assert_eq!(select_target_monitor(&monitors[..1], "", true, Some((100, 100)), true, Some(monitors[0].bounds()), false), Some(0));
     }
 }

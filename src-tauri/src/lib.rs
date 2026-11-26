@@ -119,6 +119,7 @@ pub struct AppState {
     pub hotkey_errors: std::sync::Mutex<Vec<String>>,
     pub island_rect: std::sync::Mutex<IslandRect>,
     pub main_hwnd: std::sync::Mutex<Option<isize>>,
+    pub active_monitor: std::sync::Mutex<Option<String>>,
     pub controls: std::sync::Mutex<Value>,
     pub launcher_groups: std::sync::Mutex<String>,
     pub launcher_hotkeys: std::sync::Mutex<String>,
@@ -163,6 +164,8 @@ fn default_settings() -> Value {
     "notchBar": false,
     "notchLook": "black",
     "monitor": "",
+    "monitorFollowCursor": false,
+    "fullscreenMoveToOtherMonitor": false,
     "liquidSpectrum": false,
     "opacityRest": 100,
     "opacityOpen": 100,
@@ -315,8 +318,15 @@ fn apply_island_geometry(app: &AppHandle, state: &AppState) -> Result<(), String
     win::WindowManager::set_zoom(zoom);
     let monitors = app.available_monitors().map_err(|e|e.to_string())?;
     let primary = app.primary_monitor().map_err(|e|e.to_string())?;
-    let name = settings["monitor"].as_str().unwrap_or("");
-    let monitor = monitors.iter().find(|m|m.name().map(|n|n==name).unwrap_or(false)).or(primary.as_ref()).or(monitors.first()).ok_or("Monitor unavailable")?;
+    let active_override = state.active_monitor.lock().unwrap().clone();
+    let preferred = settings["monitor"].as_str().unwrap_or("");
+    let monitor = active_override
+        .as_deref()
+        .and_then(|ov| monitors.iter().find(|m| m.name().map(|n| n == ov).unwrap_or(false)))
+        .or_else(|| (!preferred.is_empty()).then(|| monitors.iter().find(|m| m.name().map(|n| n == preferred).unwrap_or(false))).flatten())
+        .or(primary.as_ref())
+        .or(monitors.first())
+        .ok_or("Monitor unavailable")?;
     let hwnd = HWND(window.hwnd().map_err(|e|e.to_string())?.0 as _);
     win::WindowManager::position_on_monitor(hwnd, monitor.position().x, monitor.position().y, monitor.size().width as i32, monitor.size().height as i32, monitor.scale_factor(), zoom, settings["offsetX"].as_i64().unwrap_or(0).clamp(-10000,10000) as i32, settings["underTaskbar"].as_bool().unwrap_or(true), state.is_tall.load(Ordering::Relaxed));
     let rect = *state.island_rect.lock().unwrap();
@@ -340,6 +350,8 @@ fn start_cursor_loop(app: AppHandle, state: Arc<AppState>) {
         let mut cached_settings = state.settings.lock().unwrap().clone();
         let mut cached_settings_ver = SETTINGS_VERSION.load(Ordering::Relaxed);
         let mut geometry_key = String::new();
+        let mut last_scale_factor: f64 = 0.0;
+        let mut pending_cursor_monitor: Option<String> = None;
         let mut allow_edge = false;
 
         loop {
@@ -448,6 +460,77 @@ fn start_cursor_loop(app: AppHandle, state: Arc<AppState>) {
                 let local = visibility::unfolded_bounds(visibility::Bounds { left:rect.x, top, right:rect.x+rect.w, bottom:top+rect.h.max(1) }, tucked, &mut unfolded_anchor);
                 let anchor = visibility::Bounds { left:win_rect.left+(local.left as f64*scale).round() as i32, top:win_rect.top+(local.top as f64*scale).round() as i32, right:win_rect.left+(local.right as f64*scale).round() as i32, bottom:win_rect.top+(local.bottom as f64*scale).round() as i32 };
                 context["under"]=json!(visibility::Bounds::from_json(&context["bounds"]).is_some_and(|window|anchor.intersects(window)));
+                let follow_cursor = settings["monitorFollowCursor"].as_bool().unwrap_or(false);
+                let fullscreen_move = settings["fullscreenMoveToOtherMonitor"].as_bool().unwrap_or(false);
+                let fs_monitor_bounds = visibility::Bounds::from_json(&context["fullscreenMonitor"]);
+                let dpi_dirty = win::WindowManager::take_dpi_dirty();
+                if dpi_dirty || settings_changed || follow_cursor || fullscreen_move || last_monitor_check.elapsed() >= std::time::Duration::from_secs(3) {
+                    last_monitor_check = std::time::Instant::now();
+                    let monitors = app.available_monitors().unwrap_or_default();
+                    let primary = app.primary_monitor().ok().flatten();
+                    let descs: Vec<visibility::MonitorDescriptor> = monitors.iter().map(|m| {
+                        let is_primary = primary.as_ref().map(|p| p.position() == m.position() && p.name() == m.name()).unwrap_or(false);
+                        visibility::MonitorDescriptor {
+                            name: m.name().cloned().unwrap_or_default(),
+                            left: m.position().x,
+                            top: m.position().y,
+                            width: m.size().width as i32,
+                            height: m.size().height as i32,
+                            primary: is_primary,
+                        }
+                    }).collect();
+                    let preferred = settings["monitor"].as_str().unwrap_or("");
+                    if let Some(target_idx) = visibility::select_target_monitor(
+                        &descs,
+                        preferred,
+                        follow_cursor,
+                        Some((cursor_x, cursor_y)),
+                        fullscreen_move,
+                        fs_monitor_bounds,
+                        rect.expanded,
+                    ) {
+                        let target_name = descs[target_idx].name.clone();
+                        let current_active = state.active_monitor.lock().unwrap().clone();
+                        let evacuated = fullscreen_move && fs_monitor_bounds.is_some_and(|fs| descs[target_idx].bounds() != fs);
+                        // For follow-cursor-only switches, require 1 consecutive 500ms tick so brushing a screen edge doesn't jitter.
+                        let should_switch = if current_active.as_deref() == Some(target_name.as_str()) {
+                            pending_cursor_monitor = None;
+                            true
+                        } else if !follow_cursor || evacuated || dpi_dirty || settings_changed || current_active.is_none() {
+                            pending_cursor_monitor = None;
+                            true
+                        } else if pending_cursor_monitor.as_deref() == Some(target_name.as_str()) {
+                            pending_cursor_monitor = None;
+                            true
+                        } else {
+                            pending_cursor_monitor = Some(target_name.clone());
+                            false
+                        };
+                        if should_switch {
+                            if !follow_cursor && !fullscreen_move {
+                                *state.active_monitor.lock().unwrap() = None;
+                            } else {
+                                *state.active_monitor.lock().unwrap() = Some(target_name.clone());
+                            }
+                            let monitor = &monitors[target_idx];
+                            if evacuated {
+                                // Island moved onto a free monitor, so it is no longer covered by the fullscreen app.
+                                context["fullscreen"] = json!(false);
+                            }
+                            let key = format!("{}|{}|{}|{}|{}|{:?}|{:?}|{}", settings["scale"], settings["monitor"], target_name, settings["offsetX"], settings["underTaskbar"], monitor.position(), monitor.size(), monitor.scale_factor());
+                            if dpi_dirty || key != geometry_key {
+                                geometry_key = key;
+                                let scale_changed = last_scale_factor > 0.0 && (monitor.scale_factor() - last_scale_factor).abs() > 0.01;
+                                last_scale_factor = monitor.scale_factor();
+                                if let Err(e) = apply_island_geometry(&app, &state) {
+                                    app_log(&format!("Island geometry: {e}"));
+                                } else if dpi_dirty || scale_changed {
+                                    let _ = app.emit_to("main", "island:dpi-changed", monitor.scale_factor());
+                                }
+                            }
+                        }
+                    }
+                }
                 let policy=visibility::resolve(settings,&context);
                 allow_edge=policy.edge;
                 let fs_now = context["fullscreen"].as_bool().unwrap_or(false);
@@ -462,25 +545,6 @@ fn start_cursor_loop(app: AppHandle, state: Arc<AppState>) {
                     let _ = app.emit_to("main", "island:keep", policy.keep);
                     let _ = app.emit_to("main", "island:desktop", policy.desktop);
                     last_context = context_key;
-                }
-                let dpi_dirty = win::WindowManager::take_dpi_dirty();
-                if dpi_dirty || settings_changed || last_monitor_check.elapsed() >= std::time::Duration::from_secs(3) {
-                    last_monitor_check = std::time::Instant::now();
-                    let monitors = app.available_monitors().unwrap_or_default();
-                    let name = settings["monitor"].as_str().unwrap_or("");
-                    let chosen = monitors.iter().find(|m|m.name().map(|n|n==name).unwrap_or(false));
-                    let primary = app.primary_monitor().ok().flatten();
-                    if let Some(monitor) = chosen.or(primary.as_ref()).or(monitors.first()) {
-                        let key = format!("{}|{}|{}|{}|{:?}|{:?}|{}", settings["scale"], settings["monitor"], settings["offsetX"], settings["underTaskbar"], monitor.position(), monitor.size(), monitor.scale_factor());
-                        if dpi_dirty || key != geometry_key {
-                            geometry_key = key;
-                            if let Err(e) = apply_island_geometry(&app, &state) {
-                                app_log(&format!("Island geometry: {e}"));
-                            } else if dpi_dirty {
-                                let _ = app.emit_to("main", "island:dpi-changed", monitor.scale_factor());
-                            }
-                        }
-                    }
                 }
             }
         }
@@ -1875,6 +1939,7 @@ pub fn run() {
             expanded: false,
         }),
         main_hwnd: std::sync::Mutex::new(None),
+        active_monitor: std::sync::Mutex::new(None),
         controls: std::sync::Mutex::new(loaded_controls),
         launcher_groups: std::sync::Mutex::new(loaded_launcher_groups),
         launcher_hotkeys: std::sync::Mutex::new(loaded_launcher_hotkeys),

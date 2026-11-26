@@ -2463,6 +2463,38 @@ function zt() {
                                 onChange: (e) => H({ monitor: e }),
                               }),
                             }),
+                          (P.length > 1 || e.fullscreenMoveToOtherMonitor === !0) &&
+                            (0, U.jsx)(J, {
+                              since: `1.5.0`,
+                              title: n(
+                                `Переносить на другой монитор в играх`,
+                                `Move to another monitor in fullscreen`,
+                              ),
+                              hint: n(
+                                `Если на экране острова открыта полноэкранная игра или видео, остров переедет на свободный монитор и вернётся после выхода`,
+                                `When a fullscreen game or video opens on the island's screen, move the island to a free monitor and bring it back afterward`,
+                              ),
+                              children: (0, U.jsx)(Y, {
+                                value: e.fullscreenMoveToOtherMonitor === !0,
+                                onChange: (v) => H({ fullscreenMoveToOtherMonitor: v }),
+                              }),
+                            }),
+                          (P.length > 1 || e.monitorFollowCursor === !0) &&
+                            (0, U.jsx)(J, {
+                              since: `1.5.0`,
+                              title: n(
+                                `Следовать за монитором с курсором`,
+                                `Follow the cursor's monitor`,
+                              ),
+                              hint: n(
+                                `Остров плавно переходит на тот монитор, где находится курсор мыши (когда пилюля свёрнута)`,
+                                `Smoothly moves the island onto whichever monitor holds your cursor while folded`,
+                              ),
+                              children: (0, U.jsx)(Y, {
+                                value: e.monitorFollowCursor === !0,
+                                onChange: (v) => H({ monitorFollowCursor: v }),
+                              }),
+                            }),
                           (0, U.jsx)(J, {
                             since: `1.2.5`,
                             preview: `idle`,

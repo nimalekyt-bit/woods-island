@@ -414,6 +414,7 @@ impl WindowManager {
             let mut pid = 0;
             GetWindowThreadProcessId(foreground, Some(&mut pid));
             let mut fullscreen = false;
+            let mut fullscreen_monitor = serde_json::Value::Null;
             let mut desktop = false;
             let mut executable = String::new();
             let mut bounds = serde_json::Value::Null;
@@ -428,7 +429,11 @@ impl WindowManager {
                     if let Some(rect) = Self::visible_window_rect(foreground) {
                         bounds = serde_json::json!([rect.left,rect.top,rect.right,rect.bottom]);
                         let m = info.rcMonitor;
-                        fullscreen = MonitorFromWindow(island, MONITOR_DEFAULTTONEAREST)==monitor && rect.left <= m.left && rect.top <= m.top && rect.right >= m.right && rect.bottom >= m.bottom;
+                        let covers_monitor = rect.left <= m.left && rect.top <= m.top && rect.right >= m.right && rect.bottom >= m.bottom;
+                        if covers_monitor {
+                            fullscreen_monitor = serde_json::json!([m.left, m.top, m.right, m.bottom]);
+                        }
+                        fullscreen = covers_monitor && MonitorFromWindow(island, MONITOR_DEFAULTTONEAREST) == monitor;
                     }
                 }
                 let fg_raw = foreground.0 as isize;
@@ -452,7 +457,7 @@ impl WindowManager {
                     }
                 }
             }
-            serde_json::json!({"fullscreen": fullscreen, "desktop": desktop, "executable": executable, "pid": pid,"bounds":bounds})
+            serde_json::json!({"fullscreen": fullscreen, "fullscreenMonitor": fullscreen_monitor, "desktop": desktop, "executable": executable, "pid": pid,"bounds":bounds})
         }
     }
 

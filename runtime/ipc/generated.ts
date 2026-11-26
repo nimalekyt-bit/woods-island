@@ -31,6 +31,8 @@ export interface Settings {
   notchBar: boolean;
   notchLook: string;
   monitor: string;
+  monitorFollowCursor: boolean;
+  fullscreenMoveToOtherMonitor: boolean;
   liquidSpectrum: boolean;
   opacityRest: number;
   opacityOpen: number;
