@@ -152,3 +152,45 @@ export const CircleAlert = createIcon({name:"circle-alert",size:24,node:[
 export const LoaderCircle = createIcon({name:"loader-circle",size:24,node:[
   ["path",{d:"M21 12a9 9 0 1 1-6.219-8.56",key:"13zald"}]
 ]});
+export const Palette = createIcon({name:"palette",size:24,node:[
+  ["circle",{cx:"13.5",cy:"6.5",r:".5",fill:"currentColor",key:"p1"}],
+  ["circle",{cx:"17.5",cy:"10.5",r:".5",fill:"currentColor",key:"p2"}],
+  ["circle",{cx:"8.5",cy:"7.5",r:".5",fill:"currentColor",key:"p3"}],
+  ["circle",{cx:"6.5",cy:"12.5",r:".5",fill:"currentColor",key:"p4"}],
+  ["path",{d:"M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z",key:"p5"}]
+]});
+export const Snowflake = createIcon({name:"snowflake",size:24,node:[
+  ["line",{x1:"2",x2:"22",y1:"12",y2:"12",key:"s1"}],
+  ["line",{x1:"12",x2:"12",y1:"2",y2:"22",key:"s2"}],
+  ["path",{d:"m20 16-4-4 4-4",key:"s3"}],
+  ["path",{d:"m4 8 4 4-4 4",key:"s4"}],
+  ["path",{d:"m16 4-4 4-4-4",key:"s5"}],
+  ["path",{d:"m8 20 4-4 4 4",key:"s6"}]
+]});
+export const SlidersHorizontal = createIcon({name:"sliders-horizontal",size:24,node:[
+  ["line",{x1:"21",x2:"14",y1:"4",y2:"4",key:"sh1"}],
+  ["line",{x1:"10",x2:"3",y1:"4",y2:"4",key:"sh2"}],
+  ["line",{x1:"21",x2:"12",y1:"12",y2:"12",key:"sh3"}],
+  ["line",{x1:"8",x2:"3",y1:"12",y2:"12",key:"sh4"}],
+  ["line",{x1:"21",x2:"16",y1:"20",y2:"20",key:"sh5"}],
+  ["line",{x1:"12",x2:"3",y1:"20",y2:"20",key:"sh6"}],
+  ["line",{x1:"14",x2:"14",y1:"2",y2:"6",key:"sh7"}],
+  ["line",{x1:"8",x2:"8",y1:"10",y2:"14",key:"sh8"}],
+  ["line",{x1:"16",x2:"16",y1:"18",y2:"22",key:"sh9"}]
+]});
+export const Camera = createIcon({name:"camera",size:24,node:[
+  ["path",{d:"M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z",key:"c1"}],
+  ["circle",{cx:"12",cy:"13",r:"3",key:"c2"}]
+]});
+export const SearchIcon = createIcon({name:"search",size:24,node:[
+  ["circle",{cx:"11",cy:"11",r:"8",key:"sr1"}],
+  ["path",{d:"m21 21-4.3-4.3",key:"sr2"}]
+]});
+export const XIcon = createIcon({name:"x",size:24,node:[
+  ["path",{d:"M18 6 6 18",key:"x1"}],
+  ["path",{d:"m6 6 12 12",key:"x2"}]
+]});
+export const RotateCcw = createIcon({name:"rotate-ccw",size:24,node:[
+  ["path",{d:"M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8",key:"rc1"}],
+  ["path",{d:"M3 3v5h5",key:"rc2"}]
+]});

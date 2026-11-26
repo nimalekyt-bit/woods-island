@@ -1,0 +1,342 @@
+/* Woods Island Settings 2.0 visual polish */
+.wi-settings-shell {
+  background: radial-gradient(900px 420px at 72% -10%, rgba(142, 162, 255, 0.06), transparent 62%), #101013;
+}
+
+.wi-settings-nav {
+  background: linear-gradient(180deg, #0b0b0e 0%, #0d0d11 100%);
+}
+
+.wi-logo-pill {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 0 0 14px 14px;
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: none;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.55);
+}
+
+.wi-nav-group-label {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.34);
+  padding: 9px 10px 3px;
+  user-select: none;
+}
+
+.wi-nav-group-label:first-child {
+  padding-top: 2px;
+}
+
+.wi-nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 31px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  padding: 0 10px 0 11px;
+  text-align: left;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.62);
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.wi-nav-item:hover {
+  background: rgba(255, 255, 255, 0.055);
+  color: #fff;
+}
+
+.wi-nav-item[data-now="true"] {
+  background: rgba(255, 255, 255, 0.095);
+  color: #fff;
+}
+
+.wi-nav-item[data-now="true"]::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 7px;
+  bottom: 7px;
+  width: 3px;
+  border-radius: 999px;
+  background: #8ea2ff;
+  box-shadow: 0 0 10px rgba(142, 162, 255, 0.55);
+}
+
+.wi-section-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 4px;
+}
+
+.wi-section-title {
+  font-size: 21px;
+  line-height: 1.25;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: #fff;
+}
+
+.wi-section-desc {
+  margin-top: 3px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.48);
+}
+
+.wi-anchor-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.wi-anchor-pill {
+  border: 1px solid rgba(255, 255, 255, 0.085);
+  background: rgba(255, 255, 255, 0.035);
+  color: rgba(255, 255, 255, 0.68);
+  border-radius: 999px;
+  padding: 4px 11px;
+  font-size: 11.5px;
+  font-weight: 500;
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.wi-anchor-pill:hover {
+  background: rgba(142, 162, 255, 0.14);
+  border-color: rgba(142, 162, 255, 0.35);
+  color: #fff;
+}
+
+.wi-group-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.wi-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 6px 0;
+}
+
+.wi-group-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.44);
+}
+
+.wi-group-hint {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.32);
+}
+
+.wi-setting-card {
+  background: rgba(255, 255, 255, 0.038);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.068);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.wi-setting-card > * + * {
+  border-top: 1px solid rgba(255, 255, 255, 0.055);
+}
+
+.wi-setting-row {
+  transition: background-color 140ms ease;
+}
+
+.wi-setting-row:hover {
+  background: rgba(255, 255, 255, 0.024);
+}
+
+@keyframes wi-setting-flash {
+  0% {
+    background: rgba(142, 162, 255, 0.24);
+    box-shadow: inset 3px 0 0 #8ea2ff, inset 0 0 0 1px rgba(142, 162, 255, 0.45);
+  }
+  70% {
+    background: rgba(142, 162, 255, 0.12);
+    box-shadow: inset 3px 0 0 #8ea2ff, inset 0 0 0 1px rgba(142, 162, 255, 0.25);
+  }
+  100% {
+    background: rgba(255, 255, 255, 0.038);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.068);
+  }
+}
+
+.wi-setting-highlight {
+  animation: wi-setting-flash 2s ease-out forwards;
+}
+
+/* Search bar in sidebar */
+.wi-search-wrap {
+  padding: 0 10px 10px;
+}
+
+.wi-search-input {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  border-radius: 9px;
+  padding: 0 9px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.085);
+  transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
+}
+
+.wi-search-input:focus-within {
+  background: rgba(255, 255, 255, 0.075);
+  border-color: rgba(142, 162, 255, 0.55);
+  box-shadow: 0 0 0 2px rgba(142, 162, 255, 0.14);
+}
+
+.wi-search-field {
+  min-width: 0;
+  flex: 1;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  font-size: 12px;
+  color: #fff;
+  outline: none;
+}
+
+.wi-search-field:focus,
+.wi-search-field:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.wi-search-field::placeholder {
+  color: rgba(255, 255, 255, 0.36);
+}
+
+.wi-search-kbd {
+  flex-shrink: 0;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.07);
+  padding: 1px 5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 9.5px;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.wi-search-clear {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border-radius: 5px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.wi-search-clear:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.wi-search-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  text-align: left;
+}
+
+.wi-search-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+  background: rgba(142, 162, 255, 0.15);
+  border: 1px solid rgba(142, 162, 255, 0.22);
+  padding: 2px 7px;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: #b8c7ff;
+}
+
+/* Live preview scene switcher */
+.wi-stage-bar {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 4px;
+}
+
+.wi-stage-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.wi-stage-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.055);
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.wi-stage-tab {
+  border-radius: 6px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.54);
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.wi-stage-tab:hover {
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.wi-stage-tab[aria-pressed="true"] {
+  background: rgba(142, 162, 255, 0.24);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(142, 162, 255, 0.32);
+}
+
+/* Quick reset pill next to sliders */
+.wi-reset-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 8px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.065);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.72);
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.wi-reset-btn:hover {
+  background: rgba(255, 255, 255, 0.13);
+  color: #fff;
+}

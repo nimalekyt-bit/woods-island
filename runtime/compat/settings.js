@@ -18,6 +18,24 @@ import { SitePermissions } from '../web-ai/SitePermissions';
 import { shortcutBindings } from '../keyboard/shortcuts';
 import { PetLibrarySettings } from '../components/PetLibrarySettings';
 import { usePetLibrary } from '../characters/pet-library';
+import {
+  Palette as WoodsPalette,
+  Snowflake as WoodsSnowflake,
+  SlidersHorizontal as WoodsSliders,
+  Camera as WoodsCamera,
+  Bell as WoodsBell,
+  Link2 as WoodsLink,
+} from '../components/settings-icons';
+import {
+  SettingsSearchBar,
+  SettingsSearchResults,
+  SectionHeader,
+  SettingGroup,
+  StageSceneBar,
+  QuickResetButton,
+  focusSettingGroup,
+} from '../settings/SettingsChrome';
+import { SECTION_META } from '../settings/search-index';
 const WoodsSettingLabel = WoodsReact.createContext('');
 const WoodsShortcutBindings = WoodsReact.createContext([]);
 // Compatibility application source; migrate components incrementally.
@@ -772,30 +790,41 @@ function pt({ children: e }) {
     children: e,
   });
 }
-function K({ id: e, title: t, stage: n, children: r, plain = false }) {
+function K({ id: e, title: t, description: desc, anchors, onAnchor, stage: n, children: r, plain = false, grouped = false }) {
   let { page: i } = (0, F.useContext)(G);
+  const meta = e ? SECTION_META[e] : null;
+  const isEn = window.document?.documentElement?.lang === `en` || n_is_en();
+  const resolvedDesc = desc ?? (meta ? (isEn ? meta.descEn : meta.descRu) : undefined);
   return (0, U.jsxs)(`section`, {
     id: e,
     hidden: !!e && e !== i,
-    className: `flex flex-col gap-3`,
+    className: `flex flex-col gap-4`,
     children: [
-      (0, U.jsx)(pt, { children: t }),
+      (0, U.jsx)(SectionHeader, { title: t, description: resolvedDesc, anchors, onAnchor }),
       (!e || e === i) && n,
-      plain ? r : (0, U.jsx)(`div`, {
-        className: `divide-y divide-white/[0.06] overflow-hidden rounded-2xl bg-white/[0.045]`,
-        children: r,
-      }),
+      plain || grouped
+        ? r
+        : (0, U.jsx)(`div`, {
+            className: `wi-setting-card`,
+            children: r,
+          }),
     ],
   });
 }
-function mt(e) {
-  return (0, U.jsx)(`div`, {
+function n_is_en() {
+  return n(`ru`, `en`) === `en`;
+}
+function mt({ onScene, showBar = true, ...e }) {
+  return (0, U.jsxs)(`div`, {
     "data-stage-slot": !0,
-    className: `sticky top-0 z-20 -mx-2 bg-[#111113] px-2 pt-1 pb-2`,
-    children: (0, U.jsx)(F.Suspense, {
-      fallback: (0, U.jsx)(`div`, { className: `h-[180px] rounded-2xl bg-[#1c1d22]` }),
-      children: (0, U.jsx)(dt, { ...e }),
-    }),
+    className: `sticky top-0 z-20 -mx-2 bg-[#101013]/95 px-2 pt-1 pb-2 backdrop-blur-md`,
+    children: [
+      (0, U.jsx)(F.Suspense, {
+        fallback: (0, U.jsx)(`div`, { className: `h-[180px] rounded-2xl bg-[#1c1d22]` }),
+        children: (0, U.jsx)(dt, { ...e }),
+      }),
+      showBar && onScene && (0, U.jsx)(StageSceneBar, { scene: e.scene, onSelect: onScene, en: n_is_en() }),
+    ],
   });
 }
 function ht({ className: e, children: t }) {
@@ -826,8 +855,8 @@ function J({ title: e, hint: t, since: n, pro: r, stacked: i, preview: a, childr
       : {}),
     "data-preview": a,
     className: i
-      ? `flex flex-col items-start gap-2.5 px-4 py-3`
-      : `flex min-h-14 items-center gap-4 px-4 py-2.5`,
+      ? `wi-setting-row flex flex-col items-start gap-2.5 px-4 py-3`
+      : `wi-setting-row flex min-h-14 items-center gap-4 px-4 py-2.5`,
     children: [
       (0, U.jsxs)(`div`, {
         className: i ? `w-full` : `min-w-0 flex-1`,
@@ -1050,22 +1079,23 @@ function bt({ s: e, save: t }) {
   });
 }
 var xt = () => [
-  { id: `connections`, label: n(`Подключения`, `Connections`), icon: ke },
-  { id: `pro`, label: n(`О приложении`, `About`), icon: WoodsInfo },
-  { id: `character`, label: n(`Персонаж`, `Character`), icon: j, gap: !0 },
-  { id: `holidays`, label: n(`Праздники`, `Holidays`), icon: j },
-  { id: `general`, label: n(`Общее`, `General`), icon: m },
-  { id: `hotkeys`, label: n(`Клавиши`, `Hotkeys`), icon: f },
+  { id: `appearance`, label: n(`Внешний вид`, `Appearance`), icon: WoodsPalette, group: n(`Остров`, `Island`) },
+  { id: `general`, label: n(`Поведение`, `Behavior`), icon: WoodsSliders },
+  { id: `character`, label: n(`Персонаж`, `Character`), icon: j },
+  { id: `holidays`, label: n(`Праздники`, `Holidays`), icon: WoodsSnowflake },
+  { id: `modules`, label: n(`Модули`, `Modules`), icon: N },
+  { id: `clipboard`, label: n(`Захват и буфер`, `Capture & Clip`), icon: WoodsCamera, group: n(`Функции`, `Features`) },
+  { id: `events`, label: n(`События`, `Events`), icon: WoodsBell },
+  { id: `sound`, label: n(`Звук`, `Sound`), icon: _ },
+  { id: `weather`, label: n(`Погода`, `Weather`), icon: A },
   { id: `ai`, label: n(`ИИ`, `AI`), icon: de },
   { id: `voice`, label: n(`Голос в текст`, `Voice to text`), icon: se },
-  { id: `weather`, label: n(`Погода`, `Weather`), icon: A },
-  { id: `sound`, label: n(`Звук`, `Sound`), icon: _ },
-  { id: `events`, label: n(`Живые события`, `Live events`), icon: ke },
-  { id: `clipboard`, label: n(`Буфер обмена`, `Clipboard`), icon: Ee },
-  { id: `modules`, label: n(`Модули`, `Modules`), icon: N, gap: !0 },
-  { id: `updates`, label: n(`Обновления`, `Updates`), icon: y },
+  { id: `hotkeys`, label: n(`Клавиши`, `Hotkeys`), icon: f, group: n(`Управление`, `Controls`) },
+  { id: `connections`, label: n(`Подключения`, `Connections`), icon: WoodsLink },
+  { id: `updates`, label: n(`Обновления`, `Updates`), icon: y, group: n(`Система`, `System`) },
+  { id: `pro`, label: n(`О приложении`, `About`), icon: WoodsInfo },
 ];
-function St({ version: e }) {
+function St({ version: e, search, onSearch }) {
   let t = xt(),
     { page: i, go: a } = (0, F.useContext)(G),
     o = (0, F.useContext)(gt),
@@ -1076,21 +1106,20 @@ function St({ version: e }) {
     }, [o]),
     (0, U.jsxs)(`aside`, {
       "data-settings-nav": !0,
-      className: `flex w-[212px] shrink-0 flex-col border-r border-white/[0.06] bg-[#0c0c0e]`,
+      className: `wi-settings-nav flex w-[212px] shrink-0 flex-col border-r border-white/[0.06]`,
       children: [
-
         (0, U.jsxs)(`header`, {
-          className: `flex items-center gap-3 px-4 pt-5 pb-4`,
+          className: `flex items-center gap-3 px-4 pt-4 pb-3`,
           children: [
             (0, U.jsx)(`div`, {
-              className: `grid h-8 w-14 shrink-0 place-items-center rounded-b-2xl bg-black shadow-lg shadow-black/50`,
-              children: (0, U.jsx)(`span`, { className: `h-1.5 w-5 rounded-full bg-white/20` }),
+              className: `wi-logo-pill`,
+              children: (0, U.jsx)(`span`, { className: `h-1.5 w-5 rounded-full bg-white/25` }),
             }),
             (0, U.jsxs)(`div`, {
               className: `min-w-0`,
               children: [
                 (0, U.jsx)(`h1`, {
-                  className: `text-[16px] leading-tight font-semibold`,
+                  className: `text-[15.5px] leading-tight font-semibold tracking-tight text-white`,
                   children: `Woods Island`,
                 }),
                 (0, U.jsx)(`p`, {
@@ -1101,25 +1130,30 @@ function St({ version: e }) {
             }),
           ],
         }),
+        (0, U.jsx)(SettingsSearchBar, { value: search, onChange: onSearch, en: n_is_en() }),
         (0, U.jsx)(`nav`, {
           "data-settings-nav-list": true,
           className: `scroll-none flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2.5 pb-3`,
           children: t.map((e) => {
-            let t = e.icon,
-              n = i === e.id;
+            let Icon = e.icon,
+              active = i === e.id;
             return (0, U.jsxs)(
               F.Fragment,
               {
                 children: [
+                  e.group && (0, U.jsx)(`div`, { className: `wi-nav-group-label`, children: e.group }),
                   (0, U.jsxs)(`button`, {
                     "data-nav": e.id,
-                    "data-now": String(n),
-                    onClick: () => a(e.id),
-                    className: `flex h-9 shrink-0 items-center gap-2.5 rounded-lg px-2.5 text-left text-[13px] transition-colors ${n ? `bg-white/[0.1] text-white` : `text-white/60 hover:bg-white/[0.05] hover:text-white`}`,
+                    "data-now": String(active),
+                    onClick: () => {
+                      if (search) onSearch(``);
+                      a(e.id);
+                    },
+                    className: `wi-nav-item`,
                     children: [
-                      (0, U.jsx)(t, {
-                        size: 16,
-                        className: `shrink-0 ${e.id === `pro` ? `text-[#a9b8ff]` : n ? `text-white` : `text-white/45`}`,
+                      (0, U.jsx)(Icon, {
+                        size: 15,
+                        className: `shrink-0 ${e.id === `pro` ? `text-[#a9b8ff]` : active ? `text-[#b4c2ff]` : `text-white/42`}`,
                       }),
                       (0, U.jsx)(`span`, { className: `min-w-0 flex-1 truncate`, children: e.label }),
                       s.includes(e.id) &&
@@ -1129,7 +1163,6 @@ function St({ version: e }) {
                         }),
                     ],
                   }),
-                  e.gap && (0, U.jsx)(`div`, { className: `mx-2.5 my-1.5 h-px shrink-0 bg-white/[0.06]` }),
                 ],
               },
               e.id,
@@ -1145,9 +1178,9 @@ function St({ version: e }) {
             }),
             (0, U.jsxs)(`button`, {
               onClick: () => void r.quit(),
-              className: `flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-[13px] text-[#ff8b8b] hover:bg-[#ff6b6b]/10`,
+              className: `flex h-8.5 w-full items-center gap-2.5 rounded-lg px-2.5 text-[12.5px] text-[#ff8b8b] hover:bg-[#ff6b6b]/10`,
               children: [
-                (0, U.jsx)(g, { size: 16, className: `shrink-0` }),
+                (0, U.jsx)(g, { size: 15, className: `shrink-0` }),
                 n(`Выйти из Woods Island`, `Quit Woods Island`),
               ],
             }),
@@ -1867,6 +1900,7 @@ let woodsLastSettingsPage = null;
 function zt() {
   const petLibrary = usePetLibrary();
   const [saveError, setSaveError] = WoodsReact.useState(``);
+  const [searchQuery, setSearchQuery] = WoodsReact.useState(``);
   const priorPage = WoodsReact.useRef(woodsLastSettingsPage);
   const targetRequested = WoodsReact.useRef(false);
   let [e, t] = (0, F.useState)(null),
@@ -1886,12 +1920,25 @@ function zt() {
     [_, te] = (0, F.useState)(``),
     [v, ne] = (0, F.useState)(`hide`),
     [ie, ae] = (0, F.useState)(null),
-    [y, b] = (0, F.useState)(woodsLastSettingsPage ?? `general`),
+    [y, b] = (0, F.useState)(woodsLastSettingsPage ?? `appearance`),
     [oe, se] = (0, F.useState)(`idle`),
     [ce, le] = (0, F.useState)(!1),
     ue = (0, F.useCallback)((e) => {
       (e && se(e), le(e !== null));
     }, []),
+    pickScene = (0, F.useCallback)((scene) => {
+      se(scene);
+      le(!0);
+    }, []),
+    jumpAnchor = (0, F.useCallback)((groupId) => focusSettingGroup(ie, groupId), [ie]),
+    jumpTo = (0, F.useCallback)(
+      (sectionId, groupId) => {
+        setSearchQuery(``);
+        b(sectionId);
+        if (groupId) focusSettingGroup(ie, groupId);
+      },
+      [ie],
+    ),
     [x, de] = (0, F.useState)(``),
     [fe, S] = (0, F.useState)(null),
     [C, pe] = (0, F.useState)(``),
@@ -1960,7 +2007,7 @@ function zt() {
     (0, F.useEffect)(() => {
       (Promise.all([r.settingsGet(), r.settingsTarget().catch(() => null)]).then(([e, target]) => {
         if (!priorPage.current && !targetRequested.current) {
-          b(xt().some((section) => section.id === target) ? target : e.onboardingCompleted === false ? `connections` : `general`);
+          b(xt().some((section) => section.id === target) ? target : e.onboardingCompleted === false ? `connections` : `appearance`);
         }
         ((i.current = e),
           t(e),
@@ -2100,35 +2147,59 @@ function zt() {
       children: (0, U.jsx)(ft.Provider, {
         value: ue,
         children: (0, U.jsxs)(`div`, {
-          className: `flex h-full bg-[#111113] text-white`,
+          className: `wi-settings-shell flex h-full text-white`,
           children: [
-            (0, U.jsx)(St, { version: x }),
+            (0, U.jsx)(St, { version: x, search: searchQuery, onSearch: setSearchQuery }),
             (0, U.jsx)(`div`, {
               ref: ae,
               "data-settings-content": true,
               className: `scroll-none min-w-0 flex-1 overflow-y-auto`,
               children: (0, U.jsxs)(`div`, {
-                className: `mx-auto flex max-w-[580px] flex-col gap-6 px-6 py-6`,
+                className: `mx-auto flex max-w-[640px] flex-col gap-5 px-6 py-6`,
                 children: [
-                  saveError && (0, U.jsx)(`div`, { role: `alert`, className: `rounded-lg bg-white/[0.045] px-4 py-3 text-[12px] text-[#ff9b9b]`, children: saveError }),
-                  y === `connections` && (0, U.jsxs)(`section`, { id: `connections`, className: `flex flex-col gap-3`, children: [
-                    (0, U.jsx)(pt, { children: n(`Подключения`, `Connections`) }),
+                  saveError && (0, U.jsx)(`div`, { role: `alert`, className: `rounded-xl border border-[#ff6b6b]/25 bg-[#ff6b6b]/10 px-4 py-3 text-[12px] text-[#ff9b9b]`, children: saveError }),
+                  searchQuery.trim() &&
+                    (0, U.jsx)(SettingsSearchResults, {
+                      query: searchQuery,
+                      en: n_is_en(),
+                      onPick: (entry) => jumpTo(entry.section, entry.groupId),
+                      onClear: () => setSearchQuery(``),
+                    }),
+                  (0, U.jsxs)(`div`, {
+                    className: searchQuery.trim() ? `hidden` : `flex flex-col gap-5`,
+                    children: [
+                  y === `connections` && (0, U.jsxs)(`section`, { id: `connections`, className: `flex flex-col gap-4`, children: [
+                    (0, U.jsx)(SectionHeader, {
+                      title: n(`Подключения`, `Connections`),
+                      description: n(SECTION_META.connections.descRu, SECTION_META.connections.descEn),
+                    }),
                     (0, U.jsx)(ConnectionSettings, { Row: J, completed: e.onboardingCompleted !== false, save: H, navigate: b, hotkeyToggle: e.hotkeyToggle || ``, hotkeyPalette: e.hotkeyPalette || `` }),
                   ] }),
-                  (0, U.jsxs)(`div`, {
+                  (0, U.jsxs)(`section`, {
+                    id: `pro`,
                     hidden: y !== `pro`,
                     className: `flex flex-col gap-4`,
-                    children: [(0, U.jsx)(Rt, { version: x, onUpdates: () => b(`updates`) }), (0, U.jsx)(Ft, {})],
+                    children: [
+                      (0, U.jsx)(SectionHeader, {
+                        title: n(`О приложении`, `About`),
+                        description: n(SECTION_META.pro.descRu, SECTION_META.pro.descEn),
+                      }),
+                      (0, U.jsx)(Rt, { version: x, onUpdates: () => b(`updates`) }),
+                      (0, U.jsx)(Ft, {}),
+                    ],
                   }),
                   y === `character` &&
                     (0, U.jsxs)(`section`, {
                       id: `character`,
-                      className: `flex flex-col gap-3`,
+                      className: `flex flex-col gap-4`,
                       children: [
-                        (0, U.jsx)(pt, { children: n(`Персонаж`, `Character`) }),
-                        (0, U.jsx)(mt, { scene: oe, live: ce, s: e, license: l, pausable: !1 }),
-                        (0, U.jsxs)(`div`, {
-                          className: `divide-y divide-white/[0.06] overflow-hidden rounded-2xl bg-white/[0.045]`,
+                        (0, U.jsx)(SectionHeader, {
+                          title: n(`Персонаж`, `Character`),
+                          description: n(SECTION_META.character.descRu, SECTION_META.character.descEn),
+                        }),
+                        (0, U.jsx)(mt, { scene: oe, live: ce, s: e, license: l, pausable: !1, onScene: pickScene }),
+                        (0, U.jsxs)(SettingGroup, {
+                          title: n(`Поведение персонажа`, `Character behavior`),
                           children: [
                             (0, U.jsx)(J, {
                               since: `1.2.8`,
@@ -2211,10 +2282,250 @@ function zt() {
                     children: (0, U.jsx)(HolidaysSettings, { settings: e, save: H, Row: J, Toggle: Y, Choice: X, Slider: Q }),
                   }),
                   (0, U.jsxs)(K, {
-                    id: `general`,
-                    title: n(`Общее`, `General`),
-                    stage: (0, U.jsx)(mt, { scene: oe, live: ce, s: e, license: l }),
+                    id: `appearance`,
+                    title: n(`Внешний вид`, `Appearance`),
+                    grouped: true,
+                    anchors: [
+                      { id: `appearance-style`, label: n(`Стиль и размер`, `Style & size`) },
+                      { id: `appearance-screen`, label: n(`Экран и положение`, `Screen & position`) },
+                      { id: `appearance-through`, label: n(`Сквозной режим`, `Through mode`) },
+                    ],
+                    onAnchor: jumpAnchor,
+                    stage: (0, U.jsx)(mt, { scene: oe, live: ce, s: e, license: l, onScene: pickScene }),
                     children: [
+                      (0, U.jsxs)(SettingGroup, {
+                        id: `appearance-style`,
+                        title: n(`Стиль, тема и масштаб`, `Style, theme & size`),
+                        children: [
+                          (0, U.jsx)(J, {
+                            preview: `idle`,
+                            title: n(`Форма острова`, `Island shape`),
+                            children: (0, U.jsx)(X, {
+                              value: e.style,
+                              onChange: (e) => H({ style: e }),
+                              options: [
+                                { value: `notch`, label: n(`Вырез`, `Notch`) },
+                                { value: `capsule`, label: n(`Капсула`, `Capsule`) },
+                              ],
+                            }),
+                          }),
+                          (0, U.jsx)(J, {
+                            preview: `idle`,
+                            title: n(`Тема острова`, `Island theme`),
+                            hint: n(
+                              `Цвета самого острова. Тему Windows переключает центр управления`,
+                              `The colours of the island itself. The control centre switches the theme of Windows`,
+                            ),
+                            children: (0, U.jsx)(X, {
+                              value: e.theme || `dark`,
+                              onChange: (e) => H({ theme: e }),
+                              options: [
+                                { value: `dark`, label: n(`Тёмная`, `Dark`) },
+                                { value: `light`, label: n(`Светлая`, `Light`) },
+                                { value: `auto`, label: n(`Как в Windows`, `Windows`) },
+                              ],
+                            }),
+                          }),
+                          (0, U.jsx)(yt, { value: e.islandColor ?? ``, save: H }),
+                          (0, U.jsx)(J, {
+                            preview: `idle`,
+                            title: n(`Размер острова`, `Island size`),
+                            hint: n(
+                              `На 4K и больших мониторах остров можно сделать крупнее`,
+                              `On 4K and large monitors the island can be scaled up`,
+                            ),
+                            children: (0, U.jsxs)(`div`, {
+                              className: `flex items-center gap-2`,
+                              children: [
+                                (0, U.jsx)(QuickResetButton, {
+                                  visible: (e.scale ?? 100) !== 100,
+                                  label: `100%`,
+                                  title: n(`Сбросить масштаб до 100%`, `Reset scale to 100%`),
+                                  onClick: () => H({ scale: 100 }),
+                                }),
+                                (0, U.jsx)(Q, {
+                                  value: e.scale ?? 100,
+                                  min: 80,
+                                  max: 200,
+                                  step: 5,
+                                  unit: `%`,
+                                  lazy: !0,
+                                  onChange: (e) => H({ scale: e }),
+                                }),
+                              ],
+                            }),
+                          }),
+                          (0, U.jsx)(J, {
+                            preview: `idle`,
+                            title: n(`Прозрачность свёрнутого острова`, `Transparency of the folded island`),
+                            hint: n(`Пилюля и её карточки`, `The pill and its cards`),
+                            children: (0, U.jsx)(Q, {
+                              value: 100 - (e.opacityRest ?? 100),
+                              min: 0,
+                              max: 80,
+                              step: 5,
+                              unit: `%`,
+                              onChange: (e) => H({ opacityRest: 100 - e }),
+                            }),
+                          }),
+                          (0, U.jsx)(J, {
+                            preview: `home`,
+                            title: n(`Прозрачность раскрытого острова`, `Transparency of the open island`),
+                            children: (0, U.jsx)(Q, {
+                              value: 100 - (e.opacityOpen ?? 100),
+                              min: 0,
+                              max: 80,
+                              step: 5,
+                              unit: `%`,
+                              onChange: (e) => H({ opacityOpen: 100 - e }),
+                            }),
+                          }),
+                        ],
+                      }),
+                      (0, U.jsxs)(SettingGroup, {
+                        id: `appearance-screen`,
+                        title: n(`Экран и положение`, `Screen & position`),
+                        children: [
+                          (P.length > 1 || (e.monitor ?? ``) !== ``) &&
+                            (0, U.jsx)(J, {
+                              since: `1.2.7`,
+                              title: n(`Монитор острова`, `The island's monitor`),
+                              hint: n(
+                                `Отключённый монитор отдаёт остров основному, а подключённый снова — забирает обратно`,
+                                `An unplugged monitor gives the island to the main one; plugged in again, it takes it back`,
+                              ),
+                              children: (0, U.jsx)(At, {
+                                value: e.monitor ?? ``,
+                                monitors: P,
+                                onChange: (e) => H({ monitor: e }),
+                              }),
+                            }),
+                          (0, U.jsx)(J, {
+                            since: `1.2.5`,
+                            preview: `idle`,
+                            title: n(`Положение вдоль верхнего края`, `Place along the top edge`),
+                            hint: n(
+                              `0 — посередине; минус — левее, плюс — правее`,
+                              `0 is centered; negative shifts left, positive shifts right`,
+                            ),
+                            children: (0, U.jsxs)(`div`, {
+                              className: `flex items-center gap-2`,
+                              children: [
+                                (0, U.jsx)(QuickResetButton, {
+                                  visible: (e.offsetX ?? 0) !== 0,
+                                  label: n(`Центр`, `Center`),
+                                  title: n(`Вернуть в центр`, `Reset to center`),
+                                  onClick: () => H({ offsetX: 0 }),
+                                }),
+                                (0, U.jsx)(Q, {
+                                  value: e.offsetX ?? 0,
+                                  min: -100,
+                                  max: 100,
+                                  step: 5,
+                                  unit: `%`,
+                                  lazy: !0,
+                                  onChange: (e) => H({ offsetX: e }),
+                                }),
+                              ],
+                            }),
+                          }),
+                          (0, U.jsx)(J, {
+                            since: `1.2.5`,
+                            title: n(
+                              `Под панелью задач, если она сверху`,
+                              `Under the taskbar when it is at the top`,
+                            ),
+                            hint: n(
+                              `Остров встаёт под панелью, а не поверх её кнопок`,
+                              `The island stands under the taskbar, not over its buttons`,
+                            ),
+                            children: (0, U.jsx)(Y, {
+                              value: e.underTaskbar !== !1,
+                              onChange: (e) => H({ underTaskbar: e }),
+                            }),
+                          }),
+                          (0, U.jsx)(J, {
+                            since: `1.2.11`,
+                            title: n(`Режим выреза, как на MacBook`, `Notch mode, like on a MacBook`),
+                            hint: n(
+                              `Полоса во всю ширину верха экрана высотой с пилюлю остаётся за островом: развёрнутые окна начинаются под ней и остров не перекрывает вкладки`,
+                              `Reserves a strip across the top of the screen as tall as the pill so maximized windows begin below it`,
+                            ),
+                            children: (0, U.jsx)(Y, {
+                              value: e.notchBar === !0,
+                              onChange: (e) => H({ notchBar: e }),
+                            }),
+                          }),
+                          e.notchBar === !0 &&
+                            (0, U.jsx)(J, {
+                              since: `1.2.11`,
+                              title: n(`Полоса выреза`, `The notch strip`),
+                              hint: n(
+                                `Чёрная сливается с островом, стекло размывает фон, с обоями полосы не видно`,
+                                `Black blends with the island, glass blurs behind, wallpaper hides the strip`,
+                              ),
+                              children: (0, U.jsx)(X, {
+                                value: e.notchLook || `black`,
+                                onChange: (e) => H({ notchLook: e }),
+                                options: [
+                                  { value: `black`, label: n(`Чёрная`, `Black`) },
+                                  { value: `glass`, label: n(`Стекло`, `Glass`) },
+                                  { value: `wallpaper`, label: n(`Обои`, `Wallpaper`) },
+                                ],
+                              }),
+                            }),
+                        ],
+                      }),
+                      (0, U.jsxs)(SettingGroup, {
+                        id: `appearance-through`,
+                        title: n(`Сквозной режим`, `Through mode`),
+                        children: [
+                          (0, U.jsx)(J, {
+                            since: `1.2.5`,
+                            preview: `through`,
+                            title: n(`Сквозной режим`, `Through mode`),
+                            hint: n(
+                              `Свёрнутый остров пропускает клики и не раскрывается под курсором. Открывается клавишами или командой «сквозной» в Alt+Space`,
+                              `The folded island lets clicks through and opens only via hotkeys or “through” in Alt+Space`,
+                            ),
+                            children: (0, U.jsx)(Y, {
+                              value: e.through === !0,
+                              onChange: (e) => H({ through: e }),
+                            }),
+                          }),
+                          (0, U.jsx)(J, {
+                            preview: `through`,
+                            title: n(`Прозрачность в сквозном режиме`, `Transparency in through mode`),
+                            children: (0, U.jsx)(Q, {
+                              value: 100 - (e.opacityThrough ?? 45),
+                              min: 0,
+                              max: 80,
+                              step: 5,
+                              unit: `%`,
+                              onChange: (e) => H({ opacityThrough: 100 - e }),
+                            }),
+                          }),
+                        ],
+                      }),
+                    ],
+                  }),
+                  (0, U.jsxs)(K, {
+                    id: `general`,
+                    title: n(`Поведение и система`, `Behavior & System`),
+                    grouped: true,
+                    anchors: [
+                      { id: `general-system`, label: n(`Система`, `System`) },
+                      { id: `general-hide`, label: n(`Игры и скрытие`, `Games & hiding`) },
+                      { id: `general-clock`, label: n(`Часы и наведение`, `Clock & hover`) },
+                      { id: `general-media`, label: n(`Музыка и плееры`, `Music & players`) },
+                    ],
+                    onAnchor: jumpAnchor,
+                    stage: (0, U.jsx)(mt, { scene: oe, live: ce, s: e, license: l, onScene: pickScene }),
+                    children: [
+                      (0, U.jsxs)(SettingGroup, {
+                        id: `general-system`,
+                        title: n(`Система`, `System`),
+                        children: [
                       (0, U.jsx)(J, {
                         title: n(`Язык`, `Language`),
                         hint: n(`По умолчанию — как в Windows`, `By default, the same as Windows`),
@@ -2261,21 +2572,7 @@ function zt() {
                           ],
                         }),
                       (0, U.jsx)(J, {
-                        title: n(`Прятать в полноэкранных приложениях`, `Hide in full-screen apps`),
-                        hint: n(
-                          `Игры, видео на весь экран, презентации`,
-                          `Games, full-screen video, presentations`,
-                        ),
-                        children: (0, U.jsx)(Y, {
-                          value: e.hideInFullscreen,
-                          onChange: (e) => H({ hideInFullscreen: e }),
-                        }),
-                      }),
-                      (0, U.jsx)(J, {
-                        title: n(
-                          `Показывать остров на скриншотах и в записи экрана`,
-                          `Show the island in screenshots and recordings`,
-                        ),
+                        title: n(`Показывать остров на скриншотах и в записи экрана`, `Show the island in screenshots and recordings`),
                         hint: n(
                           `Обычно его там нет: ни скриншоты, ни запись, ни трансляция остров не видят. Включи, если фоновая запись NVIDIA или другой программы пишет, что Island мешает записи рабочего стола`,
                           `Normally it is not there: screenshots, recordings and streams do not see the island. Turn it on if the background recording of NVIDIA or another program says that Island prevents desktop recording`,
@@ -2319,6 +2616,23 @@ function zt() {
                             }),
                           ],
                         }),
+                        ],
+                      }),
+                      (0, U.jsxs)(SettingGroup, {
+                        id: `general-hide`,
+                        title: n(`Игры и автоскрытие`, `Games & auto-hide`),
+                        children: [
+                      (0, U.jsx)(J, {
+                        title: n(`Прятать в полноэкранных приложениях`, `Hide in full-screen apps`),
+                        hint: n(
+                          `Игры, видео на весь экран, презентации`,
+                          `Games, full-screen video, presentations`,
+                        ),
+                        children: (0, U.jsx)(Y, {
+                          value: e.hideInFullscreen,
+                          onChange: (e) => H({ hideInFullscreen: e }),
+                        }),
+                      }),
                       (0, U.jsx)(J, {
                         title: n(`Прятать остров, пока он не нужен`, `Hide the island until it is needed`),
                         hint: n(
@@ -2416,180 +2730,12 @@ function zt() {
                           (0,U.jsx)(AppListPicker,{key:v,mode:v,value:Tt(v===`keep`?_:g),onChange:names=>{(v===`keep`?te:ee)(names.join(`\n`));H(v===`keep`?{keepForApps:names}:{hideForApps:names});}}),
                         ],
                       }),
-                      (0, U.jsx)(J, {
-                        preview: `idle`,
-                        title: n(`Форма острова`, `Island shape`),
-                        children: (0, U.jsx)(X, {
-                          value: e.style,
-                          onChange: (e) => H({ style: e }),
-                          options: [
-                            { value: `notch`, label: n(`Вырез`, `Notch`) },
-                            { value: `capsule`, label: n(`Капсула`, `Capsule`) },
-                          ],
-                        }),
+                        ],
                       }),
-                      (0, U.jsx)(J, {
-                        preview: `idle`,
-                        title: n(`Тема острова`, `Island theme`),
-                        hint: n(
-                          `Цвета самого острова. Тему Windows переключает центр управления`,
-                          `The colours of the island itself. The control centre switches the theme of Windows`,
-                        ),
-                        children: (0, U.jsx)(X, {
-                          value: e.theme || `dark`,
-                          onChange: (e) => H({ theme: e }),
-                          options: [
-                            { value: `dark`, label: n(`Тёмная`, `Dark`) },
-                            { value: `light`, label: n(`Светлая`, `Light`) },
-                            { value: `auto`, label: n(`Как в Windows`, `Windows`) },
-                          ],
-                        }),
-                      }),
-                      (0, U.jsx)(yt, { value: e.islandColor ?? ``, save: H }),
-                      (0, U.jsx)(J, {
-                        preview: `idle`,
-                        title: n(`Размер острова`, `Island size`),
-                        hint: n(
-                          `На большом мониторе остров можно сделать крупнее`,
-                          `On a big monitor the island can be made bigger`,
-                        ),
-                        children: (0, U.jsx)(Q, {
-                          value: e.scale ?? 100,
-                          min: 80,
-                          max: 200,
-                          step: 5,
-                          unit: `%`,
-                          lazy: !0,
-                          onChange: (e) => H({ scale: e }),
-                        }),
-                      }),
-                      (0, U.jsx)(J, {
-                        preview: `idle`,
-                        title: n(`Прозрачность свёрнутого острова`, `Transparency of the folded island`),
-                        hint: n(`Пилюля и её карточки`, `The pill and its cards`),
-                        children: (0, U.jsx)(Q, {
-                          value: 100 - (e.opacityRest ?? 100),
-                          min: 0,
-                          max: 80,
-                          step: 5,
-                          unit: `%`,
-                          onChange: (e) => H({ opacityRest: 100 - e }),
-                        }),
-                      }),
-                      (0, U.jsx)(J, {
-                        preview: `home`,
-                        title: n(`Прозрачность раскрытого острова`, `Transparency of the open island`),
-                        children: (0, U.jsx)(Q, {
-                          value: 100 - (e.opacityOpen ?? 100),
-                          min: 0,
-                          max: 80,
-                          step: 5,
-                          unit: `%`,
-                          onChange: (e) => H({ opacityOpen: 100 - e }),
-                        }),
-                      }),
-                      (P.length > 1 || (e.monitor ?? ``) !== ``) &&
-                        (0, U.jsx)(J, {
-                          since: `1.2.7`,
-                          title: n(`Монитор острова`, `The island's monitor`),
-                          hint: n(
-                            `Отключённый монитор отдаёт остров основному, а подключённый снова — забирает обратно`,
-                            `An unplugged monitor gives the island to the main one; plugged in again, it takes it back`,
-                          ),
-                          children: (0, U.jsx)(At, {
-                            value: e.monitor ?? ``,
-                            monitors: P,
-                            onChange: (e) => H({ monitor: e }),
-                          }),
-                        }),
-                      (0, U.jsx)(J, {
-                        since: `1.2.5`,
-                        preview: `idle`,
-                        title: n(`Положение вдоль верхнего края`, `Place along the top edge`),
-                        hint: n(
-                          `0 — посередине; минус — левее, плюс — правее. До края монитора доходит окно раскрытого острова, свёрнутый стоит над его серединой`,
-                          `0 is the middle; minus is to the left, plus to the right. It is the open island's window that reaches the monitor's side; the folded island stands over its middle`,
-                        ),
-                        children: (0, U.jsx)(Q, {
-                          value: e.offsetX ?? 0,
-                          min: -100,
-                          max: 100,
-                          step: 5,
-                          unit: `%`,
-                          lazy: !0,
-                          onChange: (e) => H({ offsetX: e }),
-                        }),
-                      }),
-                      (0, U.jsx)(J, {
-                        since: `1.2.5`,
-                        title: n(
-                          `Под панелью задач, если она сверху`,
-                          `Under the taskbar when it is at the top`,
-                        ),
-                        hint: n(
-                          `Остров встаёт под панелью, а не поверх её кнопок`,
-                          `The island stands under the taskbar, not over its buttons`,
-                        ),
-                        children: (0, U.jsx)(Y, {
-                          value: e.underTaskbar !== !1,
-                          onChange: (e) => H({ underTaskbar: e }),
-                        }),
-                      }),
-                      (0, U.jsx)(J, {
-                        since: `1.2.11`,
-                        title: n(`Режим выреза, как на MacBook`, `Notch mode, like on a MacBook`),
-                        hint: n(
-                          `Полоса во всю ширину верха экрана высотой с пилюлю остаётся за островом, как место панели задач: развёрнутые окна начинаются под ней, и остров не закрывает вкладки и кнопки`,
-                          `A strip across the top of the screen, as tall as the pill, is kept for the island as the taskbar's room is: maximized windows begin under it, and the island covers no tabs or buttons`,
-                        ),
-                        children: (0, U.jsx)(Y, {
-                          value: e.notchBar === !0,
-                          onChange: (e) => H({ notchBar: e }),
-                        }),
-                      }),
-                      e.notchBar === !0 &&
-                        (0, U.jsx)(J, {
-                          since: `1.2.11`,
-                          title: n(`Полоса выреза`, `The notch strip`),
-                          hint: n(
-                            `Чёрная сливается с островом, стекло размывает то, что за ней, а с обоями полосы не видно`,
-                            `Black melts into the island, glass blurs what is behind it, and with the wallpaper the strip is not seen`,
-                          ),
-                          children: (0, U.jsx)(X, {
-                            value: e.notchLook || `black`,
-                            onChange: (e) => H({ notchLook: e }),
-                            options: [
-                              { value: `black`, label: n(`Чёрная`, `Black`) },
-                              { value: `glass`, label: n(`Стекло`, `Glass`) },
-                              { value: `wallpaper`, label: n(`Обои`, `Wallpaper`) },
-                            ],
-                          }),
-                        }),
-                      (0, U.jsx)(J, {
-                        since: `1.2.5`,
-                        preview: `through`,
-                        title: n(`Сквозной режим`, `Through mode`),
-                        hint: n(
-                          `Свёрнутый остров пропускает клики и не раскрывается под курсором: он на виду и ничему не мешает. Открывается клавишами. Включить и выключить можно здесь, своей клавишей или командой «сквозной» в Alt+Space`,
-                          `The folded island lets clicks through and does not open under the cursor: it is in sight and in nobody's way. Hotkeys open it. Turn the mode on and off here, with its own hotkey, or with “through” in Alt+Space`,
-                        ),
-                        children: (0, U.jsx)(Y, {
-                          value: e.through === !0,
-                          onChange: (e) => H({ through: e }),
-                        }),
-                      }),
-                      (0, U.jsx)(J, {
-                        preview: `through`,
-                        title: n(`Прозрачность в сквозном режиме`, `Transparency in through mode`),
-                        children: (0, U.jsx)(Q, {
-                          value: 100 - (e.opacityThrough ?? 45),
-                          min: 0,
-                          max: 80,
-                          step: 5,
-                          unit: `%`,
-                          onChange: (e) => H({ opacityThrough: 100 - e }),
-                        }),
-                      }),
+                      (0, U.jsxs)(SettingGroup, {
+                        id: `general-media`,
+                        title: n(`Музыка и плееры`, `Music & players`),
+                        children: [
                       (0, U.jsx)(J, {
                         since: `1.2.5`,
                         title: n(`Жидкий край по частотам`, `The liquid edge by frequency`),
@@ -2669,6 +2815,12 @@ function zt() {
                             onChange: (e) => H({ lyricsInHome: e }),
                           }),
                         }),
+                        ],
+                      }),
+                      (0, U.jsxs)(SettingGroup, {
+                        id: `general-clock`,
+                        title: n(`Часы, батарея и наведение`, `Clock, battery & hover`),
+                        children: [
                       (0, U.jsx)(J, {
                         preview: `idle`,
                         title: n(`Часы в свёрнутом острове`, `The time on the folded island`),
@@ -2759,12 +2911,66 @@ function zt() {
                           onChange: (e) => H({ collapseDelayMs: e }),
                         }),
                       }),
+                        ],
+                      }),
                     ],
                   }),
                   (0, U.jsxs)(K, {
                     id: `hotkeys`,
                     title: n(`Горячие клавиши`, `Hotkeys`),
+                    grouped: true,
+                    anchors: [
+                      { id: `hotkeys-island`, label: n(`Остров`, `Island`) },
+                      { id: `hotkeys-capture`, label: n(`Захват и буфер`, `Capture & clip`) },
+                      { id: `hotkeys-modes`, label: n(`Режимы`, `Modes`) },
+                      { id: `hotkeys-launcher`, label: n(`Ярлыки лаунчера`, `Launcher`) },
+                    ],
+                    onAnchor: jumpAnchor,
                     children: [
+                      d.length > 0 &&
+                        (0, U.jsx)(`div`, {
+                          className: `rounded-2xl border border-[#ff6b6b]/25 bg-[#ff6b6b]/10 px-4 py-3 text-[12px] leading-relaxed text-[#ff9b9b]`,
+                          children: d.map((e) => (0, U.jsx)(`div`, { children: e }, e)),
+                        }),
+                      De &&
+                        he([
+                          e.hotkeyToggle,
+                          e.hotkeyPalette,
+                          e.hotkeyChat,
+                          e.hotkeyDictate,
+                          e.hotkeyVoiceCommand,
+                          e.hotkeyRecord,
+                          e.hotkeyArea,
+                          e.hotkeyScreen,
+                          e.hotkeyOcr,
+                          e.hotkeyClipboard,
+                          e.hotkeyPlainPaste,
+                          e.hotkeyMic,
+                          e.hotkeyColor,
+                          e.hotkeyQr,
+                        ]) &&
+                        (0, U.jsxs)(`div`, {
+                          "data-prtsc-hint": !0,
+                          className: `flex items-center gap-3 rounded-2xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-[12px] leading-relaxed text-amber-100/90`,
+                          children: [
+                            (0, U.jsx)(`span`, {
+                              className: `min-w-0 flex-1`,
+                              children: n(
+                                `Клавишу PrtSc занимает и сама Windows: она открывает по ней свои «Ножницы», и на нажатие отвечает то остров, то она. Выключи в параметрах Windows «Использовать клавишу PRINT SCREEN для открытия захвата экрана».`,
+                                `Windows takes the PrtSc key as well: it opens its own Snipping Tool at it, and a press is answered now by the island, now by Windows. Turn off “Use the Print screen key to open screen capture” in Windows' settings.`,
+                              ),
+                            }),
+                            (0, U.jsx)(`button`, {
+                              onClick: () => void r.openPath(`ms-settings:easeofaccess-keyboard`),
+                              className: `shrink-0 rounded-lg bg-white/10 px-3 py-1.5 text-[12px] text-white hover:bg-white/15`,
+                              children: n(`Открыть параметры`, `Open settings`),
+                            }),
+                          ],
+                        }),
+                      (0, U.jsxs)(SettingGroup, {
+                        id: `hotkeys-island`,
+                        title: n(`Остров и навигация`, `Island & navigation`),
+                        children: [
                       (0, U.jsx)(J, {
                         title: n(`Открыть / закрыть остров`, `Open / close the island`),
                         children: (0, U.jsx)($, {
@@ -2816,6 +3022,12 @@ function zt() {
                           onChange: (value) => H({ hotkeyVoiceCommand: value }),
                         }),
                       }),
+                        ],
+                      }),
+                      (0, U.jsxs)(SettingGroup, {
+                        id: `hotkeys-capture`,
+                        title: n(`Скриншоты, запись и буфер`, `Screenshots, recording & clipboard`),
+                        children: [
                       (0, U.jsx)(J, {
                         title: n(`Запись экрана: начать / остановить`, `Screen recording: start / stop`),
                         children: (0, U.jsx)($, {
@@ -2860,10 +3072,6 @@ function zt() {
                         }),
                       }),
                       (0, U.jsx)(J, {
-                        title: n(`Микрофон: выключить / включить`, `Microphone: mute / unmute`),
-                        children: (0, U.jsx)($, { value: e.hotkeyMic, onChange: (e) => H({ hotkeyMic: e }) }),
-                      }),
-                      (0, U.jsx)(J, {
                         title: n(`Пипетка`, `Color picker`),
                         children: (0, U.jsx)($, {
                           value: e.hotkeyColor,
@@ -2873,6 +3081,16 @@ function zt() {
                       (0, U.jsx)(J, {
                         title: n(`QR-код с экрана`, `QR code from the screen`),
                         children: (0, U.jsx)($, { value: e.hotkeyQr, onChange: (e) => H({ hotkeyQr: e }) }),
+                      }),
+                        ],
+                      }),
+                      (0, U.jsxs)(SettingGroup, {
+                        id: `hotkeys-modes`,
+                        title: n(`Быстрые режимы и переключатели`, `Quick modes & toggles`),
+                        children: [
+                      (0, U.jsx)(J, {
+                        title: n(`Микрофон: выключить / включить`, `Microphone: mute / unmute`),
+                        children: (0, U.jsx)($, { value: e.hotkeyMic, onChange: (e) => H({ hotkeyMic: e }) }),
                       }),
                       (0, U.jsx)(J, {
                         since: `1.2.5`,
@@ -2933,77 +3151,52 @@ function zt() {
                       }),
                       (0,U.jsx)(J,{title:n(`Скрытие над полным экраном: вкл. / выкл.`,`Toggle hiding over fullscreen apps`),children:(0,U.jsx)($,{value:e.hotkeyFullscreen??``,onChange:value=>H({hotkeyFullscreen:value})})}),
                       (0,U.jsx)(J,{title:n(`Автоскрытие: вкл. / выкл.`,`Auto-hide: on / off`),children:(0,U.jsx)($,{value:e.hotkeyAutoHide??``,onChange:value=>H({hotkeyAutoHide:value})})}),
-                      (0, U.jsx)(It, { onProblems: f }),
-                      De &&
-                        he([
-                          e.hotkeyToggle,
-                          e.hotkeyPalette,
-                          e.hotkeyChat,
-                          e.hotkeyDictate,
-                          e.hotkeyVoiceCommand,
-                          e.hotkeyRecord,
-                          e.hotkeyArea,
-                          e.hotkeyScreen,
-                          e.hotkeyOcr,
-                          e.hotkeyClipboard,
-                          e.hotkeyPlainPaste,
-                          e.hotkeyMic,
-                          e.hotkeyColor,
-                          e.hotkeyQr,
-                        ]) &&
-                        (0, U.jsxs)(`div`, {
-                          "data-prtsc-hint": !0,
-                          className: `flex items-center gap-3 bg-amber-300/10 px-4 py-3 text-[12px] leading-relaxed text-amber-100/90`,
-                          children: [
-                            (0, U.jsx)(`span`, {
-                              className: `min-w-0 flex-1`,
-                              children: n(
-                                `Клавишу PrtSc занимает и сама Windows: она открывает по ней свои «Ножницы», и на нажатие отвечает то остров, то она. Выключи в параметрах Windows «Использовать клавишу PRINT SCREEN для открытия захвата экрана».`,
-                                `Windows takes the PrtSc key as well: it opens its own Snipping Tool at it, and a press is answered now by the island, now by Windows. Turn off “Use the Print screen key to open screen capture” in Windows' settings.`,
-                              ),
-                            }),
-                            (0, U.jsx)(`button`, {
-                              onClick: () => void r.openPath(`ms-settings:easeofaccess-keyboard`),
-                              className: `shrink-0 rounded-lg bg-white/10 px-3 py-1.5 text-[12px] text-white hover:bg-white/15`,
-                              children: n(`Открыть параметры`, `Open settings`),
-                            }),
-                          ],
-                        }),
-                      d.length > 0 &&
-                        (0, U.jsx)(`div`, {
-                          className: `bg-[#ff6b6b]/10 px-4 py-3 text-[12px] leading-relaxed text-[#ff9b9b]`,
-                          children: d.map((e) => (0, U.jsx)(`div`, { children: e }, e)),
-                        }),
+                        ],
+                      }),
+                      (0, U.jsx)(SettingGroup, {
+                        id: `hotkeys-launcher`,
+                        title: n(`Ярлыки лаунчера`, `Launcher shortcuts`),
+                        children: (0, U.jsx)(It, { onProblems: f }),
+                      }),
                     ],
                   }),
                   (0, U.jsxs)(K, {
                     id: `ai`,
                     title: n(`ИИ`, `AI`),
+                    grouped: true,
                     children: [
-                      (0, U.jsx)(J, {
-                        since: `1.2.10`,
-                        pro: !0,
-                        title: n(`Веб-версии без ключа`, `The web versions, no key`),
-                        hint: n(
-                          `ChatGPT, Gemini и DeepSeek прямо во вкладке «Чат»: вход со своим аккаунтом, без API-ключа. Открываются и из командной строки острова. Кнопка «В окне» переносит чат в отдельное окно.`,
-                          `ChatGPT, Gemini and DeepSeek in the Chat tab: sign in with your account, without an API key. Also available from the island command bar. “In a window” moves the chat to a separate window.`,
-                        ),
-                        children: (0, U.jsx)(`div`, {
-                          className: `flex shrink-0 flex-wrap gap-1.5`,
-                          children: webChatProviders.map(({id:e,label}) =>
-                            (0, U.jsx)(
-                              `button`,
-                              {
-                                "data-web-ai-open": e,
-                                onClick: () => (l.pro ? void r.webAiOpen(e) : b(`pro`)),
-                                className: `h-8 rounded-lg bg-white/10 px-3 text-[12.5px] text-white hover:bg-white/15`,
-                                children: label,
-                              },
-                              e,
-                            ),
+                      (0, U.jsx)(SettingGroup, {
+                        id: `ai-web`,
+                        title: n(`Веб-версии без ключа`, `Web versions (no key)`),
+                        children: (0, U.jsx)(J, {
+                          since: `1.2.10`,
+                          pro: !0,
+                          title: n(`Веб-версии без ключа`, `The web versions, no key`),
+                          hint: n(
+                            `ChatGPT, Gemini и DeepSeek прямо во вкладке «Чат»: вход со своим аккаунтом, без API-ключа. Открываются и из командной строки острова. Кнопка «В окне» переносит чат в отдельное окно.`,
+                            `ChatGPT, Gemini and DeepSeek in the Chat tab: sign in with your account, without an API key. Also available from the island command bar. “In a window” moves the chat to a separate window.`,
                           ),
+                          children: (0, U.jsx)(`div`, {
+                            className: `flex shrink-0 flex-wrap gap-1.5`,
+                            children: webChatProviders.map(({id:e,label}) =>
+                              (0, U.jsx)(
+                                `button`,
+                                {
+                                  "data-web-ai-open": e,
+                                  onClick: () => (l.pro ? void r.webAiOpen(e) : b(`pro`)),
+                                  className: `h-8 rounded-lg bg-white/10 px-3 text-[12.5px] text-white hover:bg-white/15`,
+                                  children: label,
+                                },
+                                e,
+                              ),
+                            ),
+                          }),
                         }),
                       }),
+                      (0, U.jsxs)(SettingGroup, {
+                        id: `ai-api`,
+                        title: n(`Подключение по API-ключу`, `API key connection`),
+                        children: [
                       (0, U.jsx)(Mt, {
                         list: qe,
                         baseUrl: e.aiBaseUrl,
@@ -3075,8 +3268,6 @@ function zt() {
                           }),
                         ],
                       }),
-                      y === `ai` && (0,U.jsx)(AiProxySettings,{value:e.aiProxy||``,Row:J}),
-                      y === `ai` && (0,U.jsx)(J,{title:n(`Разрешения сайтов ИИ`,`AI site permissions`),hint:n(`Микрофон, камера и уведомления. После сброса сайт спросит снова; вход в аккаунт сохраняется.`,`Microphone, camera and notifications. The site asks again after reset; you stay signed in.`),children:(0,U.jsx)(SitePermissions,{})}),
                       (0, U.jsxs)(`div`, {
                         className: `flex items-center gap-3 px-4 py-3`,
                         children: [
@@ -3094,12 +3285,27 @@ function zt() {
                             }),
                         ],
                       }),
+                        ],
+                      }),
+                      (0, U.jsxs)(SettingGroup, {
+                        id: `ai-advanced`,
+                        title: n(`Сеть и разрешения`, `Network & permissions`),
+                        children: [
+                          y === `ai` && (0,U.jsx)(AiProxySettings,{value:e.aiProxy||``,Row:J}),
+                          y === `ai` && (0,U.jsx)(J,{title:n(`Разрешения сайтов ИИ`,`AI site permissions`),hint:n(`Микрофон, камера и уведомления. После сброса сайт спросит снова; вход в аккаунт сохраняется.`,`Microphone, camera and notifications. The site asks again after reset; you stay signed in.`),children:(0,U.jsx)(SitePermissions,{})}),
+                        ],
+                      }),
                     ],
                   }),
                   (0, U.jsxs)(K, {
                     id: `voice`,
                     title: n(`Голос в текст`, `Voice to text`),
+                    grouped: true,
                     children: [
+                      (0, U.jsxs)(SettingGroup, {
+                        id: `voice-service`,
+                        title: n(`Сервис распознавания и ключ`, `Recognition service & key`),
+                        children: [
                       (0, U.jsx)(`div`, {
                         className: `px-4 py-3 text-[12px] leading-snug text-white/45`,
                         children: n(
@@ -3189,16 +3395,38 @@ function zt() {
                                 className: `h-9 rounded-lg bg-white/[0.08] px-3 text-[12.5px] hover:bg-white/[0.12] disabled:opacity-40`,
                                 children: n(`Сохранить`, `Save`),
                               }),
-                              k &&
-                                (0, U.jsx)(`button`, {
-                                  onClick: () => B(``),
-                                  className: `h-9 rounded-lg px-3 text-[12.5px] text-[#ff8b8b] hover:bg-[#ff6b6b]/10`,
-                                  children: n(`Удалить`, `Remove`),
-                                }),
-                            ],
-                          }),
+                                k &&
+                                  (0, U.jsx)(`button`, {
+                                    onClick: () => B(``),
+                                    className: `h-9 rounded-lg px-3 text-[12.5px] text-[#ff8b8b] hover:bg-[#ff6b6b]/10`,
+                                    children: n(`Удалить`, `Remove`),
+                                  }),
+                              ],
+                            }),
+                          ],
+                        }),
+                        (0, U.jsxs)(`div`, {
+                          className: `flex items-center gap-3 px-4 py-3`,
+                          children: [
+                            (0, U.jsx)(`button`, {
+                              onClick: V,
+                              disabled: ye || (!k && !(w && Xe(e.aiBaseUrl, e.sttBaseUrl))),
+                              className: `h-8 shrink-0 rounded-lg bg-white/[0.08] px-3 text-[12.5px] hover:bg-white/[0.12] disabled:opacity-40`,
+                              children: n(`Проверить`, `Test`),
+                            }),
+                            xe &&
+                              (0, U.jsx)(`span`, {
+                                className: `text-[12.5px] ${xe.ok ? `text-white/55` : `text-[#ff9b9b]`}`,
+                                children: xe.text,
+                              }),
+                          ],
+                        }),
                         ],
                       }),
+                      (0, U.jsxs)(SettingGroup, {
+                        id: `voice-options`,
+                        title: n(`Язык и вставка`, `Language & paste`),
+                        children: [
                       (0, U.jsx)(J, {
                         title: n(`Язык речи`, `Spoken language`),
                         hint: n(
@@ -3226,20 +3454,6 @@ function zt() {
                           onChange: (e) => H({ dictatePaste: e }),
                         }),
                       }),
-                      (0, U.jsxs)(`div`, {
-                        className: `flex items-center gap-3 px-4 py-3`,
-                        children: [
-                          (0, U.jsx)(`button`, {
-                            onClick: V,
-                            disabled: ye || (!k && !(w && Xe(e.aiBaseUrl, e.sttBaseUrl))),
-                            className: `h-8 shrink-0 rounded-lg bg-white/[0.08] px-3 text-[12.5px] hover:bg-white/[0.12] disabled:opacity-40`,
-                            children: n(`Проверить`, `Test`),
-                          }),
-                          xe &&
-                            (0, U.jsx)(`span`, {
-                              className: `text-[12.5px] ${xe.ok ? `text-white/55` : `text-[#ff9b9b]`}`,
-                              children: xe.text,
-                            }),
                         ],
                       }),
                     ],
@@ -3247,7 +3461,12 @@ function zt() {
                   (0, U.jsxs)(K, {
                     id: `weather`,
                     title: n(`Погода`, `Weather`),
+                    grouped: true,
                     children: [
+                      (0, U.jsxs)(SettingGroup, {
+                        id: `weather-city`,
+                        title: n(`Город и часовой пояс`, `City & time zone`),
+                        children: [
                       (0, U.jsxs)(`div`, {
                         className: `flex flex-col gap-2 px-4 py-3`,
                         children: [
@@ -3275,6 +3494,12 @@ function zt() {
                       }),
                       y === `weather` && (0, U.jsx)(`div`, {className:`px-4 pb-3`,children:(0,U.jsx)(WeatherPlaces,{settings:e,onPick:(place)=>H(placePatch(place))})}),
                       y === `weather` && (0, U.jsx)(WeatherTimezoneSettings, { Row: J, value: e.weatherTimezone || ``, save: H }),
+                        ],
+                      }),
+                      (0, U.jsxs)(SettingGroup, {
+                        id: `weather-display`,
+                        title: n(`Отображение и оповещения`, `Display & alerts`),
+                        children: [
                       (0, U.jsx)(J, {
                         title: n(`Единицы`, `Units`),
                         children: (0, U.jsx)(X, {
@@ -3309,12 +3534,19 @@ function zt() {
                         }),
                       }),
                       (0, U.jsx)(WeatherDataSources, {}),
+                        ],
+                      }),
                     ],
                   }),
                   (0, U.jsxs)(K, {
                     id: `sound`,
                     title: n(`Звук`, `Sound`),
+                    grouped: true,
+                    stage: (0, U.jsx)(mt, { scene: ce ? oe : `music`, live: ce, s: e, license: l, onScene: pickScene }),
                     children: [
+                      (0, U.jsxs)(SettingGroup, {
+                        title: n(`Устройства вывода и микрофон`, `Output & microphone`),
+                        children: [
                       (0, U.jsx)(J, {
                         title: n(`Чью громкость регулирует остров`, `Whose volume the island controls`),
                         hint: n(
@@ -3342,12 +3574,42 @@ function zt() {
                           onChange: (e) => H({ audioInput: e }),
                         }),
                       }),
+                        ],
+                      }),
+                      (0, U.jsx)(SettingGroup, {
+                        title: n(`Музыка в острове`, `Music on the island`),
+                        children: (0, U.jsx)(J, {
+                          title: n(`Вид плеера, текст песни и скрытые плееры`, `Player style, lyrics & hidden players`),
+                          hint: n(
+                            `Настройка музыкальной пилюли, LRCLIB-текстов, жидкого спектра и видимости Яндекс Браузера / Spotify`,
+                            `Configure music pill layout, LRCLIB lyrics, liquid spectrum and visible browsers/players`,
+                          ),
+                          children: (0, U.jsx)(`button`, {
+                            type: `button`,
+                            onClick: () => jumpTo(`general`, `general-media`),
+                            className: `h-8 shrink-0 rounded-lg bg-white/[0.08] px-3 text-[12.5px] text-white hover:bg-white/[0.14]`,
+                            children: n(`Открыть`, `Open`),
+                          }),
+                        }),
+                      }),
                     ],
                   }),
                   (0, U.jsxs)(K, {
                     id: `events`,
-                    title: n(`Живые события`, `Live events`),
+                    title: n(`События и уведомления`, `Events & Alerts`),
+                    grouped: true,
+                    anchors: [
+                      { id: `events-system`, label: n(`Система`, `System`) },
+                      { id: `events-downloads`, label: n(`Загрузки и Steam`, `Downloads & Steam`) },
+                      { id: `events-integrations`, label: n(`OBS и ИИ-агенты`, `OBS & AI agents`) },
+                      { id: `events-notifications`, label: n(`VPN и Windows`, `VPN & Windows`) },
+                    ],
+                    onAnchor: jumpAnchor,
                     children: [
+                      (0, U.jsxs)(SettingGroup, {
+                        id: `events-system`,
+                        title: n(`Системные карточки и индикаторы`, `System cards & indicators`),
+                        children: [
                       (0, U.jsx)(J, {
                         since: `1.2.10`,
                         title: n(`Сколько держится карточка`, `How long a card stays`),
@@ -3387,6 +3649,12 @@ function zt() {
                           onChange: (e) => H({ showPrivacy: e }),
                         }),
                       }),
+                        ],
+                      }),
+                      (0, U.jsxs)(SettingGroup, {
+                        id: `events-downloads`,
+                        title: n(`Загрузки браузера, торренты и Steam`, `Downloads, torrents & Steam`),
+                        children: [
                       (0, U.jsx)(J, {
                         title: n(`Загрузки`, `Downloads`),
                         hint: n(
@@ -3438,6 +3706,40 @@ function zt() {
                           onChange: (e) => H({ downloadsTorrents: e }),
                         }),
                       }),
+                      (0, U.jsx)(J, {
+                        since: `1.2.6`,
+                        title: n(`Загрузки Steam`, `Steam downloads`),
+                        hint: n(
+                          `Игры и обновления, которые качает Steam: сколько осталось и скорость, а в конце карточка`,
+                          `Games and updates Steam downloads: how much is left and the speed, and a card at the end`,
+                        ),
+                        children: (0, U.jsx)(Y, {
+                          value: e.steamDownloads !== !1,
+                          onChange: (e) => H({ steamDownloads: e }),
+                        }),
+                      }),
+                      (0, U.jsxs)(`div`, {
+                        className: `flex flex-col gap-2 px-4 py-3`,
+                        children: [
+                          (0, U.jsx)(`div`, {
+                            className: `text-[13.5px]`,
+                            children: n(`Папка загрузок`, `Downloads folder`),
+                          }),
+                          (0, U.jsx)(`input`, {
+                            defaultValue: e.downloadsDir,
+                            placeholder: n(`Системная папка «Загрузки»`, `The system Downloads folder`),
+                            onBlur: (e) => H({ downloadsDir: e.target.value.trim() }),
+                            spellCheck: !1,
+                            className: `h-9 rounded-lg bg-black/40 px-2.5 text-[12.5px] text-white/85 outline-none placeholder:text-white/30 focus:ring-1 focus:ring-white/20`,
+                          }),
+                        ],
+                      }),
+                        ],
+                      }),
+                      (0, U.jsxs)(SettingGroup, {
+                        id: `events-integrations`,
+                        title: n(`OBS Studio и ИИ-агенты`, `OBS Studio & AI agents`),
+                        children: [
                       (0, U.jsx)(J, {
                         since: `1.2.6`,
                         title: n(`OBS: запись и трансляция`, `OBS: recording and streaming`),
@@ -3549,18 +3851,12 @@ function zt() {
                             onChange: (e) => H({ agentsAsk: e }),
                           }),
                         }),
-                      (0, U.jsx)(J, {
-                        since: `1.2.6`,
-                        title: n(`Загрузки Steam`, `Steam downloads`),
-                        hint: n(
-                          `Игры и обновления, которые качает Steam: сколько осталось и скорость, а в конце карточка`,
-                          `Games and updates Steam downloads: how much is left and the speed, and a card at the end`,
-                        ),
-                        children: (0, U.jsx)(Y, {
-                          value: e.steamDownloads !== !1,
-                          onChange: (e) => H({ steamDownloads: e }),
-                        }),
+                        ],
                       }),
+                      (0, U.jsxs)(SettingGroup, {
+                        id: `events-notifications`,
+                        title: n(`Раскладка, VPN и уведомления Windows`, `Layout, VPN & Windows notifications`),
+                        children: [
                       (0, U.jsx)(wt, { value: e.alertSound ?? ``, save: H }),
                       (0, U.jsx)(J, {
                         title: n(`Смена раскладки`, `Keyboard layout switch`),
@@ -3700,28 +3996,25 @@ function zt() {
                             }),
                           ],
                         }),
-                      (0, U.jsxs)(`div`, {
-                        className: `flex flex-col gap-2 px-4 py-3`,
-                        children: [
-                          (0, U.jsx)(`div`, {
-                            className: `text-[13.5px]`,
-                            children: n(`Папка загрузок`, `Downloads folder`),
-                          }),
-                          (0, U.jsx)(`input`, {
-                            defaultValue: e.downloadsDir,
-                            placeholder: n(`Системная папка «Загрузки»`, `The system Downloads folder`),
-                            onBlur: (e) => H({ downloadsDir: e.target.value.trim() }),
-                            spellCheck: !1,
-                            className: `h-9 rounded-lg bg-black/40 px-2.5 text-[12.5px] text-white/85 outline-none placeholder:text-white/30 focus:ring-1 focus:ring-white/20`,
-                          }),
                         ],
                       }),
                     ],
                   }),
                   (0, U.jsxs)(K, {
                     id: `clipboard`,
-                    title: n(`Буфер обмена`, `Clipboard`),
+                    title: n(`Захват и буфер`, `Capture & Clipboard`),
+                    grouped: true,
+                    anchors: [
+                      { id: `clip-history`, label: n(`Буфер обмена`, `Clipboard`) },
+                      { id: `clip-record`, label: n(`Запись экрана`, `Screen recording`) },
+                      { id: `clip-shots`, label: n(`Скриншоты и папки`, `Screenshots & folders`) },
+                    ],
+                    onAnchor: jumpAnchor,
                     children: [
+                      (0, U.jsxs)(SettingGroup, {
+                        id: `clip-history`,
+                        title: n(`Буфер обмена`, `Clipboard`),
+                        children: [
                       (0, U.jsx)(J, {
                         title: n(`Клик по записи вставляет её`, `Clicking an item pastes it`),
                         hint: n(
@@ -3778,6 +4071,12 @@ function zt() {
                           }),
                         ],
                       }),
+                        ],
+                      }),
+                      (0, U.jsxs)(SettingGroup, {
+                        id: `clip-record`,
+                        title: n(`Запись экрана (MP4 / GIF)`, `Screen recording (MP4 / GIF)`),
+                        children: [
                       (0, U.jsx)(J, {
                         title: n(`Формат записи экрана`, `Screen recording format`),
                         hint: n(
@@ -3844,6 +4143,12 @@ function zt() {
                           ],
                         }),
                       }),
+                        ],
+                      }),
+                      (0, U.jsxs)(SettingGroup, {
+                        id: `clip-shots`,
+                        title: n(`Скриншоты, папки и отправка ссылок`, `Screenshots, folders & links`),
+                        children: [
                       (0, U.jsx)(J, {
                         since: `1.2.9`,
                         title: n(
@@ -3877,15 +4182,30 @@ function zt() {
                         service: e.uploadService ?? ``,
                         save: H,
                       }),
+                        ],
+                      }),
                     ],
                   }),
                   (0, U.jsxs)(K, {
                     id: `modules`,
-                    title: n(`Модули`, `Modules`),
+                    title: n(`Модули и Главная`, `Modules & Home`),
+                    grouped: true,
+                    anchors: [
+                      { id: `modules-home`, label: n(`Главная и вкладки`, `Home & tabs`) },
+                      { id: `modules-telemetry`, label: n(`Датчики и заряд`, `Load & batteries`) },
+                      { id: `modules-search`, label: n(`Поиск и заметки`, `Search & notes`) },
+                      { id: `modules-controls`, label: n(`Центр управления`, `Control centre`) },
+                    ],
+                    onAnchor: jumpAnchor,
+                    stage: (0, U.jsx)(mt, { scene: ce ? oe : `home`, live: ce, s: e, license: l, onScene: pickScene }),
                     children: [
-                      U.jsx(ObsidianVaultSettings, {}),
+                      (0, U.jsxs)(SettingGroup, {
+                        id: `modules-home`,
+                        title: n(`Конструктор «Главной» и вкладки`, `Home builder & tabs`),
+                        children: [
                       (0, U.jsx)(J, {
                         since: `1.2.10`,
+                        preview: `home`,
                         title: n(`Что на «Главной»`, `What is on Home`),
                         hint: n(
                           `Оставь только нужное: например, один плеер или плеер и скриншот области. «Главная» перестроится сама`,
@@ -3894,12 +4214,9 @@ function zt() {
                         stacked: !0,
                         children: (0, U.jsx)(at, { s: e, save: H }),
                       }),
-                      (0,U.jsx)(IndicatorSettings,{settings:e,save:H,Row:J,Choice:X}),
-                      (0, U.jsx)(PeripheralSettings, {
-                        preferences: e, save: H, ru: n('ru', 'en') === 'ru', Row: J, Toggle: Y,
-                      }),
                       (0, U.jsx)(J, {
                         since: `1.2.10`,
+                        preview: `home`,
                         title: n(`Вкладки острова`, `Tabs of the island`),
                         hint: n(
                           `Убранная вкладка по-прежнему открывается своей клавишей и командой`,
@@ -3909,6 +4226,7 @@ function zt() {
                         children: (0, U.jsx)(ot, { s: e, save: H }),
                       }),
                       (0, U.jsx)(J, {
+                        preview: `home`,
                         title: n(`Медиаплеер`, `Media player`),
                         hint: n(`Обложка, управление и эквалайзер`, `Cover art, controls and an equalizer`),
                         children: (0, U.jsx)(Y, {
@@ -3930,6 +4248,34 @@ function zt() {
                           onChange: (e) => H({ moduleLauncher: e }),
                         }),
                       }),
+                      (0, U.jsx)(J, {
+                        title: n(`Погода`, `Weather`),
+                        hint: n(
+                          `Вкладка с прогнозом и температура в острове`,
+                          `The forecast tab and the temperature on the island`,
+                        ),
+                        children: (0, U.jsx)(Y, {
+                          value: e.moduleWeather,
+                          onChange: (e) => H({ moduleWeather: e }),
+                        }),
+                      }),
+                        ],
+                      }),
+                      (0, U.jsxs)(SettingGroup, {
+                        id: `modules-telemetry`,
+                        title: n(`Датчики нагрузки и заряд устройств`, `System load & device batteries`),
+                        children: [
+                          (0,U.jsx)(IndicatorSettings,{settings:e,save:H,Row:J,Choice:X}),
+                          (0, U.jsx)(PeripheralSettings, {
+                            preferences: e, save: H, ru: n('ru', 'en') === 'ru', Row: J, Toggle: Y,
+                          }),
+                        ],
+                      }),
+                      (0, U.jsxs)(SettingGroup, {
+                        id: `modules-search`,
+                        title: n(`Поиск и заметки Obsidian`, `Search & Obsidian notes`),
+                        children: [
+                          U.jsx(ObsidianVaultSettings, {}),
                       (0, U.jsx)(J, {
                         since: `1.2.6`,
                         title: n(`Поиск файлов в командной строке`, `File search in the command bar`),
@@ -3978,17 +4324,12 @@ function zt() {
                           ],
                         }),
                       (0, U.jsx)(Dt, { engine: e.searchEngine ?? `auto`, url: e.searchUrl ?? ``, save: H }),
-                      (0, U.jsx)(J, {
-                        title: n(`Погода`, `Weather`),
-                        hint: n(
-                          `Вкладка с прогнозом и температура в острове`,
-                          `The forecast tab and the temperature on the island`,
-                        ),
-                        children: (0, U.jsx)(Y, {
-                          value: e.moduleWeather,
-                          onChange: (e) => H({ moduleWeather: e }),
-                        }),
+                        ],
                       }),
+                      (0, U.jsxs)(SettingGroup, {
+                        id: `modules-controls`,
+                        title: n(`Центр управления и сеть`, `Control centre & network`),
+                        children: [
                       (0, U.jsx)(J, {
                         title: n(`Центр управления`, `Control centre`),
                         hint: n(
@@ -4018,6 +4359,8 @@ function zt() {
                         }),
                       }),
                       (0, U.jsx)(bt, { s: e, save: H }),
+                        ],
+                      }),
                     ],
                   }),
                   (0, U.jsxs)(K, {
@@ -4026,6 +4369,8 @@ function zt() {
                     children: [
                       y === `updates` && (0, U.jsx)(UpdateSettings, { Row: J, Switch: Y, version: x, checkUpdates: e.checkUpdates !== false, autoDownload: e.autoDownloadUpdates !== false, save: H }),
                       (0, U.jsx)(Lt, { version: x }),
+                    ],
+                  }),
                     ],
                   }),
                 ],
