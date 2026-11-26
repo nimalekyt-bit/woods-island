@@ -33,28 +33,38 @@ export function HolidaysSettings({settings,save,Row,Toggle,Choice,Slider}: {
   const waits=(settings.snow??'auto')==='auto'&&!holidayDateActive(today,settings.snowFrom,settings.snowTo);
   const [fromMonth,fromDay]=recurringDay(settings.snowFrom,HOLIDAY_DEFAULTS.snowFrom).split('-').map(Number);
   const snowDate=new Date(2000,fromMonth-1,fromDay).toLocaleDateString(t('ru-RU','en-US'),{day:'numeric',month:'long'});
-  return <div data-holidays-settings>
-    <div data-holiday-live-preview style={{position:"relative",marginBottom:20}}>
+  return <div data-holidays-settings className="flex flex-col gap-5">
+    <div data-holiday-live-preview className="wi-stage-wrap">
       <React.Suspense fallback={<div className="grid h-[180px] place-items-center rounded-2xl bg-[#1c1d22] text-[12px] text-white/50">{t('Загружаю остров…','Loading the island…')}</div>}>
         <LiveStage scene="current" actual live pausable={false} s={{...settings,snow:enabled?'on':'off',snowScreen:false}}/>
       </React.Suspense>
-      {waits&&<span data-stage-waits className="absolute right-3 bottom-2 rounded-full bg-black/55 px-2 py-1 text-[11px] text-white/70">{t(`На острове — с ${snowDate}`,`On the island from ${snowDate}`)}</span>}
+      {waits&&<span data-stage-waits className="absolute right-3 bottom-5 rounded-full bg-black/55 px-2.5 py-1 text-[11px] text-white/75">{t(`На острове — с ${snowDate}`,`On the island from ${snowDate}`)}</span>}
     </div>
-    <div className="divide-y divide-white/[0.06] overflow-hidden rounded-2xl bg-white/[0.045]">
-      <Row title={t('Новый год на острове','New Year on the island')} hint={t('Снег и огоньки в выбранные дни или круглый год.','Snow and lights on selected days or all year round.')} stacked>
-        <Choice value={settings.snow??'auto'} onChange={value=>save({snow:value as HolidaySettings['snow']})} options={[{value:'auto',label:t('По датам','By dates')},{value:'on',label:t('Всегда','Always')},{value:'off',label:t('Нет','Off')}]}/>
-      </Row>
-      {(settings.snow??'auto')==='auto'&&<Row title={t('Когда идёт снег','When it snows')} hint={t('Каждый год, оба дня включительно.','Every year, including both days.')} stacked>
-        <div className="wi-holiday-dates" data-snow-dates>
-          <span>{t('с','from')}</span><AnnualDate label={t('Начало','Start')} value={settings.snowFrom} fallback={HOLIDAY_DEFAULTS.snowFrom} onChange={snowFrom=>save({snowFrom})}/>
-          <span>{t('по','to')}</span><AnnualDate label={t('Конец','End')} value={settings.snowTo} fallback={HOLIDAY_DEFAULTS.snowTo} onChange={snowTo=>save({snowTo})}/>
-        </div>
-      </Row>}
-      {waits&&<div data-snow-waits className="flex items-center gap-3 px-4 py-3">
-        <p className="min-w-0 flex-1 text-[12px] leading-relaxed text-white/55">{t(`Снег начнётся ${snowDate}. Вверху — предварительный просмотр.`,`Snow starts on ${snowDate}. The image above is a preview.`)}</p>
-        <button data-snow-now onClick={()=>save({snow:'on'})} className="press h-8 shrink-0 rounded-full bg-white/10 px-3 text-[12px] text-white hover:bg-white/15">{t('Включить сейчас','Turn on now')}</button>
-      </div>}
-      {enabled&&<>
+    <div className="wi-group-wrap">
+      <div className="wi-group-head">
+        <h3 className="wi-group-title">{t('Режим и расписание','Mode & schedule')}</h3>
+      </div>
+      <div className="wi-setting-card">
+        <Row title={t('Новый год на острове','New Year on the island')} hint={t('Снег и огоньки в выбранные дни или круглый год.','Snow and lights on selected days or all year round.')} stacked>
+          <Choice value={settings.snow??'auto'} onChange={value=>save({snow:value as HolidaySettings['snow']})} options={[{value:'auto',label:t('По датам','By dates')},{value:'on',label:t('Всегда','Always')},{value:'off',label:t('Нет','Off')}]}/>
+        </Row>
+        {(settings.snow??'auto')==='auto'&&<Row title={t('Когда идёт снег','When it snows')} hint={t('Каждый год, оба дня включительно.','Every year, including both days.')} stacked>
+          <div className="wi-holiday-dates" data-snow-dates>
+            <span>{t('с','from')}</span><AnnualDate label={t('Начало','Start')} value={settings.snowFrom} fallback={HOLIDAY_DEFAULTS.snowFrom} onChange={snowFrom=>save({snowFrom})}/>
+            <span>{t('по','to')}</span><AnnualDate label={t('Конец','End')} value={settings.snowTo} fallback={HOLIDAY_DEFAULTS.snowTo} onChange={snowTo=>save({snowTo})}/>
+          </div>
+        </Row>}
+        {waits&&<div data-snow-waits className="flex items-center gap-3 px-4 py-3">
+          <p className="min-w-0 flex-1 text-[12px] leading-relaxed text-white/55">{t(`Снег начнётся ${snowDate}. Вверху — предварительный просмотр.`,`Snow starts on ${snowDate}. The image above is a preview.`)}</p>
+          <button data-snow-now onClick={()=>save({snow:'on'})} className="press h-8 shrink-0 rounded-full bg-white/10 px-3 text-[12px] text-white hover:bg-white/15">{t('Включить сейчас','Turn on now')}</button>
+        </div>}
+      </div>
+    </div>
+    {enabled&&<div className="wi-group-wrap">
+      <div className="wi-group-head">
+        <h3 className="wi-group-title">{t('Эффекты на острове и экране','Island & screen effects')}</h3>
+      </div>
+      <div className="wi-setting-card">
         <Row title={t('Снег из-под острова','Snow beneath the island')} hint={t('Снежинки падают вниз и тают у нижнего края.','Flakes fall down and fade at the bottom.')}><Toggle value={settings.snowFall!==false} onChange={snowFall=>save({snowFall})}/></Row>
         <Row title={t('Шапка снега на острове','A cap of snow on the island')} hint={settings.style==='capsule'?t('Сугробы растягиваются с пилюлей, сужение стряхивает снег с краёв.','Drifts stretch with the pill; narrowing sheds snow from the edges.'):t('Появится в стиле «Капсула».','Available with the Capsule style.')}><Toggle value={settings.snowCap!==false} onChange={snowCap=>save({snowCap})}/></Row>
         <Row title={t('Гирлянда','Garland')} hint={t('Огоньки по краю острова. Режим «Под музыку» следует за звуком.','Lights along the edge. With the music follows the audio.')} stacked>
@@ -62,7 +72,7 @@ export function HolidaysSettings({settings,save,Row,Toggle,Choice,Slider}: {
         </Row>
         <Row title={t('Сколько снега','How much snow')} hint={t('100% — обычный снег, 300% — метель.','100% is normal snowfall; 300% is a blizzard.')} stacked><Slider value={settings.snowAmount??100} min={25} max={300} step={25} unit="%" onChange={snowAmount=>save({snowAmount})}/></Row>
         <Row title={t('Снег по всему экрану','Snow over the whole screen')} hint={t('Поверх окон, с пропуском щелчков. Исчезает над программой на весь экран.','Above windows, with clicks passing through. Hidden while an app is fullscreen.')}><Toggle value={settings.snowScreen===true} onChange={snowScreen=>save({snowScreen})}/></Row>
-      </>}
-    </div>
+      </div>
+    </div>}
   </div>;
 }

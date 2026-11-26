@@ -400,30 +400,68 @@ function tt({ c: e, mood: t }) {
 function nt({ value: e, onChange: t, pro: r, onLocked: i }) {
   const petLibrary = usePetLibrary();
   let [a, o] = (0, F.useState)(`idle`);
+  let [cat, setCat] = (0, F.useState)(`all`);
+  const groups = et();
+  const visibleGroups = cat === `all` ? groups : groups.filter((g) => g.id === cat);
   return (0, U.jsxs)(`div`, {
-    className: `flex flex-col gap-4 rounded-2xl bg-white/[0.045] p-3`,
+    className: `flex flex-col gap-4 p-3.5`,
     children: [
       (0, U.jsxs)(`div`, {
-        className: `flex flex-wrap items-center gap-1`,
+        className: `flex flex-col gap-2.5`,
         children: [
-          (0, U.jsx)(`span`, {
-            className: `mr-1 text-[12px] text-white/45`,
-            children: n(`Посмотреть реакцию:`, `Preview a reaction:`),
+          (0, U.jsxs)(`div`, {
+            className: `wi-cat-bar`,
+            children: [
+              (0, U.jsx)(`button`, {
+                type: `button`,
+                "aria-pressed": cat === `all`,
+                onClick: () => setCat(`all`),
+                className: `wi-cat-chip`,
+                children: n(`Все`, `All`),
+              }),
+              groups.map((g) =>
+                (0, U.jsx)(
+                  `button`,
+                  {
+                    type: `button`,
+                    "aria-pressed": cat === g.id,
+                    onClick: () => setCat(g.id),
+                    className: `wi-cat-chip`,
+                    children: g.label,
+                  },
+                  g.id,
+                ),
+              ),
+            ],
           }),
-          $e().map((e) =>
-            (0, U.jsx)(
-              `button`,
-              {
-                onClick: () => o(e.value),
-                className: `rounded-md px-2.5 py-1 text-[12px] ${a === e.value ? `bg-white/15 text-white` : `text-white/55 hover:bg-white/[0.06] hover:text-white`}`,
-                children: e.label,
-              },
-              e.value,
-            ),
-          ),
+          (0, U.jsxs)(`div`, {
+            className: `flex flex-wrap items-center gap-1.5`,
+            children: [
+              (0, U.jsx)(`span`, {
+                className: `mr-1 text-[11.5px] text-white/45`,
+                children: n(`Реакция в превью:`, `Preview reaction:`),
+              }),
+              (0, U.jsx)(`div`, {
+                className: `wi-choice-group`,
+                children: $e().map((e) =>
+                  (0, U.jsx)(
+                    `button`,
+                    {
+                      type: `button`,
+                      "aria-pressed": a === e.value,
+                      onClick: () => o(e.value),
+                      className: `wi-choice-btn`,
+                      children: e.label,
+                    },
+                    e.value,
+                  ),
+                ),
+              }),
+            ],
+          }),
         ],
       }),
-      et().map((n) =>
+      visibleGroups.map((n) =>
         (0, U.jsxs)(
           `div`,
           {
@@ -496,7 +534,7 @@ function W({ on: e, icon: t, label: n, note: r, onClick: i, mark: a }) {
     "aria-pressed": e,
     title: r,
     onClick: i,
-    className: `press flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] transition-colors ${e ? `bg-white/12 text-white ring-1 ring-white/15` : `text-white/40 ring-1 ring-white/[0.07] hover:text-white/70`}`,
+    className: `press wi-tile-toggle`,
     children: [(0, U.jsx)(t, { size: 14, className: `shrink-0` }), n],
   });
 }
@@ -2199,14 +2237,32 @@ function zt() {
                   y === `character` &&
                     (0, U.jsxs)(`section`, {
                       id: `character`,
-                      className: `flex flex-col gap-4`,
+                      className: `flex flex-col gap-5`,
                       children: [
                         (0, U.jsx)(SectionHeader, {
                           title: n(`Персонаж`, `Character`),
                           description: n(SECTION_META.character.descRu, SECTION_META.character.descEn),
+                          anchors: [
+                            { id: `character-picker`, label: n(`Выбор персонажа`, `Pick character`) },
+                            { id: `character-behavior`, label: n(`Поведение`, `Behavior`) },
+                            { id: `character-codex`, label: n(`Питомцы Codex`, `Codex pets`) },
+                          ],
+                          onAnchor: jumpAnchor,
                         }),
                         (0, U.jsx)(mt, { scene: oe, live: ce, s: e, license: l, pausable: !1, onScene: pickScene }),
+                        (0, U.jsx)(SettingGroup, {
+                          id: `character-picker`,
+                          title: n(`Выбор персонажа`, `Choose a character`),
+                          hint: n(`Сразу видно на превью выше`, `Live preview above`),
+                          children: (0, U.jsx)(nt, {
+                            value: e.character || `liquid`,
+                            onChange: (e) => H({ character: e }),
+                            pro: l.pro,
+                            onLocked: () => b(`pro`),
+                          }),
+                        }),
                         (0, U.jsxs)(SettingGroup, {
+                          id: `character-behavior`,
                           title: n(`Поведение персонажа`, `Character behavior`),
                           children: [
                             (0, U.jsx)(J, {
@@ -2276,12 +2332,10 @@ function zt() {
                             }),
                           ],
                         }),
-                        (0, U.jsx)(PetLibrarySettings, { language: n('ru', 'en') }),
-                        (0, U.jsx)(nt, {
-                          value: e.character || `liquid`,
-                          onChange: (e) => H({ character: e }),
-                          pro: l.pro,
-                          onLocked: () => b(`pro`),
+                        (0, U.jsx)(`div`, {
+                          id: `character-codex`,
+                          className: `wi-group-wrap`,
+                          children: (0, U.jsx)(PetLibrarySettings, { language: n('ru', 'en') }),
                         }),
                       ],
                     }),
@@ -3173,6 +3227,12 @@ function zt() {
                     id: `ai`,
                     title: n(`ИИ`, `AI`),
                     grouped: true,
+                    anchors: [
+                      { id: `ai-web`, label: n(`Веб-версии`, `Web chats`) },
+                      { id: `ai-api`, label: n(`API-ключ`, `API key`) },
+                      { id: `ai-advanced`, label: n(`Сеть и права`, `Network & permissions`) },
+                    ],
+                    onAnchor: jumpAnchor,
                     children: [
                       (0, U.jsx)(SettingGroup, {
                         id: `ai-web`,

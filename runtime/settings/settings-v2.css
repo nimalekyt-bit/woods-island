@@ -585,3 +585,91 @@
   background: rgba(255, 255, 255, 0.13);
   color: #fff;
 }
+
+/* Home builder & island tabs tile toggles — unmistakable ON vs OFF state */
+.wi-tile-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  border-radius: 9px;
+  padding: 0 11px;
+  font-size: 12.5px;
+  font-weight: 500;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+  color: rgba(255, 255, 255, 0.42);
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+.wi-tile-toggle:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.wi-tile-toggle[aria-pressed="true"] {
+  background: rgba(142, 162, 255, 0.16);
+  border-color: rgba(142, 162, 255, 0.45);
+  color: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.wi-tile-toggle[aria-pressed="true"]::after {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: #9bb0ff;
+  box-shadow: 0 0 6px rgba(142, 162, 255, 0.85);
+  margin-left: 1px;
+}
+
+/* Category filter chips (Character picker) */
+.wi-cat-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.wi-cat-chip {
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.56);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.wi-cat-chip:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.wi-cat-chip[aria-pressed="true"] {
+  background: rgba(142, 162, 255, 0.2);
+  border-color: rgba(142, 162, 255, 0.45);
+  color: #fff;
+}
+
+/* Unified polished text inputs & textareas across all sections */
+[data-settings-content] input:not([type="range"]):not([type="checkbox"]):not([type="radio"]):not([type="color"]):not(.wi-search-field):not(.bg-transparent),
+[data-settings-content] textarea {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: border-color 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
+  outline: none !important;
+}
+
+[data-settings-content] input:not([type="range"]):not([type="checkbox"]):not([type="radio"]):not([type="color"]):not(.wi-search-field):not(.bg-transparent):hover,
+[data-settings-content] textarea:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+[data-settings-content] input:not([type="range"]):not([type="checkbox"]):not([type="radio"]):not([type="color"]):not(.wi-search-field):not(.bg-transparent):focus,
+[data-settings-content] textarea:focus {
+  border-color: rgba(142, 162, 255, 0.65) !important;
+  box-shadow: 0 0 0 3px rgba(142, 162, 255, 0.16) !important;
+  outline: none !important;
+}
