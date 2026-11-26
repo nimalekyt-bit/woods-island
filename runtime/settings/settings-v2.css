@@ -654,6 +654,37 @@
   color: #fff;
 }
 
+/* Favorite pet star badge on character cards */
+.wi-fav-star {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: rgba(10, 10, 14, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 12px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.42);
+  transition: color 140ms ease, background-color 140ms ease, transform 140ms ease, border-color 140ms ease;
+}
+
+.wi-fav-star:hover {
+  color: #ffd257;
+  background: rgba(10, 10, 14, 0.85);
+  transform: scale(1.08);
+}
+
+.wi-fav-star[data-fav="true"] {
+  color: #ffd257;
+  background: rgba(255, 210, 87, 0.16);
+  border-color: rgba(255, 210, 87, 0.45);
+}
+
 /* Unified polished text inputs & textareas across all sections */
 [data-settings-content] input:not([type="range"]):not([type="checkbox"]):not([type="radio"]):not([type="color"]):not(.wi-search-field):not(.bg-transparent),
 [data-settings-content] textarea {

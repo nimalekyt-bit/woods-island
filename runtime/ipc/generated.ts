@@ -99,6 +99,7 @@ export interface Settings {
   homeHidden: string[];
   tabsHidden: string[];
   liquidWith: boolean;
+  favoriteCharacters: string[];
   recordFormat: string;
   recordingFps: number;
   recordingSound: string;

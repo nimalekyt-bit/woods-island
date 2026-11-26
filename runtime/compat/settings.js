@@ -397,12 +397,80 @@ function tt({ c: e, mood: t }) {
         }),
       });
 }
-function nt({ value: e, onChange: t, pro: r, onLocked: i }) {
+function nt({ value: e, onChange: t, pro: r, onLocked: i, favorites = [], onToggleFav }) {
   const petLibrary = usePetLibrary();
   let [a, o] = (0, F.useState)(`idle`);
   let [cat, setCat] = (0, F.useState)(`all`);
+  const favSet = new Set(Array.isArray(favorites) ? favorites : []);
+  const favItems = p.filter((item) => favSet.has(item.id));
   const groups = et();
-  const visibleGroups = cat === `all` ? groups : groups.filter((g) => g.id === cat);
+  const visibleGroups =
+    cat === `favorites`
+      ? []
+      : cat === `all`
+        ? groups
+        : groups.filter((g) => g.id === cat);
+  const renderCard = (item, keyPrefix = ``) => {
+    let selected = e === item.id,
+      s = !1,
+      unavailable = item.bitmap?.source === 'codex' && !petLibrary.pets.some((pet) => pet.id === item.bitmap.file && pet.available),
+      { name: c, desc: l } = re(item),
+      isFav = favSet.has(item.id);
+    return (0, U.jsxs)(
+      `button`,
+      {
+        "data-character-option": keyPrefix ? void 0 : item.id,
+        disabled: unavailable,
+        onClick: () => (s ? i() : t(item.id)),
+        title: unavailable ? l + ' · ' + item.id : l,
+        "aria-pressed": selected,
+        className: `flex flex-col gap-1.5 rounded-xl p-1.5 text-left transition-colors disabled:opacity-40 ${selected ? `bg-[#8ea2ff]/15 ring-1 ring-[#8ea2ff]` : `hover:bg-white/[0.05]`}`,
+        children: [
+          (0, U.jsxs)(`div`, {
+            className: `relative h-[78px] overflow-hidden rounded-lg bg-[#1d1d20]`,
+            children: [
+              (0, U.jsx)(tt, { c: item, mood: a }),
+              onToggleFav &&
+                (0, U.jsx)(`span`, {
+                  role: `button`,
+                  tabIndex: 0,
+                  "data-fav": isFav ? `true` : void 0,
+                  title: isFav ? n(`Убрать из избранного`, `Remove from favorites`) : n(`Закрепить в избранном`, `Pin to favorites`),
+                  onClick: (ev) => {
+                    ev.stopPropagation();
+                    ev.preventDefault();
+                    onToggleFav(item.id);
+                  },
+                  onKeyDown: (ev) => {
+                    if (ev.key === `Enter` || ev.key === ` `) {
+                      ev.stopPropagation();
+                      ev.preventDefault();
+                      onToggleFav(item.id);
+                    }
+                  },
+                  className: `wi-fav-star`,
+                  children: isFav ? `★` : `☆`,
+                }),
+            ],
+          }),
+          (0, U.jsxs)(`div`, {
+            className: `px-1 pb-0.5`,
+            children: [
+              (0, U.jsx)(`div`, {
+                className: `text-[12.5px] font-medium ${selected ? `text-white` : `text-white/85`}`,
+                children: c,
+              }),
+              (0, U.jsx)(`div`, {
+                className: `line-clamp-2 text-[11px] leading-snug text-white/40`,
+                children: l,
+              }),
+            ],
+          }),
+        ],
+      },
+      `${keyPrefix}${item.id}`,
+    );
+  };
   return (0, U.jsxs)(`div`, {
     className: `flex flex-col gap-4 p-3.5`,
     children: [
@@ -419,6 +487,14 @@ function nt({ value: e, onChange: t, pro: r, onLocked: i }) {
                 className: `wi-cat-chip`,
                 children: n(`Все`, `All`),
               }),
+              favItems.length > 0 &&
+                (0, U.jsx)(`button`, {
+                  type: `button`,
+                  "aria-pressed": cat === `favorites`,
+                  onClick: () => setCat(`favorites`),
+                  className: `wi-cat-chip`,
+                  children: `★ ${n(`Избранные`, `Favorites`)} (${favItems.length})`,
+                }),
               groups.map((g) =>
                 (0, U.jsx)(
                   `button`,
@@ -461,6 +537,21 @@ function nt({ value: e, onChange: t, pro: r, onLocked: i }) {
           }),
         ],
       }),
+      (cat === `all` || cat === `favorites`) &&
+        favItems.length > 0 &&
+        (0, U.jsxs)(`div`, {
+          className: `flex flex-col gap-2`,
+          children: [
+            (0, U.jsx)(`div`, {
+              className: `px-1 text-[11px] font-semibold tracking-wider text-[#ffd257]/80 uppercase`,
+              children: `★ ${n(`Избранные`, `Favorites`)}`,
+            }),
+            (0, U.jsx)(`div`, {
+              className: `grid grid-cols-3 gap-2`,
+              children: favItems.map((item) => renderCard(item, `fav:`)),
+            }),
+          ],
+        }),
       visibleGroups.map((n) =>
         (0, U.jsxs)(
           `div`,
@@ -473,52 +564,7 @@ function nt({ value: e, onChange: t, pro: r, onLocked: i }) {
               }),
               (0, U.jsx)(`div`, {
                 className: `grid grid-cols-3 gap-2`,
-                children: p
-                  .filter((e) => e.group === n.id)
-                  .map((n) => {
-                    let o = e === n.id,
-                      s = !1,
-                      unavailable = n.bitmap?.source === 'codex' && !petLibrary.pets.some(pet => pet.id === n.bitmap.file && pet.available),
-                      { name: c, desc: l } = re(n);
-                    return (0, U.jsxs)(
-                      `button`,
-                      {
-                        "data-character-option": n.id,
-                        disabled: unavailable,
-                        onClick: () => (s ? i() : t(n.id)),
-                        title: unavailable ? l + ' · ' + n.id : l,
-                        "aria-pressed": o,
-                        className: `flex flex-col gap-1.5 rounded-xl p-1.5 text-left transition-colors disabled:opacity-40 ${o ? `bg-[#8ea2ff]/15 ring-1 ring-[#8ea2ff]` : `hover:bg-white/[0.05]`}`,
-                        children: [
-                          (0, U.jsxs)(`div`, {
-                            className: `relative h-[78px] overflow-hidden rounded-lg bg-[#1d1d20]`,
-                            children: [
-                              (0, U.jsx)(tt, { c: n, mood: a }),
-                              s &&
-                                (0, U.jsx)(`span`, {
-                                  className: `absolute top-1.5 right-1.5 rounded bg-[#8ea2ff]/25 px-1.5 text-[10px] leading-4 font-semibold text-[#c3cdff]`,
-                                  children: `Pro`,
-                                }),
-                            ],
-                          }),
-                          (0, U.jsxs)(`div`, {
-                            className: `px-1 pb-0.5`,
-                            children: [
-                              (0, U.jsx)(`div`, {
-                                className: `text-[12.5px] font-medium ${o ? `text-white` : `text-white/85`}`,
-                                children: c,
-                              }),
-                              (0, U.jsx)(`div`, {
-                                className: `line-clamp-2 text-[11px] leading-snug text-white/40`,
-                                children: l,
-                              }),
-                            ],
-                          }),
-                        ],
-                      },
-                      n.id,
-                    );
-                  }),
+                children: p.filter((e) => e.group === n.id).map((item) => renderCard(item)),
               }),
             ],
           },
@@ -2259,6 +2305,12 @@ function zt() {
                             onChange: (e) => H({ character: e }),
                             pro: l.pro,
                             onLocked: () => b(`pro`),
+                            favorites: e.favoriteCharacters ?? [],
+                            onToggleFav: (id) => {
+                              const cur = Array.isArray(e.favoriteCharacters) ? e.favoriteCharacters : [];
+                              const next = cur.includes(id) ? cur.filter((x) => x !== id) : [id, ...cur];
+                              H({ favoriteCharacters: next });
+                            },
                           }),
                         }),
                         (0, U.jsxs)(SettingGroup, {

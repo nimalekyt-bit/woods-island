@@ -162,18 +162,67 @@ function MixerRow({ app, refresh }: { app: AudioApp; refresh: () => void }) {
     </div>
   );
 }
+interface AudioEndpoint {
+  id: string;
+  name: string;
+  default: boolean;
+}
+
+function readEndpoints(value: unknown): AudioEndpoint[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== "object") return [];
+    const e = entry as Record<string, unknown>;
+    if (typeof e.id !== "string" || typeof e.name !== "string") return [];
+    return [{ id: e.id, name: e.name, default: e.default === true }];
+  });
+}
+
 export function AudioMixer() {
   const toggle = React.useRef<HTMLButtonElement>(null);
   const panel = React.useRef<HTMLElement>(null);
   const active = useVisibleControls(),
     [open, setOpen] = React.useState(false),
+    [mode, setMode] = React.useState<"apps" | "outputs" | "inputs">("apps"),
     [apps, setApps] = React.useState<AudioApp[] | null>(null),
+    [outputs, setOutputs] = React.useState<AudioEndpoint[] | null>(null),
+    [inputs, setInputs] = React.useState<AudioEndpoint[] | null>(null),
+    [switchingId, setSwitchingId] = React.useState<string | null>(null),
     [error, setError] = React.useState(false),
     [revision, setRevision] = React.useState(0);
   const refresh = React.useCallback(
     () => setRevision((value) => value + 1),
     [],
   );
+  React.useEffect(() => {
+    if (!open || !active || mode === "apps") return;
+    let alive = true;
+    const cmd = mode === "outputs" ? "audio_devices" : "audio_inputs";
+    void invoke(cmd)
+      .then((res) => {
+        if (!alive) return;
+        const list = readEndpoints(res);
+        if (mode === "outputs") setOutputs(list);
+        else setInputs(list);
+      })
+      .catch(() => {
+        if (alive) setError(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [open, active, mode, revision]);
+  const pickDevice = async (id: string) => {
+    setSwitchingId(id);
+    try {
+      await invoke("audio_set_default", { id });
+      refresh();
+    } catch {
+      setError(true);
+    } finally {
+      setSwitchingId(null);
+    }
+  };
   React.useEffect(() => {
     if (!open || !active) return;
     let alive = true,
@@ -275,10 +324,28 @@ export function AudioMixer() {
             }
           }}
         >
-          <div className="flex shrink-0 items-center gap-1 px-2 pb-1 text-[12px] font-semibold text-ink">
-            <span className="flex-1">
-              {t("Громкость программ", "Application volume")}
-            </span>
+          <div className="flex shrink-0 items-center gap-1 px-2 pb-1.5 text-[11.5px] font-semibold text-ink">
+            <div className="flex flex-1 items-center gap-1" role="tablist">
+              {(
+                [
+                  ["apps", t("Микшер", "Mixer")],
+                  ["outputs", t("Вывод", "Output")],
+                  ["inputs", t("Микрофон", "Mic")],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={mode === id}
+                  data-audio-tab={id}
+                  onClick={() => setMode(id)}
+                  className={`press rounded-md px-2 py-0.5 text-[11px] transition-colors ${mode === id ? "bg-white/15 text-ink" : "text-ink-3 hover:bg-white/8 hover:text-ink"}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <button
               onClick={close}
               aria-label={t("Закрыть", "Close")}
@@ -288,21 +355,64 @@ export function AudioMixer() {
             </button>
           </div>
           <div data-mixer-list className="scroll-none min-h-0 max-h-[220px] overflow-y-auto" tabIndex={0}>
-            {apps?.map((app) => (
-              <MixerRow key={app.id} app={app} refresh={refresh} />
-            ))}
-            {!apps && !error && (
-              <p className="p-3 text-[12px] text-ink-3">
-                {t("Загружаю…", "Loading…")}
-              </p>
-            )}
-            {apps?.length === 0 && (
-              <p className="p-3 text-[12px] text-ink-3">
-                {t(
-                  "Открой программу и включи в ней звук.",
-                  "Open an application and play some audio.",
+            {mode === "apps" ? (
+              <>
+                {apps?.map((app) => (
+                  <MixerRow key={app.id} app={app} refresh={refresh} />
+                ))}
+                {!apps && !error && (
+                  <p className="p-3 text-[12px] text-ink-3">
+                    {t("Загружаю…", "Loading…")}
+                  </p>
                 )}
-              </p>
+                {apps?.length === 0 && (
+                  <p className="p-3 text-[12px] text-ink-3">
+                    {t(
+                      "Открой программу и включи в ней звук.",
+                      "Open an application and play some audio.",
+                    )}
+                  </p>
+                )}
+              </>
+            ) : (
+              (() => {
+                const list = mode === "outputs" ? outputs : inputs;
+                if (!list) {
+                  return (
+                    <p className="p-3 text-[12px] text-ink-3">
+                      {t("Загружаю устройства…", "Loading devices…")}
+                    </p>
+                  );
+                }
+                if (list.length === 0) {
+                  return (
+                    <p className="p-3 text-[12px] text-ink-3">
+                      {t("Устройства не найдены.", "No devices found.")}
+                    </p>
+                  );
+                }
+                return list.map((dev) => (
+                  <button
+                    key={dev.id}
+                    type="button"
+                    data-audio-endpoint={dev.id}
+                    aria-pressed={dev.default}
+                    disabled={switchingId === dev.id}
+                    onClick={() => void pickDevice(dev.id)}
+                    className={`press flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[12px] transition-colors ${dev.default ? "bg-[#8ea2ff]/18 text-ink" : "text-ink-2 hover:bg-white/8 hover:text-ink"}`}
+                  >
+                    <span
+                      className={`size-2 shrink-0 rounded-full ${dev.default ? "bg-[#8ea2ff]" : "bg-white/20"}`}
+                    />
+                    <span className="min-w-0 flex-1 truncate">{dev.name}</span>
+                    {dev.default && (
+                      <span className="shrink-0 text-[10px] font-medium text-[#b8c7ff]">
+                        {t("Активно", "Active")}
+                      </span>
+                    )}
+                  </button>
+                ));
+              })()
             )}
           </div>
           {error && (

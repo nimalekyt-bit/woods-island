@@ -233,6 +233,7 @@ fn default_settings() -> Value {
     "homeHidden": [],
     "tabsHidden": [],
     "liquidWith": false,
+    "favoriteCharacters": [],
     "recordFormat": "mp4",
     "recordingFps": 30,
     "recordingSound": "system",
