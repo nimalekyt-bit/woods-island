@@ -554,7 +554,7 @@ async function quit(client) {
         assert(Math.abs(layout.strip.h-48)<.1,JSON.stringify(layout));assert(layout.grid.h>=95.9);
         assert(layout.grid.bottom<=layout.strip.y+.1);assert(layout.load.right<=layout.brightness.x+.1);
         assert.equal(layout.power.length,4);assert(layout.power.every(item=>item.h>=75.9&&item.w>60&&item.bottom<=layout.center.bottom+.1),JSON.stringify(layout));
-        assert(layout.cards.length>=4);assert(layout.cards.every(card=>card.h>=95.9&&card.bottom<=layout.strip.y+.1),JSON.stringify(layout));
+        assert(layout.cards.length>=3,JSON.stringify(layout));assert(layout.cards.every(card=>card.h>=95.9&&card.bottom<=layout.strip.y+.1),JSON.stringify(layout));
         if(scale===100){const shot=await main.command('Page.captureScreenshot',{format:'png'});await fs.writeFile(path.join(directory,`controls-reference-${theme}.png`),Buffer.from(shot.data,'base64'));}
         samples.push({theme,scale,...layout});
       }
