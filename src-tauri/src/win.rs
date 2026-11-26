@@ -5,7 +5,7 @@ use windows::Win32::Graphics::Dwm::{
     DwmSetWindowAttribute, DWMWA_BORDER_COLOR, DWMWA_CAPTION_COLOR,
     DWMWA_USE_IMMERSIVE_DARK_MODE, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND,
 };
-use windows::Win32::Graphics::Gdi::{CreateRectRgn, DeleteObject, GetMonitorInfoW, MonitorFromRect, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST, SetWindowRgn};
+use windows::Win32::Graphics::Gdi::{CreateRectRgn, DeleteObject, GetMonitorInfoW, MonitorFromPoint, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST, SetWindowRgn};
 use windows::Win32::UI::WindowsAndMessaging::{
     GetClientRect, GetCursorPos, GetForegroundWindow, GetSystemMetrics, GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId,
     SetWindowLongPtrW, SetWindowPos,
@@ -19,10 +19,12 @@ use windows::Win32::UI::WindowsAndMessaging::{
 const WM_ERASEBKGND: u32 = 0x0014;
 const WM_SHOWWINDOW: u32 = 0x0018;
 const WM_MOUSEACTIVATE: u32 = 0x0021;
+const WM_DISPLAYCHANGE: u32 = 0x007E;
 const WM_NCCALCSIZE: u32 = 0x0083;
 const WM_NCHITTEST: u32 = 0x0084;
 const WM_NCPAINT: u32 = 0x0085;
 const WM_NCACTIVATE: u32 = 0x0086;
+const WM_DPICHANGED: u32 = 0x02E0;
 
 const HTTRANSPARENT: isize = -1;
 const HTCLIENT: isize = 1;
@@ -114,7 +116,63 @@ static ISLAND_HWND: Mutex<isize> = Mutex::new(0);
 static PREVIOUS_FOCUS: Mutex<isize> = Mutex::new(0);
 static ISLAND_ZOOM: Mutex<f64> = Mutex::new(1.0);
 static PAGE_FACTOR: Mutex<Option<f64>> = Mutex::new(None);
+static DPI_DIRTY: AtomicBool = AtomicBool::new(false);
 static LAST_FG_PROC: Mutex<(isize, u32, String)> = Mutex::new((0, 0, String::new()));
+
+fn validate_page_factor(client_width: i32, css_width: f64, expected_scale: f64) -> Option<f64> {
+    if client_width <= 0 || !css_width.is_finite() || css_width <= 0.0 || !expected_scale.is_finite() || expected_scale <= 0.0 {
+        return None;
+    }
+    let expected_css = client_width as f64 / expected_scale;
+    // Allow 4K fractional DPI (125/150/175/225/250/300%) + WebView zoom rounding
+    // while still rejecting stale pre-resize reports that would cause feedback loops.
+    let tolerance = 4.0_f64.max(expected_css * 0.015);
+    if (expected_css - css_width).abs() > tolerance {
+        return None;
+    }
+    let factor = client_width as f64 / css_width;
+    if (0.5..=8.0).contains(&factor) {
+        Some(factor)
+    } else {
+        None
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn compute_monitor_canvas(
+    left: i32,
+    top: i32,
+    width: i32,
+    height: i32,
+    work_top: i32,
+    dock_top: Option<i32>,
+    scale: f64,
+    zoom: f64,
+    offset_x: i32,
+    below_taskbar: bool,
+    tall: bool,
+) -> (i32, i32, i32, i32) {
+    let safe_scale = if scale.is_finite() { scale.clamp(1.0, 4.0) } else { 1.0 };
+    let safe_zoom = if zoom.is_finite() { zoom.clamp(0.8, 2.0) } else { 1.0 };
+    let y = if let Some(d) = dock_top {
+        d
+    } else if below_taskbar {
+        work_top
+    } else {
+        top
+    };
+    let avail_h = (top + height - y).max(1);
+    let monitor_w = width.max(1);
+    let canvas_w = ((760.0 * safe_scale * safe_zoom).round() as i32).clamp(1, monitor_w);
+    let canvas_h = if tall {
+        avail_h
+    } else {
+        ((480.0 * safe_scale * safe_zoom).round() as i32).clamp(1, avail_h)
+    };
+    let centered = left + (monitor_w - canvas_w) / 2 + (offset_x as f64 * safe_scale).round() as i32;
+    let x = centered.clamp(left, left + monitor_w - canvas_w);
+    (x, y, canvas_w, canvas_h)
+}
 
 fn scaled_bounds(rect: (i32, i32, i32, i32), scale: f64, width: i32, height: i32) -> (i32, i32, i32, i32) {
     let (x1, y1, x2, y2) = rect;
@@ -163,6 +221,15 @@ unsafe extern "system" fn island_subclass_proc(
     _ref_data: usize,
 ) -> LRESULT {
     match msg {
+        WM_DPICHANGED | WM_DISPLAYCHANGE => {
+            // Invalidate cached physical geometry immediately on 4K/high-DPI scale switches
+            // or display reconfigurations; the cursor loop reapplies monitor geometry promptly.
+            DPI_DIRTY.store(true, Ordering::Release);
+            if let Ok(mut guard) = PAGE_FACTOR.try_lock() { *guard = None; }
+            if let Ok(mut guard) = CURRENT_BOUNDS.try_lock() { *guard = None; }
+            if let Ok(mut guard) = VISUAL_BOUNDS.try_lock() { *guard = None; }
+            if let Ok(mut guard) = BASE_CANVAS.try_lock() { *guard = None; }
+        }
         0x0219 => { crate::peripherals::request_refresh(); } // WM_DEVICECHANGE
         0x0218 if matches!(wparam.0, 7 | 18) => { crate::peripherals::request_refresh(); } // Resume broadcast
         WM_SHOWWINDOW => { crate::audio::set_spectrum_visible(wparam.0 != 0); }
@@ -295,15 +362,18 @@ impl WindowManager {
         PAGE_FACTOR.lock().unwrap().unwrap_or_else(|| Self::scale_factor(hwnd) * *ISLAND_ZOOM.lock().unwrap())
     }
 
+    pub fn take_dpi_dirty() -> bool {
+        DPI_DIRTY.swap(false, Ordering::AcqRel)
+    }
+
     pub fn report_page_width(hwnd: HWND, width: f64) {
         if !width.is_finite() || width <= 0.0 { return; }
         let mut client = RECT::default();
         if unsafe { GetClientRect(hwnd, &mut client) }.is_ok() && client.right > 0 {
-            // A report queued before an overscan/zoom resize must not redefine the
-            // page factor using the old viewport width and start a resize feedback loop.
             let expected_scale = Self::scale_factor(hwnd) * *ISLAND_ZOOM.lock().unwrap();
-            if (client.right as f64 / expected_scale - width).abs() > 2.0 { return; }
-            *PAGE_FACTOR.lock().unwrap() = Some(client.right as f64 / width);
+            if let Some(factor) = validate_page_factor(client.right, width, expected_scale) {
+                *PAGE_FACTOR.lock().unwrap() = Some(factor);
+            }
         }
     }
 
@@ -387,25 +457,41 @@ impl WindowManager {
     }
 
     /// Geometry uses physical pixels; monitor selection is provided by Tauri's real inventory.
-    pub fn position_on_monitor(hwnd: HWND, left: i32, top: i32, width: i32, scale: f64, zoom: f64, offset_x: i32, below_taskbar: bool, tall: bool) {
+    pub fn position_on_monitor(hwnd: HWND, left: i32, top: i32, width: i32, height: i32, scale: f64, zoom: f64, offset_x: i32, below_taskbar: bool, tall: bool) {
         unsafe {
-            let canvas_w = (760.0 * scale * zoom).round() as i32;
-            let mut canvas_h = (480.0 * scale * zoom).round() as i32;
-            let mut y = top;
-            let target = RECT {left,top,right:left+width,bottom:top+canvas_h};
-            let monitor = MonitorFromRect(&target, MONITOR_DEFAULTTONEAREST);
+            let probe = POINT { x: left + width / 2, y: top + 10.min(height.max(1) / 2) };
+            let monitor = MonitorFromPoint(probe, MONITOR_DEFAULTTONEAREST);
             let mut info = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
-            if GetMonitorInfoW(monitor, &mut info).as_bool() && info.rcMonitor.left == left && info.rcMonitor.top == top {
-                if let Some(dock_top) = crate::appbar::dock_top(left, top) { y = dock_top; }
-                else if below_taskbar { y = info.rcWork.top; }
-                if tall { canvas_h = (info.rcMonitor.bottom - y).max(1); }
-            }
-            let x = left + (width - canvas_w) / 2 + (offset_x as f64 * scale).round() as i32;
+            let (mon_h, work_top, dock_top) = if GetMonitorInfoW(monitor, &mut info).as_bool()
+                && info.rcMonitor.left == left
+                && info.rcMonitor.top == top
+            {
+                let h = (info.rcMonitor.bottom - info.rcMonitor.top).max(1);
+                (h, info.rcWork.top, crate::appbar::dock_top(left, top))
+            } else {
+                (height.max(1), top, crate::appbar::dock_top(left, top))
+            };
+            let (x, y, canvas_w, canvas_h) = compute_monitor_canvas(
+                left,
+                top,
+                width,
+                mon_h,
+                work_top,
+                dock_top,
+                scale,
+                zoom,
+                offset_x,
+                below_taskbar,
+                tall,
+            );
             *BASE_CANVAS.lock().unwrap() = Some((x, y, canvas_w, canvas_h));
             let overscan = *CANVAS_OVERSCAN.lock().unwrap();
-            let extra_w = (overscan.0 * scale * zoom).round() as i32;
-            let extra_h = (overscan.1 * scale * zoom).round() as i32;
-            let _ = SetWindowPos(hwnd, HWND_TOPMOST, x - extra_w / 2, y, canvas_w + extra_w, canvas_h + extra_h, SWP_NOACTIVATE | SWP_FRAMECHANGED);
+            let avail_h = (top + mon_h - y).max(1);
+            let total_w = (canvas_w + (overscan.0 * scale * zoom).round() as i32).min(width.max(1));
+            let total_h = (canvas_h + (overscan.1 * scale * zoom).round() as i32).min(avail_h);
+            let extra_w = (total_w - canvas_w).max(0);
+            let final_x = (x - extra_w / 2).clamp(left, (left + width.max(1) - total_w).max(left));
+            let _ = SetWindowPos(hwnd, HWND_TOPMOST, final_x, y, total_w, total_h, SWP_NOACTIVATE | SWP_FRAMECHANGED);
             // A DPI or geometry change invalidates cached region coordinates.
             *CURRENT_BOUNDS.lock().unwrap() = None;
             *VISUAL_BOUNDS.lock().unwrap() = None;
@@ -485,13 +571,27 @@ impl WindowManager {
             // Install subclass procedure
             let _ = SetWindowSubclass(hwnd, island_subclass_proc, 1001, 0);
 
-            // Center docked at the top edge of the primary monitor
+            // Center docked at the top edge of the monitor owning this window (respecting 4K/high-DPI)
             let scale = Self::scale_factor(hwnd);
-            let physical_width = (width as f64 * scale).round() as i32;
-            let physical_height = (height as f64 * scale).round() as i32;
-            let screen_w = GetSystemMetrics(SM_CXSCREEN);
-            let pos_x = (screen_w - physical_width) / 2;
-            let pos_y = 0;
+            let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+            let mut info = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
+            let (mon_left, mon_top, mon_w, mon_h) = if GetMonitorInfoW(monitor, &mut info).as_bool()
+                && info.rcMonitor.right > info.rcMonitor.left
+                && info.rcMonitor.bottom > info.rcMonitor.top
+            {
+                (
+                    info.rcMonitor.left,
+                    info.rcMonitor.top,
+                    info.rcMonitor.right - info.rcMonitor.left,
+                    info.rcMonitor.bottom - info.rcMonitor.top,
+                )
+            } else {
+                (0, 0, GetSystemMetrics(SM_CXSCREEN).max(1), 1080)
+            };
+            let physical_width = ((width as f64 * scale).round() as i32).clamp(1, mon_w);
+            let physical_height = ((height as f64 * scale).round() as i32).clamp(1, mon_h);
+            let pos_x = mon_left + (mon_w - physical_width) / 2;
+            let pos_y = mon_top;
             *BASE_CANVAS.lock().unwrap() = Some((pos_x, pos_y, physical_width, physical_height));
             
             SetWindowPos(
@@ -670,7 +770,47 @@ impl WindowManager {
 
 #[cfg(test)]
 mod tests {
-    use super::{attachment_overscan, safe_visual_inset, scaled_bounds, visual_bounds};
+    use super::{
+        attachment_overscan, compute_monitor_canvas, safe_visual_inset, scaled_bounds,
+        validate_page_factor, visual_bounds,
+    };
+
+    #[test]
+    fn four_k_high_dpi_canvas_stays_centered_and_within_monitor_bounds() {
+        // 4K (3840x2160) across all Windows scaling levels 100%..300% and app zooms 80%..200%.
+        for scale in [1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 3.0] {
+            for zoom in [0.8, 1.0, 1.2, 1.5, 2.0] {
+                let (x, y, w, h) = compute_monitor_canvas(
+                    0, 0, 3840, 2160, 0, None, scale, zoom, 0, true, false,
+                );
+                assert!(w >= 1 && w <= 3840, "width overflow at scale={scale} zoom={zoom}: {w}");
+                assert!(h >= 1 && h <= 2160, "height overflow at scale={scale} zoom={zoom}: {h}");
+                assert!(x >= 0 && x + w <= 3840, "x out of bounds at scale={scale} zoom={zoom}: x={x} w={w}");
+                assert_eq!(y, 0);
+                // Centered within 1px
+                let center_diff = ((x as f64 + w as f64 / 2.0) - 1920.0).abs();
+                assert!(center_diff <= 1.0, "off-center at scale={scale} zoom={zoom}: diff={center_diff}");
+            }
+        }
+        // Extreme 4K@300% + 200% zoom (6x) must clamp cleanly to monitor height without overflowing below screen.
+        let (x, y, w, h) = compute_monitor_canvas(0, 0, 3840, 2160, 48, None, 3.0, 2.0, 5000, true, false);
+        assert_eq!(y, 48);
+        assert!(w <= 3840 && h <= 2160 - 48);
+        assert!(x >= 0 && x + w <= 3840);
+    }
+
+    #[test]
+    fn page_factor_accepts_4k_fractional_dpi_rounding_and_rejects_stale_reports() {
+        // 4K @ 175% DPI * 120% zoom = 2.1x; Chromium may report 761..763 CSS px for 1596 physical px.
+        let factor = validate_page_factor(1596, 762.0, 2.1);
+        assert!(factor.is_some());
+        assert!((factor.unwrap() - (1596.0 / 762.0)).abs() < 1e-6);
+        // 4K @ 250% DPI * 120% zoom = 3.0x
+        assert!(validate_page_factor(2280, 760.0, 3.0).is_some());
+        // Stale pre-resize report (e.g. 1520 physical px still reporting old 500 CSS px at 2x) must be rejected.
+        assert!(validate_page_factor(1520, 500.0, 2.0).is_none());
+        assert!(validate_page_factor(1520, f64::NAN, 2.0).is_none());
+    }
 
     #[test]
     fn css_bounds_follow_monitor_dpi() {

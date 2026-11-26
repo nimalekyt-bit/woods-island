@@ -387,6 +387,12 @@ function L() {
       let leaveUnlisten = a(`overlay:leave`, (token) => {
           leavingRef.current = !0;
           setLeaving(!0);
+          // Release large 4K screenshot data URL immediately so the hidden overlay
+          // never retains 15–30 MB inside the shared WebView2 renderer process.
+          o(null);
+          f(null);
+          m(null);
+          S(null);
           requestAnimationFrame(() => requestAnimationFrame(() => void n.overlayLeft(token)));
         }),
         e = a(`overlay:start`, async (e) => {

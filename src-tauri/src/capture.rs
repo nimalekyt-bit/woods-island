@@ -2,31 +2,36 @@ pub mod qr;
 
 use base64::Engine;
 use serde_json::{json, Value};
-use std::{path::{Path, PathBuf}, sync::{atomic::{AtomicBool, Ordering}, Mutex}};
+use std::{path::{Path, PathBuf}, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}};
 use windows::Win32::{Foundation::{HWND, RECT}, Graphics::Gdi::*};
 
 static EDITOR_PATH: Mutex<Option<PathBuf>> = Mutex::new(None);
-static FRAME: Mutex<Option<image::RgbaImage>> = Mutex::new(None);
+static FRAME: Mutex<Option<Arc<image::RgbaImage>>> = Mutex::new(None);
 static CAPTURING: AtomicBool = AtomicBool::new(false);
 
 pub fn is_capturing() -> bool { CAPTURING.load(Ordering::Relaxed) }
 
 pub struct MainHidden { window:Option<tauri::Window>, restore:bool }
 impl MainHidden { pub fn keep_hidden(&mut self){self.restore=false;} }
-impl Drop for MainHidden {fn drop(&mut self){if self.restore{CAPTURING.store(false, Ordering::Relaxed);if let Some(window)=&self.window{let _=window.show();}}}}
+impl Drop for MainHidden {fn drop(&mut self){if self.restore{clear_frame();if let Some(window)=&self.window{let _=window.show();}}}}
 pub fn hide_main(app:&tauri::AppHandle)->MainHidden{
     use tauri::Manager;
     CAPTURING.store(true, Ordering::Relaxed);
     let window=app.get_window("main");if let Some(window)=&window{let _=window.hide();}
     MainHidden{window,restore:true}
 }
-pub fn set_frame(image:&image::RgbaImage){*FRAME.lock().unwrap()=Some(image.clone());}
+pub fn set_frame(image: image::RgbaImage) -> Arc<image::RgbaImage> {
+    let shared = Arc::new(image);
+    *FRAME.lock().unwrap() = Some(shared.clone());
+    shared
+}
 pub fn clear_frame(){*FRAME.lock().unwrap()=None;CAPTURING.store(false, Ordering::Relaxed);}
 pub fn selected_image(rect:RECT)->Result<image::RgbaImage,String>{
-    if let Some(frame)=FRAME.lock().unwrap().as_ref(){
+    let frame = FRAME.lock().unwrap().clone();
+    if let Some(frame) = frame {
         let screen=screen_rect();let x=(rect.left-screen.left).max(0) as u32;let y=(rect.top-screen.top).max(0) as u32;
         let w=(rect.right-rect.left).max(1) as u32;let h=(rect.bottom-rect.top).max(1) as u32;
-        if x+w<=frame.width()&&y+h<=frame.height(){return Ok(image::imageops::crop_imm(frame,x,y,w,h).to_image());}
+        if x+w<=frame.width()&&y+h<=frame.height(){return Ok(image::imageops::crop_imm(frame.as_ref(),x,y,w,h).to_image());}
     }
     screenshot(rect)
 }
@@ -75,7 +80,14 @@ pub fn screenshot(rect: RECT) -> Result<image::RgbaImage,String> {
 
 pub fn data_url(image: &image::RgbaImage) -> Result<String,String> {
     let mut out=std::io::Cursor::new(Vec::new());
-    image::DynamicImage::ImageRgba8(image.clone()).write_to(&mut out,image::ImageFormat::Png).map_err(|e|e.to_string())?;
+    image::write_buffer_with_format(
+        &mut out,
+        image.as_raw(),
+        image.width(),
+        image.height(),
+        image::ExtendedColorType::Rgba8,
+        image::ImageFormat::Png,
+    ).map_err(|e|e.to_string())?;
     Ok(format!("data:image/png;base64,{}",base64::engine::general_purpose::STANDARD.encode(out.into_inner())))
 }
 

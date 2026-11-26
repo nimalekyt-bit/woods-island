@@ -1,3 +1,4 @@
+pub mod browser_fallback;
 pub mod legacy;
 pub mod names;
 mod cover_retry;
@@ -8,8 +9,9 @@ use std::sync::{
     Condvar, Mutex, OnceLock,
 };
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 use serde_json::{json, Value};
+use windows::core::Interface;
 use windows::Foundation::TypedEventHandler;
 use windows::Media::Control::{
     GlobalSystemMediaTransportControlsSession,
@@ -33,6 +35,7 @@ static MEDIA_LOOP_RUNNING: AtomicBool = AtomicBool::new(false);
 static MEDIA_WAKE: OnceLock<(Mutex<bool>, Condvar)> = OnceLock::new();
 static LAST_GSMTC_ERROR: Mutex<Option<(String, Instant)>> = Mutex::new(None);
 static LEGACY_CACHE: Mutex<Option<(Instant, Vec<Value>)>> = Mutex::new(None);
+static BROWSER_CACHE: Mutex<Option<(Instant, Vec<Value>)>> = Mutex::new(None);
 
 fn wake_pair() -> &'static (Mutex<bool>, Condvar) {
     MEDIA_WAKE.get_or_init(|| (Mutex::new(true), Condvar::new()))
@@ -111,6 +114,29 @@ fn cached_legacy_snapshots(force: bool) -> Vec<Value> {
     }
     let fresh = legacy::snapshots();
     if let Ok(mut guard) = LEGACY_CACHE.lock() {
+        *guard = Some((now, fresh.clone()));
+    }
+    fresh
+}
+
+fn cached_browser_snapshots(force: bool, gsmtc_active_apps: &[String]) -> Vec<Value> {
+    let now = Instant::now();
+    if !force {
+        if let Ok(guard) = BROWSER_CACHE.lock() {
+            if let Some((at, ref cached)) = *guard {
+                let ttl = if cached.is_empty() {
+                    if crate::is_low_power() { Duration::from_secs(5) } else { Duration::from_millis(1800) }
+                } else {
+                    Duration::from_millis(900)
+                };
+                if now.duration_since(at) < ttl {
+                    return cached.clone();
+                }
+            }
+        }
+    }
+    let fresh = browser_fallback::snapshots(gsmtc_active_apps);
+    if let Ok(mut guard) = BROWSER_CACHE.lock() {
         *guard = Some((now, fresh.clone()));
     }
     fresh
@@ -195,12 +221,26 @@ pub fn format_app_name(app_id: &str) -> String {
     if let Some(kind) = legacy::LegacyKind::from_id(app_id) {
         return kind.name().to_string();
     }
+    if let Some(kind) = browser_fallback::BrowserKind::from_id(app_id) {
+        return kind.name().to_string();
+    }
     if names::firefox_app_id(app_id) {
         return "Firefox".to_string();
     }
     let lower = app_id.to_lowercase();
     if lower.contains("yandex") {
-        "Яндекс Музыка".to_string()
+        // Distinguish Yandex Browser (e.g. `Yandex.OWPTABZ5EHFIKZ6HFNJOEQW6JI`, `YandexBrowser`)
+        // from the dedicated Yandex Music desktop app (`ru.yandex.desktop.music`, `yandex.music`).
+        if lower.contains("music") {
+            "Яндекс Музыка".to_string()
+        } else if lower.contains("browser")
+            || lower.starts_with("yandex.")
+            || lower.ends_with("browser.exe")
+        {
+            "Яндекс Браузер".to_string()
+        } else {
+            cached_registered_app_name(app_id).unwrap_or_else(|| "Яндекс Музыка".to_string())
+        }
     } else if lower.contains("ayugram") {
         "Telegram (AyuGram)".to_string()
     } else if lower.contains("vk") {
@@ -249,60 +289,84 @@ pub fn get_manager() -> Option<GlobalSystemMediaTransportControlsSessionManager>
     request_manager_no_com()
 }
 
+fn session_is_playing(session: &GlobalSystemMediaTransportControlsSession) -> bool {
+    session
+        .GetPlaybackInfo()
+        .ok()
+        .and_then(|p| p.PlaybackStatus().ok())
+        .is_some_and(|s| s == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing)
+}
+
+fn session_has_title(session: &GlobalSystemMediaTransportControlsSession) -> bool {
+    session
+        .TryGetMediaPropertiesAsync()
+        .ok()
+        .and_then(|op| op.get().ok())
+        .and_then(|props| props.Title().ok())
+        .is_some_and(|t| !t.to_string().trim().is_empty())
+}
+
 pub fn get_active_session(
     mgr: &GlobalSystemMediaTransportControlsSessionManager,
 ) -> Option<GlobalSystemMediaTransportControlsSession> {
     let picked = PICKED_APP_ID.lock().ok().and_then(|p| p.clone());
-    
+
     if let Ok(all) = mgr.GetSessions() {
         let sessions: Vec<_> = all.into_iter().filter(session_visible).collect();
-        // 1. Prioritize user picked session
+        // 1. Prioritize user picked session (prefer one with a non-empty title when the browser has multiple)
         if let Some(target) = picked {
-            for session in sessions.iter().cloned() {
-                if session.SourceAppUserModelId().unwrap_or_default().to_string() == target {
-                    return Some(session);
-                }
+            let matching: Vec<_> = sessions
+                .iter()
+                .filter(|s| s.SourceAppUserModelId().unwrap_or_default().to_string() == target)
+                .cloned()
+                .collect();
+            if let Some(s) = matching.iter().find(|s| session_is_playing(s) && session_has_title(s)) {
+                return Some(s.clone());
+            }
+            if let Some(s) = matching.iter().find(|s| session_has_title(s)) {
+                return Some(s.clone());
+            }
+            if let Some(s) = matching.into_iter().next() {
+                return Some(s);
             }
         }
 
-        // 2. Default current session if Playing
-        if let Some(current) = mgr.GetCurrentSession().ok().filter(session_visible) {
-            if let Ok(playback) = current.GetPlaybackInfo() {
-                if let Ok(status) = playback.PlaybackStatus() {
-                    if status == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing {
-                        return Some(current);
-                    }
-                }
+        let current = mgr.GetCurrentSession().ok().filter(session_visible);
+
+        // 2. Default current session if Playing AND has a non-empty title
+        if let Some(ref cur) = current {
+            if session_is_playing(cur) && session_has_title(cur) {
+                return Some(cur.clone());
             }
         }
 
-        // 3. Find any session that is currently Playing
-        for session in sessions.iter().cloned() {
-            if let Ok(playback) = session.GetPlaybackInfo() {
-                if let Ok(status) = playback.PlaybackStatus() {
-                    if status == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing {
-                        return Some(session);
-                    }
-                }
+        // 3. Any visible Playing session with a non-empty title (skips empty browser/Alice ghost sessions)
+        for session in &sessions {
+            if session_is_playing(session) && session_has_title(session) {
+                return Some(session.clone());
             }
         }
 
-        // 4. Fallback to default current session
-        if let Some(current) = mgr.GetCurrentSession().ok().filter(session_visible) {
-            return Some(current);
+        // 4. Default current session with a non-empty title (paused)
+        if let Some(ref cur) = current {
+            if session_has_title(cur) {
+                return Some(cur.clone());
+            }
         }
 
-        // 5. Fallback to first session with non-empty title
-        for session in sessions.iter().cloned() {
-            if let Ok(prop_op) = session.TryGetMediaPropertiesAsync() {
-                if let Ok(props) = prop_op.get() {
-                    if let Ok(title) = props.Title() {
-                        if !title.is_empty() {
-                            return Some(session);
-                        }
-                    }
-                }
+        // 5. Any visible session with a non-empty title
+        for session in &sessions {
+            if session_has_title(session) {
+                return Some(session.clone());
             }
+        }
+
+        // 6. Keep a handle to a playing/current session solely for event subscription
+        if let Some(session) = sessions.iter().find(|s| session_is_playing(s)) {
+            return Some(session.clone());
+        }
+        if let Some(cur) = current {
+            return Some(cur);
         }
     }
 
@@ -470,6 +534,10 @@ fn poll_current_media_with_manager(
             bridge.clone()
         } else if let Some(found) = legacy_visible.iter().find(|m| m["app"].as_str() == Some(picked_id.as_str())) {
             Some(found.clone())
+        } else if browser_fallback::is_browser_id(picked_id) {
+            cached_browser_snapshots(force_legacy, &[])
+                .into_iter()
+                .find(|m| m["app"].as_str() == Some(picked_id.as_str()))
         } else {
             let (val, sess, ok) = read_current_media_from_manager(mgr);
             rpc_ok = ok;
@@ -488,14 +556,41 @@ fn poll_current_media_with_manager(
         }
         let legacy_playing = legacy_visible.iter().find(|m| m["playing"] == true).cloned();
         let legacy_any = legacy_visible.first().cloned();
-        current = if bridge.as_ref().is_some_and(|m| m["playing"] == true) {
+        let gsmtc_playing = gsmtc.as_ref().is_some_and(|m| m["playing"] == true);
+        let bridge_playing = bridge.as_ref().is_some_and(|m| m["playing"] == true);
+        // Only query Core Audio browser fallback when neither GSMTC nor bridge is already playing,
+        // or when explicitly picking a browser fallback source.
+        let gsmtc_apps: Vec<String> = gsmtc
+            .as_ref()
+            .and_then(|m| m["app"].as_str())
+            .map(|id| vec![id.to_owned()])
+            .unwrap_or_default();
+        let browser_visible: Vec<Value> = if !gsmtc_playing && !bridge_playing {
+            cached_browser_snapshots(force_legacy, &gsmtc_apps)
+                .into_iter()
+                .filter(|m| m["app"].as_str().is_some_and(|id| !is_hidden(id)))
+                .map(|mut m| {
+                    if let Some(id) = m["app"].as_str().map(str::to_owned) {
+                        m["appName"] = json!(format_app_name(&id));
+                    }
+                    m
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let browser_playing = browser_visible.iter().find(|m| m["playing"] == true).cloned();
+        let browser_any = browser_visible.first().cloned();
+        current = if bridge_playing {
             bridge
-        } else if gsmtc.as_ref().is_some_and(|m| m["playing"] == true) {
+        } else if gsmtc_playing {
             gsmtc
         } else if legacy_playing.is_some() {
             legacy_playing
+        } else if browser_playing.is_some() {
+            browser_playing
         } else {
-            gsmtc.or(bridge).or(legacy_any)
+            gsmtc.or(bridge).or(legacy_any).or(browser_any)
         };
     }
     if current.as_ref().is_some_and(|media|media["app"]==crate::music_bridge::APP_ID&&media["cover"].is_null())&&active_session.is_none() {
@@ -671,35 +766,49 @@ pub fn get_media_sources() -> Vec<Value> {
             }));
         }
     }
-    let mgr = match get_manager() {
-        Some(m) => m,
-        None => return result,
-    };
-
-    if let Ok(sessions) = mgr.GetSessions() {
-        for session in sessions {
-            let id = session.SourceAppUserModelId().unwrap_or_default().to_string();
-            let name = format_app_name(&id);
-            let mut title = String::new();
-            if let Ok(prop_op) = session.TryGetMediaPropertiesAsync() {
-                if let Ok(props) = prop_op.get() {
-                    title = props.Title().unwrap_or_default().to_string();
+    let mut gsmtc_apps = Vec::new();
+    if let Some(mgr) = get_manager() {
+        if let Ok(sessions) = mgr.GetSessions() {
+            for session in sessions {
+                let id = session.SourceAppUserModelId().unwrap_or_default().to_string();
+                let name = format_app_name(&id);
+                let mut title = String::new();
+                if let Ok(prop_op) = session.TryGetMediaPropertiesAsync() {
+                    if let Ok(props) = prop_op.get() {
+                        title = props.Title().unwrap_or_default().to_string();
+                    }
                 }
-            }
-            let mut is_playing = false;
-            if let Ok(playback) = session.GetPlaybackInfo() {
-                if let Ok(status) = playback.PlaybackStatus() {
-                    is_playing = status == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
+                let mut is_playing = false;
+                if let Ok(playback) = session.GetPlaybackInfo() {
+                    if let Ok(status) = playback.PlaybackStatus() {
+                        is_playing = status == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
+                    }
                 }
-            }
+                if !title.is_empty() {
+                    gsmtc_apps.push(id.clone());
+                }
 
+                result.push(json!({
+                    "id": id,
+                    "name": name,
+                    "title": title,
+                    "playing": is_playing,
+                    "hidden": is_hidden(&id),
+                    "active": shown_id.as_deref() == Some(&id)
+                }));
+            }
+        }
+    }
+
+    for media in browser_fallback::snapshots(&gsmtc_apps) {
+        if let Some(id) = media["app"].as_str() {
             result.push(json!({
                 "id": id,
-                "name": name,
-                "title": title,
-                "playing": is_playing,
-                "hidden": is_hidden(&id),
-                "active": shown_id.as_deref() == Some(&id)
+                "name": format_app_name(id),
+                "title": media["title"],
+                "playing": media["playing"],
+                "hidden": is_hidden(id),
+                "active": shown_id.as_deref() == Some(id)
             }));
         }
     }
@@ -730,6 +839,20 @@ pub fn media_control(action: &str) -> bool {
             }
             if legacy::LegacyKind::from_id(app_id).is_some() {
                 return legacy::control(app_id, action).is_ok();
+            }
+            if browser_fallback::is_browser_id(app_id) {
+                let playing = current["playing"].as_bool().unwrap_or(false);
+                match action {
+                    "play" if !playing => send_media_key(VK_MEDIA_PLAY_PAUSE.0 as u8),
+                    "pause" if playing => send_media_key(VK_MEDIA_PLAY_PAUSE.0 as u8),
+                    "play" | "pause" => return true,
+                    "toggle" => send_media_key(VK_MEDIA_PLAY_PAUSE.0 as u8),
+                    "next" => send_media_key(VK_MEDIA_NEXT_TRACK.0 as u8),
+                    "prev" => send_media_key(VK_MEDIA_PREV_TRACK.0 as u8),
+                    _ => return false,
+                }
+                notify_wake();
+                return true;
             }
         }
     }
@@ -849,6 +972,15 @@ pub fn volume_mute() {
     send_media_key(VK_VOLUME_MUTE.0 as u8);
 }
 
+fn emit_media_event<S: serde::Serialize + Clone>(app: &tauri::AppHandle, event: &str, payload: S) {
+    let _ = app.emit_to("main", event, payload.clone());
+    if let Some(settings) = app.get_webview_window("settings") {
+        if settings.is_visible().unwrap_or(false) && !settings.is_minimized().unwrap_or(false) {
+            let _ = app.emit_to("settings", event, payload);
+        }
+    }
+}
+
 /// Polls GSMTC and starts the measured WASAPI stream independently of media apps.
 fn media_event_snapshot(current: &Option<Value>) -> Value {
     let mut value=current.clone().unwrap_or(Value::Null);
@@ -899,6 +1031,7 @@ impl Drop for ManagerBinding {
 struct SessionBinding {
     session: GlobalSystemMediaTransportControlsSession,
     app_id: String,
+    raw_ptr: usize,
     media_token: Option<windows::Foundation::EventRegistrationToken>,
     playback_token: Option<windows::Foundation::EventRegistrationToken>,
     timeline_token: Option<windows::Foundation::EventRegistrationToken>,
@@ -906,6 +1039,7 @@ struct SessionBinding {
 
 impl SessionBinding {
     fn bind(session: GlobalSystemMediaTransportControlsSession, app_id: String) -> Self {
+        let raw_ptr = session.as_raw() as usize;
         let media_token = session
             .MediaPropertiesChanged(&TypedEventHandler::new(|_, _| {
                 notify_wake();
@@ -927,6 +1061,7 @@ impl SessionBinding {
         Self {
             session,
             app_id,
+            raw_ptr,
             media_token,
             playback_token,
             timeline_token,
@@ -1032,9 +1167,12 @@ pub fn start_media_loop(app: tauri::AppHandle) {
                         match active_session {
                             Some(sess) => {
                                 let app_id = sess.SourceAppUserModelId().unwrap_or_default().to_string();
+                                let raw_ptr = sess.as_raw() as usize;
+                                // Browsers (especially Yandex Browser / Chromium) replace the GSMTC
+                                // COM session object under the same AUMID when switching tabs.
                                 let same = session_binding
                                     .as_ref()
-                                    .is_some_and(|b| b.app_id == app_id);
+                                    .is_some_and(|b| b.app_id == app_id && b.raw_ptr == raw_ptr);
                                 if !same {
                                     session_binding = Some(SessionBinding::bind(sess, app_id));
                                 }
@@ -1083,7 +1221,7 @@ pub fn start_media_loop(app: tauri::AppHandle) {
                 if let Some(cover) = cover {
                     let pair = (key.clone(), cover.clone());
                     if last_cover.as_ref() != Some(&pair) {
-                        let _ = app_clone.emit("media:cover", json!({"key": key, "cover": cover}));
+                        emit_media_event(&app_clone, "media:cover", json!({"key": key, "cover": cover}));
                         last_cover = Some(pair);
                     }
                 } else if key_changed {
@@ -1113,7 +1251,8 @@ pub fn start_media_loop(app: tauri::AppHandle) {
                                     media["cover"] = json!(artwork);
                                     *LAST_COVER_CACHE.lock().unwrap() = Some((key_for_task.clone(), artwork.clone()));
                                     drop(current);
-                                    let _ = app_for_task.emit(
+                                    emit_media_event(
+                                        &app_for_task,
                                         "media:cover",
                                         json!({
                                             "key": key_for_task,
@@ -1139,7 +1278,7 @@ pub fn start_media_loop(app: tauri::AppHandle) {
                         Some(ref v) => v.clone(),
                         None => Value::Null,
                     };
-                    let _ = app_clone.emit("media:update", &payload);
+                    emit_media_event(&app_clone, "media:update", &payload);
                     last_key = key;
                     last_playing = is_playing;
                     last_payload = snapshot;
@@ -1159,6 +1298,13 @@ mod tests {
         assert!(super::matching_online_artwork(&data,"","Песня",180000).is_none());
         let insecure=json!({"results":[{"artistName":"Автор","trackName":"Песня","trackTimeMillis":180000,"artworkUrl100":"http://example.test/art.jpg"}]});
         assert!(super::matching_online_artwork(&insecure,"Автор","Песня",180000).is_none());
+    }
+    #[test] fn yandex_browser_and_yandex_music_have_distinct_names() {
+        assert_eq!(super::format_app_name("Yandex.OWPTABZ5EHFIKZ6HFNJOEQW6JI"), "Яндекс Браузер");
+        assert_eq!(super::format_app_name("YandexBrowser"), "Яндекс Браузер");
+        assert_eq!(super::format_app_name("woods.browser.yandex"), "Яндекс Браузер");
+        assert_eq!(super::format_app_name("ru.yandex.desktop.music"), "Яндекс Музыка");
+        assert_eq!(super::format_app_name("yandex.music"), "Яндекс Музыка");
     }
     #[test] fn connector_artwork_uses_only_the_same_song_and_never_replaces_its_own_cover() {
         let source=serde_json::json!({"title":"Песня","artist":"Автор","durationMs":180000,"cover":"native"});

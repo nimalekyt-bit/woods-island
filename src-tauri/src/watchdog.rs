@@ -42,6 +42,88 @@ extern "system" {
     fn QueryUnbiasedInterruptTime(unbiased_time: *mut u64) -> BOOL;
 }
 
+#[link(name = "user32")]
+extern "system" {
+    fn OpenInputDesktop(dwFlags: u32, fInherit: BOOL, dwDesiredAccess: u32) -> *mut std::ffi::c_void;
+    fn CloseDesktop(hDesktop: *mut std::ffi::c_void) -> BOOL;
+}
+
+/// Returns false when Windows is on the lock screen or UAC secure desktop, where
+/// WebView2 renderers are suspended by the OS and must not be killed by watchdog.
+fn desktop_interactive() -> bool {
+    unsafe {
+        // DESKTOP_READOBJECTS (0x0001) succeeds only on the interactive user desktop.
+        let desk = OpenInputDesktop(0, BOOL(0), 0x0001);
+        if desk.is_null() {
+            return false;
+        }
+        let _ = CloseDesktop(desk);
+        true
+    }
+}
+
+fn process_failed_kind_name(code: i32) -> &'static str {
+    match code {
+        0 => "browserProcessExited",
+        1 => "renderProcessExited",
+        2 => "renderProcessUnresponsive",
+        3 => "frameRenderProcessExited",
+        4 => "utilityProcessExited",
+        5 => "sandboxHelperProcessExited",
+        6 => "gpuProcessExited",
+        7 => "ppapiPluginProcessExited",
+        8 => "ppapiBrokerProcessExited",
+        _ => "unknownProcessFailed",
+    }
+}
+
+/// Attaches a native WebView2 `ProcessFailed` listener so renderer crashes (OOM /
+/// breakpoint / hang) log exact diagnostics and immediately trigger `Reload()` instead
+/// of silently stalling until the 90-second full process restart.
+pub fn attach_process_failed(window: &tauri::WebviewWindow) {
+    use webview2_com::ProcessFailedEventHandler;
+    let label = window.label().to_owned();
+    let app = window.app_handle().clone();
+    let _ = window.with_webview(move |platform| unsafe {
+        let Ok(core) = platform.controller().CoreWebView2() else {
+            return;
+        };
+        let mut token = 0i64;
+        let handler = ProcessFailedEventHandler::create(Box::new(move |sender, args| {
+            let mut kind = Default::default();
+            if let Some(args) = args {
+                let _ = args.ProcessFailedKind(&mut kind);
+            }
+            let code = kind.0;
+            let name = process_failed_kind_name(code);
+            crate::app_log(&format!(
+                "WebView2 ProcessFailed on '{label}': {name} (code={code})"
+            ));
+            // 1 = RenderProcessExited, 2 = RenderProcessUnresponsive, 3 = FrameRenderProcessExited
+            if matches!(code, 1 | 2 | 3) {
+                if let Some(core) = sender {
+                    let reloaded = core.Reload().is_ok();
+                    crate::app_log(&format!(
+                        "WebView2 immediate Reload() on '{label}' after {name}: ok={reloaded}"
+                    ));
+                    if label == "main" {
+                        if let Some(service) = app.try_state::<Arc<Service>>() {
+                            record_incident(
+                                &service,
+                                Reason::Page,
+                                Recovery::Navigate,
+                                if reloaded { "processFailedReload" } else { "processFailedReloadErr" },
+                            );
+                        }
+                    }
+                }
+            }
+            Ok(())
+        }));
+        let _ = core.add_ProcessFailed(&handler, &mut token);
+    });
+}
+
 const PARENT_PID: &str = "WOODS_WATCHDOG_PARENT_PID";
 const PARENT_CREATED: &str = "WOODS_WATCHDOG_PARENT_CREATED";
 const HANDOFF_NAME: &str = "WOODS_WATCHDOG_HANDOFF_EVENT";
@@ -289,15 +371,41 @@ fn limit(app: &AppHandle, service: &Service, reason: Reason, recovery: Recovery,
     *service.notice.lock().unwrap_or_else(|e| e.into_inner()) = Some(Notice::Limited);
     crate::storage::warn(notice_text(app, Notice::Limited));
 }
-fn main_url(app: &AppHandle) -> Result<tauri::Url, String> {
+fn main_url(app: &AppHandle, cache_bust: Option<u64>) -> Result<tauri::Url, String> {
+    let suffix = match cache_bust {
+        Some(ts) => format!("index.html?recover={ts}"),
+        None => "index.html".to_owned(),
+    };
     if tauri::is_dev() {
         if let Some(url) = &app.config().build.dev_url {
-            return url.join("index.html").map_err(|e| e.to_string());
+            return url.join(&suffix).map_err(|e| e.to_string());
         }
     }
     // The main window is always our local entry. The AI service lives in another
-    // webview. This also repairs an initial renderer stuck on about:blank.
-    tauri::Url::parse("http://tauri.localhost/index.html").map_err(|e| e.to_string())
+    // webview. Cache-busting forces WebView2 to recreate a dead/stalled document.
+    tauri::Url::parse(&format!("http://tauri.localhost/{suffix}")).map_err(|e| e.to_string())
+}
+
+fn recover_main_webview(app: &AppHandle, window: &tauri::WebviewWindow) -> Result<&'static str, String> {
+    let (tx, rx) = mpsc::channel::<bool>();
+    let dispatched = window
+        .with_webview(move |platform| unsafe {
+            let ok = platform
+                .controller()
+                .CoreWebView2()
+                .and_then(|core| core.Reload())
+                .is_ok();
+            let _ = tx.send(ok);
+        })
+        .is_ok();
+    if dispatched {
+        if let Ok(true) = rx.recv_timeout(Duration::from_secs(3)) {
+            return Ok("reload");
+        }
+    }
+    let url = main_url(app, Some(wall_ms()))?;
+    window.navigate(url).map_err(|e| e.to_string())?;
+    Ok("navigate")
 }
 
 /// Called from setup after the native main HWND is known. Idempotent per app.
@@ -334,8 +442,14 @@ pub fn start(app: AppHandle, hwnd: isize) -> bool {
                 match work{
                     Work::Probe(sequence)=>{let _=window.eval(format!("(()=>{{const api=window.__TAURI_INTERNALS__;if(api)void api.invoke('page_pong',{{sequence:{sequence},ready:!!document.querySelector('[data-island]')}}).catch(()=>{{}});}})()"));},
                     Work::Navigate=>{
-                        let result=main_url(&worker_app).and_then(|url|window.navigate(url).map_err(|e|e.to_string()));
-                        if result.is_err(){release_recovery();}
+                        let result = recover_main_webview(&worker_app, &window);
+                        match &result {
+                            Ok(method) => crate::app_log(&format!("Watchdog main recovery triggered via {method}")),
+                            Err(err) => {
+                                crate::app_log(&format!("Watchdog main recovery failed: {err}"));
+                                release_recovery();
+                            }
+                        }
                     }
                 }
             }
@@ -368,10 +482,11 @@ pub fn start(app: AppHandle, hwnd: isize) -> bool {
                 let fullscreen_occluded = responsive
                     && lock_monitor(&service).is_ready()
                     && crate::is_fullscreen_active();
+                let locked_desktop = responsive && !desktop_interactive();
                 let action = lock_monitor(&service).poll(
                     now,
                     responsive,
-                    is_protected() || fullscreen_occluded,
+                    is_protected() || fullscreen_occluded || locked_desktop,
                     !service.worker_busy.load(Ordering::SeqCst),
                 );
                 match action {
@@ -691,6 +806,15 @@ pub fn wait_for_predecessor() -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn process_failed_kind_names_are_mapped_cleanly() {
+        assert_eq!(process_failed_kind_name(0), "browserProcessExited");
+        assert_eq!(process_failed_kind_name(1), "renderProcessExited");
+        assert_eq!(process_failed_kind_name(2), "renderProcessUnresponsive");
+        assert_eq!(process_failed_kind_name(3), "frameRenderProcessExited");
+        assert_eq!(process_failed_kind_name(6), "gpuProcessExited");
+        assert_eq!(process_failed_kind_name(99), "unknownProcessFailed");
+    }
     #[test]
     fn current_process_has_a_stable_creation_identity() {
         let handle = unsafe { GetCurrentProcess() };

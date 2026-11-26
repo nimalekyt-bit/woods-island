@@ -11060,9 +11060,13 @@ function IslandApp() {
           (e.forEach(clearTimeout), (e = [0, 250, 700].map((ms, idx) => window.setTimeout(() => t(idx === 0), ms))));
         };
       (n(), window.addEventListener(`resize`, n));
+      let unlistenDpi = subscribeEvent(`island:dpi-changed`, () => {
+        lastScaleKey = "";
+        n();
+      });
       let r = window.setInterval(() => t(false), 3e3);
       return () => {
-        (e.forEach(clearTimeout), window.removeEventListener(`resize`, n), clearInterval(r));
+        (e.forEach(clearTimeout), window.removeEventListener(`resize`, n), clearInterval(r), void unlistenDpi.then((fn) => fn()));
       };
     }, []),
     (0, ReactRuntime.useEffect)(() => {
@@ -11151,12 +11155,17 @@ function IslandApp() {
       }
       const onResize = () => wake(650);
       window.addEventListener('resize', onResize);
+      const unlistenDpiRect = subscribeEvent('island:dpi-changed', () => {
+        t = "";
+        wake(700);
+      });
       return () => {
         disposed = true;
         if (e) cancelAnimationFrame(e);
         ro?.disconnect();
         mo?.disconnect();
         window.removeEventListener('resize', onResize);
+        void unlistenDpiRect.then((fn) => fn());
       };
     }, [s, c, D, k, te, re, spectrumBottom]));
   let A = useIslandStore(qj),

@@ -79,7 +79,20 @@ fn ensure_aux_window(app: &AppHandle, label: &str) -> Result<tauri::WebviewWindo
     let config = app.config().app.windows.iter().find(|config| config.label == label).ok_or("Window configuration unavailable")?;
     let window = tauri::WebviewWindowBuilder::from_config(app, config).map_err(|e|e.to_string())?.build().map_err(|e|e.to_string())?;
     if win::WindowManager::passive_qa() { window.set_focusable(false).map_err(|e|e.to_string())?; }
-    if label == "settings" { win::track_settings_visibility(&window)?; }
+    watchdog::attach_process_failed(&window);
+    if label == "settings" {
+        // On high-DPI screens (e.g. 4K @ 250-300%), clamp settings window cleanly inside the monitor work area.
+        if let Ok(Some(monitor)) = window.current_monitor().or_else(|_| app.primary_monitor()) {
+            let scale = monitor.scale_factor().max(1.0);
+            let max_w = ((monitor.size().width as f64 / scale) * 0.92).floor().max(660.0);
+            let max_h = ((monitor.size().height as f64 / scale) * 0.88).floor().max(480.0);
+            if config.width > max_w || config.height > max_h {
+                let _ = window.set_size(tauri::LogicalSize::new(config.width.min(max_w), config.height.min(max_h)));
+                let _ = window.center();
+            }
+        }
+        win::track_settings_visibility(&window)?;
+    }
     // Auxiliary windows close normally, releasing their renderer. Reopening creates
     // them from the same configuration; persisted settings and the image source remain native.
     Ok(window)
@@ -305,7 +318,7 @@ fn apply_island_geometry(app: &AppHandle, state: &AppState) -> Result<(), String
     let name = settings["monitor"].as_str().unwrap_or("");
     let monitor = monitors.iter().find(|m|m.name().map(|n|n==name).unwrap_or(false)).or(primary.as_ref()).or(monitors.first()).ok_or("Monitor unavailable")?;
     let hwnd = HWND(window.hwnd().map_err(|e|e.to_string())?.0 as _);
-    win::WindowManager::position_on_monitor(hwnd, monitor.position().x, monitor.position().y, monitor.size().width as i32, monitor.scale_factor(), zoom, settings["offsetX"].as_i64().unwrap_or(0).clamp(-10000,10000) as i32, settings["underTaskbar"].as_bool().unwrap_or(true), state.is_tall.load(Ordering::Relaxed));
+    win::WindowManager::position_on_monitor(hwnd, monitor.position().x, monitor.position().y, monitor.size().width as i32, monitor.size().height as i32, monitor.scale_factor(), zoom, settings["offsetX"].as_i64().unwrap_or(0).clamp(-10000,10000) as i32, settings["underTaskbar"].as_bool().unwrap_or(true), state.is_tall.load(Ordering::Relaxed));
     let rect = *state.island_rect.lock().unwrap();
     win::WindowManager::update_island_region(hwnd, if state.is_tucked.load(Ordering::Relaxed){None}else{Some((rect.x-4,0,rect.x+rect.w+4,rect.y+rect.h+6))});
     Ok(())
@@ -365,18 +378,27 @@ fn start_cursor_loop(app: AppHandle, state: Arc<AppState>) {
             // Cursor touching top 3 pixels near island activates edge unfold
             let at_top_edge = rel_y >= -2 && rel_y <= 3 && (rel_x >= (rect.x - 20) && rel_x <= (rect.x + rect.w + 20));
 
-            if !tucked && !hidden && rel_x > -150 && rel_x < 910 && rel_y > -100 && rel_y < 580 {
+            let canvas_css_w = (win_rect.right - win_rect.left) as f64 / scale;
+            let canvas_css_h = (win_rect.bottom - win_rect.top) as f64 / scale;
+            if !tucked
+                && !hidden
+                && (rel_x as f64) > -150.0
+                && (rel_x as f64) < canvas_css_w + 150.0
+                && (rel_y as f64) > -100.0
+                && (rel_y as f64) < canvas_css_h + 100.0
+            {
                 if last_near != Some((rel_x, rel_y)) {
                     last_near = Some((rel_x, rel_y));
-                    let canvas_center = (win_rect.right - win_rect.left) as f64 / scale / 2.0;
-                    let _ = app.emit("cursor:near", [rel_x as f64 - canvas_center, rel_y as f64]);
+                    let canvas_center = canvas_css_w / 2.0;
+                    // Target only "main" so hidden overlay / settings never receive 40Hz ExecuteScript churn.
+                    let _ = app.emit_to("main", "cursor:near", [rel_x as f64 - canvas_center, rel_y as f64]);
                 }
             } else {
                 last_near = None;
             }
             if rect.expanded {
                 let down = unsafe { windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(0x01) < 0 };
-                if down && !mouse_down && !inside_pill && !win::WindowManager::qa_input_disabled() { let _ = app.emit("outside-click", ()); }
+                if down && !mouse_down && !inside_pill && !win::WindowManager::qa_input_disabled() { let _ = app.emit_to("main", "outside-click", ()); }
                 mouse_down = down;
             } else {
                 mouse_down = false;
@@ -385,13 +407,13 @@ fn start_cursor_loop(app: AppHandle, state: Arc<AppState>) {
             win::WindowManager::set_hover_passthrough(!inside_pill);
             if inside_pill != is_hovered {
                 is_hovered = inside_pill;
-                let _ = app.emit("hover", is_hovered);
+                let _ = app.emit_to("main", "hover", is_hovered);
             }
 
             let at_top_edge = at_top_edge && allow_edge;
             if at_top_edge != is_edge {
                 is_edge = at_top_edge;
-                let _ = app.emit("island:edge", is_edge);
+                let _ = app.emit_to("main", "island:edge", is_edge);
             }
             let check_interval = if (tucked || hidden) && ISLAND_FULLSCREEN.load(Ordering::Relaxed) {
                 std::time::Duration::from_millis(800)
@@ -435,13 +457,14 @@ fn start_cursor_loop(app: AppHandle, state: Arc<AppState>) {
                 if FULLSCREEN_SHORTCUTS.swap(suspend,Ordering::Relaxed)!=suspend {let errors=register_hotkeys(&app,settings);*state.hotkey_errors.lock().unwrap()=errors;}
                 let context_key = json!([context,settings["hideInFullscreen"],settings["hideForApps"],settings["keepForApps"],settings["hideOnlyUnder"],settings["fullscreenEdge"]]);
                 if context_key != last_context {
-                    let _ = app.emit("fullscreen", policy.fullscreen);
-                    let _ = app.emit("island:shy", policy.shy);
-                    let _ = app.emit("island:keep", policy.keep);
-                    let _ = app.emit("island:desktop", policy.desktop);
+                    let _ = app.emit_to("main", "fullscreen", policy.fullscreen);
+                    let _ = app.emit_to("main", "island:shy", policy.shy);
+                    let _ = app.emit_to("main", "island:keep", policy.keep);
+                    let _ = app.emit_to("main", "island:desktop", policy.desktop);
                     last_context = context_key;
                 }
-                if settings_changed || last_monitor_check.elapsed() >= std::time::Duration::from_secs(3) {
+                let dpi_dirty = win::WindowManager::take_dpi_dirty();
+                if dpi_dirty || settings_changed || last_monitor_check.elapsed() >= std::time::Duration::from_secs(3) {
                     last_monitor_check = std::time::Instant::now();
                     let monitors = app.available_monitors().unwrap_or_default();
                     let name = settings["monitor"].as_str().unwrap_or("");
@@ -449,9 +472,13 @@ fn start_cursor_loop(app: AppHandle, state: Arc<AppState>) {
                     let primary = app.primary_monitor().ok().flatten();
                     if let Some(monitor) = chosen.or(primary.as_ref()).or(monitors.first()) {
                         let key = format!("{}|{}|{}|{}|{:?}|{:?}|{}", settings["scale"], settings["monitor"], settings["offsetX"], settings["underTaskbar"], monitor.position(), monitor.size(), monitor.scale_factor());
-                        if key != geometry_key {
+                        if dpi_dirty || key != geometry_key {
                             geometry_key = key;
-                            if let Err(e) = apply_island_geometry(&app, &state) { app_log(&format!("Island geometry: {e}")); }
+                            if let Err(e) = apply_island_geometry(&app, &state) {
+                                app_log(&format!("Island geometry: {e}"));
+                            } else if dpi_dirty {
+                                let _ = app.emit_to("main", "island:dpi-changed", monitor.scale_factor());
+                            }
                         }
                     }
                 }
@@ -1371,7 +1398,39 @@ fn chime(sound:Option<String>,state:tauri::State<'_, Arc<AppState>>)->bool{let s
 fn chime_try(sound:Option<String>)->bool{play_chime(sound.as_deref())}
 
 #[tauri::command]
-fn capture_start(mode:Option<String>,app:AppHandle,state:tauri::State<'_, Arc<AppState>>)->Result<bool,String>{let mode=mode.unwrap_or_else(||"area".into());let rect=capture::screen_rect();let mut visibility=capture::hide_main(&app);std::thread::sleep(std::time::Duration::from_millis(70));let image=capture::screenshot(rect)?;capture::set_frame(&image);if mode=="screen"{let settings=state.settings.lock().unwrap().clone();let result=capture::save(&image,&settings)?;capture::clear_frame();let _=clipboard::set_png(&capture::data_url(&image)?);let _=app.emit("capture:done",result);if let Some(main)=app.get_window("main"){let _=main.show();}return Ok(true);}let overlay=app.get_webview_window("overlay").ok_or("Capture overlay is unavailable")?;overlay.set_position(tauri::PhysicalPosition::new(rect.left,rect.top)).map_err(|e|e.to_string())?;overlay.set_size(tauri::PhysicalSize::new((rect.right-rect.left) as u32,(rect.bottom-rect.top) as u32)).map_err(|e|e.to_string())?;let frame=capture::data_url(&image)?;let _=app.emit_to("overlay","overlay:start",json!({"mode":mode,"frame":frame,"below":0}));overlay.show().map_err(|e|e.to_string())?;if !win::WindowManager::passive_qa(){overlay.set_focus().map_err(|e|e.to_string())?;}visibility.keep_hidden();Ok(true)}
+fn capture_start(mode:Option<String>,app:AppHandle,state:tauri::State<'_, Arc<AppState>>)->Result<bool,String>{
+    let mode=mode.unwrap_or_else(||"area".into());
+    let rect=capture::screen_rect();
+    let mut visibility=capture::hide_main(&app);
+    std::thread::sleep(std::time::Duration::from_millis(70));
+    let image=capture::screenshot(rect)?;
+    let shared=capture::set_frame(image);
+    if mode=="screen"{
+        let settings=state.settings.lock().unwrap().clone();
+        let result=capture::save(shared.as_ref(),&settings)?;
+        let encoded=capture::data_url(shared.as_ref())?;
+        capture::clear_frame();
+        let _=clipboard::set_png(&encoded);
+        let _=app.emit("capture:done",result);
+        if let Some(main)=app.get_window("main"){let _=main.show();}
+        return Ok(true);
+    }
+    let overlay=app.get_webview_window("overlay").ok_or("Capture overlay is unavailable")?;
+    let pos=tauri::PhysicalPosition::new(rect.left,rect.top);
+    let size=tauri::PhysicalSize::new((rect.right-rect.left) as u32,(rect.bottom-rect.top) as u32);
+    // On mixed-DPI 4K multi-monitor layouts, moving across monitors triggers WM_DPICHANGED
+    // which can rescale the window; applying position + size twice guarantees exact physical coverage.
+    overlay.set_position(pos).map_err(|e|e.to_string())?;
+    overlay.set_size(size).map_err(|e|e.to_string())?;
+    let _=overlay.set_position(pos);
+    let _=overlay.set_size(size);
+    let frame=capture::data_url(shared.as_ref())?;
+    let _=app.emit_to("overlay","overlay:start",json!({"mode":mode,"frame":frame,"below":0}));
+    overlay.show().map_err(|e|e.to_string())?;
+    if !win::WindowManager::passive_qa(){overlay.set_focus().map_err(|e|e.to_string())?;}
+    visibility.keep_hidden();
+    Ok(true)
+}
 
 static OVERLAY_TOKEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 static OVERLAY_LEAVE: std::sync::Mutex<Option<(u64, std::sync::mpsc::Sender<()>)>> = std::sync::Mutex::new(None);
@@ -1859,6 +1918,9 @@ pub fn run() {
                     app_log("setup_island_window completed");
                     window.set_content_protected(!state_clone.settings.lock().unwrap()["captureVisible"].as_bool().unwrap_or(false))?;
                     apply_island_geometry(app.handle(), &state_clone).map_err(std::io::Error::other)?;
+                    if let Some(main_webview) = app.get_webview_window("main") {
+                        watchdog::attach_process_failed(&main_webview);
+                    }
                     watchdog::start(app.handle().clone(), hwnd_val);
                     snow_surface::start(app.handle().clone(),state_clone.clone());
                     appbar::start(app.handle().clone(),state_clone.clone(),apply_island_geometry);

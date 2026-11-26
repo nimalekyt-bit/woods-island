@@ -3,7 +3,7 @@ pub mod process_loopback;
 use rustfft::{num_complex::Complex, Fft, FftPlanner};
 use serde_json::{json, Value};
 use std::{collections::VecDeque, sync::{Arc,atomic::{AtomicBool,Ordering}}, time::{Duration, Instant}};
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 use windows::{core::{GUID, Interface, PCWSTR, PWSTR}, Win32::{
     Devices::FunctionDiscovery::PKEY_Device_FriendlyName,
     Foundation::RPC_E_CHANGED_MODE,
@@ -211,8 +211,12 @@ unsafe fn player_audio_session(active_only: bool) -> Result<(IMMDevice, IAudioSe
         .and_then(|m|m["app"].as_str().map(str::to_owned))
         .ok_or("Нет активного плеера")?
         .to_lowercase();
-    let aliases = ["yandex","spotify","chrome","msedge","firefox","opera","telegram","ayugram","vlc","aimp","foobar"];
+    let aliases = ["yandex","spotify","chrome","msedge","firefox","opera","brave","vivaldi","telegram","ayugram","vlc","aimp","foobar"];
     let alias = aliases.iter().find(|alias|app.contains(**alias)).copied();
+    let is_yandex_browser = app == "woods.browser.yandex"
+        || (app.starts_with("yandex.") && !app.contains("music"))
+        || app.contains("yandexbrowser")
+        || app == "browser.exe";
     let all = enumerator().map_err(|e|e.to_string())?.EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE).map_err(|e|e.to_string())?;
     for index in 0..all.GetCount().map_err(|e|e.to_string())? {
         let device = all.Item(index).map_err(|e|e.to_string())?;
@@ -223,10 +227,14 @@ unsafe fn player_audio_session(active_only: bool) -> Result<(IMMDevice, IAudioSe
             if active_only && control.GetState().map_err(|e|e.to_string())? != AudioSessionStateActive {continue;}
             let extended: IAudioSessionControl2 = control.cast().map_err(|e|e.to_string())?;
             let identifier = owned_string(extended.GetSessionIdentifier().map_err(|e|e.to_string())?).to_lowercase();
-            let matching=alias.map(|a|identifier.contains(a)).unwrap_or_else(||identifier.contains(&app));
-            // Yandex Browser and Yandex Music share a vendor name. A music
-            // player's slider must not silently change the browser's volume.
-            let matching=matching && !(app.contains("yandex")&&app.contains("music")&&!identifier.contains("music"));
+            let matching = if is_yandex_browser {
+                identifier.contains("yandexbrowser") || (identifier.contains("yandex") && identifier.contains("browser.exe"))
+            } else {
+                let base = alias.map(|a|identifier.contains(a)).unwrap_or_else(||identifier.contains(&app));
+                // Yandex Browser and Yandex Music share a vendor name. A music
+                // player's slider must not silently change the browser's volume.
+                base && !(app.contains("yandex")&&app.contains("music")&&!identifier.contains("music"))
+            };
             if matching {
                 return Ok((device, control));
             }
@@ -448,6 +456,20 @@ unsafe fn open_process_loopback(pid: u32) -> Result<(IAudioClient, SampleFormat,
     ))
 }
 
+/// Deliver high-frequency spectrum samples only to windows that actually render them
+/// (`main`, plus `settings` only while visible) so hidden windows (`overlay`, closed
+/// settings) never accumulate WebView2 ExecuteScript evaluations.
+fn emit_spectrum(app: &tauri::AppHandle, bands: [f32; BAND_COUNT], level: f32) {
+    let _ = app.emit_to("main", "media:bands", bands);
+    let _ = app.emit_to("main", "media:level", level);
+    if let Some(settings) = app.get_webview_window("settings") {
+        if settings.is_visible().unwrap_or(false) && !settings.is_minimized().unwrap_or(false) {
+            let _ = app.emit_to("settings", "media:bands", bands);
+            let _ = app.emit_to("settings", "media:level", level);
+        }
+    }
+}
+
 unsafe fn capture_session(app:&tauri::AppHandle, failed_pid: &mut Option<u32>)->Result<(),String> {
     let explicit_output = SELECTED_OUTPUT.lock().unwrap().is_some();
     let target_pid = if explicit_output { None } else { active_player_pid().filter(|pid| Some(*pid) != *failed_pid) };
@@ -521,7 +543,7 @@ unsafe fn capture_session(app:&tauri::AppHandle, failed_pid: &mut Option<u32>)->
                 // The UI uses bandsAt to distinguish live audio from a stopped capture.
                 // Keep steady nonzero signals fresh; only deduplicate complete silence.
                 if sample != ([0.; BAND_COUNT],0.) || last_sample != Some(sample) {
-                    let _=app.emit("media:bands",sample.0);let _=app.emit("media:level",sample.1);
+                    emit_spectrum(app, sample.0, sample.1);
                     last_sample=Some(sample);
                 }
                 emitted=Instant::now();
@@ -648,8 +670,8 @@ pub fn start_loopback(app:tauri::AppHandle) {
             if !spectrum_active() { std::thread::sleep(Duration::from_millis(250)); continue; }
             let outcome=unsafe{capture_session(&app, &mut failed_pid)};
             let failed=outcome.is_err();
-            if let Err(error)=outcome {let _=app.emit("audio:error",error);}
-            let _=app.emit("media:bands",[0.; BAND_COUNT]);let _=app.emit("media:level",0.);
+            if let Err(error)=outcome {let _=app.emit_to("main","audio:error",error);}
+            emit_spectrum(&app, [0.; BAND_COUNT], 0.);
             if failed { std::thread::sleep(Duration::from_secs(1)); }
         }
     });
