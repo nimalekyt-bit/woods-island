@@ -109,6 +109,7 @@ export interface Settings {
   showNotifications: boolean;
   notifyMuted: string[];
   paletteFiles: boolean;
+  paletteEverything: boolean;
   paletteFolders: string[];
   hideForApps: string[];
   keepForApps: string[];
@@ -349,6 +350,7 @@ export interface RustCommands {
   editor_save: { args: { dataUrl?: string | null; copy?: boolean | null }; result: boolean };
   editor_image: { args: {  }; result: JsonValue };
   files_held: { args: {  }; result: Array<JsonValue> };
+  everything_status: { args: {  }; result: JsonValue };
   files_search: { args: { query?: string | null }; result: Array<JsonValue> };
   files_warm: { args: {  }; result: boolean };
   attach_data: { args: { name?: string | null; data?: string | null }; result: JsonValue };

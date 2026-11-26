@@ -21,6 +21,7 @@ pub mod notes;
 pub mod ai;
 mod ai_http;
 pub mod capture;
+pub mod everything;
 pub mod system;
 mod app_inventory;
 pub mod clipboard;
@@ -242,6 +243,7 @@ fn default_settings() -> Value {
     "showNotifications": false,
     "notifyMuted": [],
     "paletteFiles": true,
+    "paletteEverything": true,
     "paletteFolders": [],
     "hideForApps": [],
     "keepForApps": [],
@@ -1588,13 +1590,35 @@ fn editor_image()->Result<Value,String>{capture::editor_image().map(|url|json!({
 fn files_held()->Vec<Value>{system::recent()}
 
 #[tauri::command]
+async fn everything_status() -> Value {
+    tauri::async_runtime::spawn_blocking(|| json!({ "available": everything::is_available() }))
+        .await
+        .unwrap_or_else(|_| json!({ "available": false }))
+}
+
+#[tauri::command]
 async fn files_search(query: Option<String>, app: AppHandle) -> Vec<Value> {
     let state = app.state::<Arc<AppState>>();
-    let folders = state.settings.lock().unwrap()["paletteFolders"].as_array()
-        .map(|list| list.iter().filter_map(Value::as_str).map(str::to_owned).collect::<Vec<_>>())
-        .unwrap_or_default();
-    tauri::async_runtime::spawn_blocking(move || system::search_files(&query.unwrap_or_default(), &folders))
-        .await.unwrap_or_default()
+    let (use_everything, folders) = {
+        let s = state.settings.lock().unwrap();
+        let ev = s["paletteEverything"].as_bool().unwrap_or(true);
+        let dirs = s["paletteFolders"]
+            .as_array()
+            .map(|list| list.iter().filter_map(Value::as_str).map(str::to_owned).collect::<Vec<_>>())
+            .unwrap_or_default();
+        (ev, dirs)
+    };
+    let q = query.unwrap_or_default();
+    tauri::async_runtime::spawn_blocking(move || {
+        if use_everything {
+            if let Some(results) = everything::search(&q, 50) {
+                return results;
+            }
+        }
+        system::search_files(&q, &folders)
+    })
+    .await
+    .unwrap_or_default()
 }
 
 #[tauri::command]
@@ -2207,6 +2231,7 @@ pub fn run() {
             editor_save,
             editor_image,
             files_held,
+            everything_status,
             files_search,
             files_warm,
             attach_data,

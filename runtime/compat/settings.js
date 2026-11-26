@@ -4441,6 +4441,19 @@ function zt() {
                         }),
                       }),
                       e.paletteFiles !== !1 &&
+                        (0, U.jsx)(J, {
+                          since: `1.5.0`,
+                          title: n(`Использовать Everything (поиск по всему ПК)`, `Use Everything (instant PC-wide search)`),
+                          hint: n(
+                            `Если установлен и запущен Voidtools Everything, Alt+Space мгновенно ищет по всем дискам; иначе автоматически работает встроенный поиск по папкам ниже`,
+                            `When Voidtools Everything is running, Alt+Space searches all drives instantly; otherwise it automatically falls back to the folder scan below`,
+                          ),
+                          children: (0, U.jsx)(Y, {
+                            value: e.paletteEverything !== !1,
+                            onChange: (v) => H({ paletteEverything: v }),
+                          }),
+                        }),
+                      e.paletteFiles !== !1 &&
                         (0, U.jsxs)(`div`, {
                           className: `flex flex-col gap-2 px-4 py-3`,
                           children: [
