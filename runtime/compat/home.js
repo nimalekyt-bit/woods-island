@@ -2123,6 +2123,7 @@ function pm() {
         (e.settings?.agentsStatus !== !1 && e.agents.length > 0) ||
         (e.downloads.length > 0 && e.settings?.downloadsInPill === `badge`) || compactIndicatorWidth(e.settings,e.peripherals)>0,
     ),
+    hasCompact = useIslandStore((e) => compactIndicatorWidth(e.settings, e.peripherals) > 0),
     u = useIslandStore((e) => (e.settings?.moduleShelf === !1 ? 0 : e.shelf.length)),
     p = lm() && (0, jsxRuntime.jsx)(cm, {}),
     m = o && (0, jsxRuntime.jsx)($p, {}),
@@ -2167,6 +2168,35 @@ function pm() {
             className: `flex items-center gap-2 justify-self-end`,
             children: [v, e.right.map(t)],
           }),
+        ],
+      });
+    }
+    if (hasCompact) {
+      return (0, jsxRuntime.jsxs)(`div`, {
+        className: `flex h-full items-center justify-center gap-2.5 pr-3.5 pl-3`,
+        children: [
+          (a || g) &&
+            (0, jsxRuntime.jsxs)(`span`, {
+              className: `flex shrink-0 items-center gap-2`,
+              children: [a && (0, jsxRuntime.jsx)(Jp, { sky: a.sky, night: a.night, size: 20, still: !0 }), g],
+            }),
+          (p || m || h) &&
+            (0, jsxRuntime.jsxs)(`span`, {
+              className: `flex shrink-0 items-center gap-2`,
+              children: [p, m, h],
+            }),
+          (v || a) &&
+            (0, jsxRuntime.jsxs)(`span`, {
+              className: `flex shrink-0 items-center gap-2`,
+              children: [
+                v,
+                a &&
+                  (0, jsxRuntime.jsx)(`span`, {
+                    className: `tabular text-[12.5px] font-semibold text-ink`,
+                    children: a.temp,
+                  }),
+              ],
+            }),
         ],
       });
     }

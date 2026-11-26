@@ -40,6 +40,11 @@ test('A short lyric releases the unused title-width reservation while keeping a 
   assert.equal(sizing.lyricsMediaSize({words:96,compact:244})[0]>368,true);
 });
 
+test('Compact PC load indicators use a single balanced row instead of doubling the wide side', () => {
+  assert.deepEqual(sizing.idleSize({ clock: true, weather: true, compact: 328 }), [470, 30]);
+  assert.deepEqual(sizing.idleSize({ clock: true, compact: 244 }), [318, 30]);
+});
+
 test('Palette, expansion, dictation and alerts retain priority over playback', () => {
   const state = fixture({ palette: true, expanded: true, dictating: true, peek: true, recording: true,
     updating: true, downloads: true, mediaLive: true, shelfCount: 2, status: true });

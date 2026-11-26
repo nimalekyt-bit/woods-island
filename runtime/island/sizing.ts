@@ -95,7 +95,15 @@ export function idleSize(options: WidgetSizing): Size {
     return [occupied > 0 ? 8 + (options.slot ?? 60) + 12 + occupied : rest, options.big ? 44 : SLOT[1]];
   }
   const center = append(append(timer, clock), options.battery ? BATTERY : 0);
-  const side = Math.max(append(options.weather ? 20 : 0, input), append(options.weather ? 30 : 0, status));
+  const left = append(options.weather ? 20 : 0, input);
+  const right = append(options.weather ? 30 : 0, status);
+  if ((options.compact ?? 0) > 0) {
+    const row = [left, center, right]
+      .filter(width => width > 0)
+      .reduce((sum, width, index) => sum + (index > 0 ? GAP : 0) + width, 0);
+    return [Math.max(IDLE[0], 26 + row), IDLE[1]];
+  }
+  const side = Math.max(left, right);
   const sides = side > 0 ? 2 * (side + (center > 0 ? GAP : 0)) : 0;
   return [Math.max(IDLE[0], 26 + center + sides), IDLE[1]];
 }

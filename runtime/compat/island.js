@@ -10485,13 +10485,12 @@ var Bj = 700,
   Vj = { type: `spring`, stiffness: 420, damping: 34, mass: 0.9 },
   Hj = { type: `spring`, stiffness: 300, damping: 34, mass: 0.9 },
   Uj = {
-    initial: { opacity: 0, scale: 0.985 },
+    initial: { opacity: 0 },
     animate: {
       opacity: 1,
-      scale: 1,
       transition: { delay: 0.03, duration: 0.18, ease: [0.2, 0.8, 0.2, 1] },
     },
-    exit: { opacity: 0, scale: 0.99, transition: { duration: 0.08 } },
+    exit: { opacity: 0, transition: { duration: 0.08 } },
   };
 function useIslandGeometry(e) {
   let t = useIslandStore((e) => e.palette),
