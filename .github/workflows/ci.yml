@@ -17,6 +17,32 @@ concurrency:
   group: windows-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  frontend:
+    if: github.event_name != 'workflow_dispatch' || inputs.artifact_run_id == ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Build bundled frontend runtime
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+      - name: Upload bundled frontend dist
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: woods-island-frontend-dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 1
   checks:
     if: github.event_name != 'workflow_dispatch' || inputs.artifact_run_id == ''
     runs-on: windows-latest
@@ -55,6 +81,7 @@ jobs:
           node scripts/verify-web-ai-ui.cjs
   rust-tests:
     if: github.event_name != 'workflow_dispatch' || inputs.artifact_run_id == ''
+    needs: [frontend]
     runs-on: windows-latest
     timeout-minutes: 30
     env:
@@ -66,18 +93,11 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - name: Download bundled frontend dist
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          version: 10.33.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - name: Build bundled frontend for Tauri context
-        run: |
-          pnpm install --frozen-lockfile
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          pnpm build
+          name: woods-island-frontend-dist
+          path: dist
       - name: Install verified Rust toolchain
         run: rustup toolchain install 1.98.1 --profile minimal
       - name: Cache compiler outputs
@@ -97,8 +117,9 @@ jobs:
         run: sccache --show-stats
   windows:
     if: github.event_name != 'workflow_dispatch' || inputs.artifact_run_id == ''
+    needs: [frontend]
     runs-on: windows-latest
-    timeout-minutes: 50
+    timeout-minutes: 40
     env:
       RUSTC_WRAPPER: sccache
       SCCACHE_GHA_ENABLED: 'true'
@@ -108,18 +129,14 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-        with:
-          version: 10.33.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
-          cache: pnpm
-      - name: Build bundled frontend runtime
-        run: |
-          pnpm install --frozen-lockfile
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          pnpm build
+      - name: Download bundled frontend dist
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: woods-island-frontend-dist
+          path: dist
       - name: Install verified Rust toolchain
         run: rustup toolchain install 1.98.1 --profile minimal
       - name: Cache compiler outputs
@@ -133,15 +150,16 @@ jobs:
           workspaces: src-tauri -> target
           cache-on-failure: true
       - name: Build Windows executable
-        run: cargo +1.98.1 build --release --locked -j 4 --manifest-path src-tauri/Cargo.toml
+        shell: pwsh
+        run: |
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            cargo +1.98.1 build --release --locked -j 4 --bins --example verify-update-package --manifest-path src-tauri/Cargo.toml
+          } else {
+            cargo +1.98.1 build --release --locked -j 4 --manifest-path src-tauri/Cargo.toml
+          }
       - name: Report compiler cache statistics
         if: always()
         run: sccache --show-stats
-      - name: Verify native feature integration and bundled runtime
-        shell: pwsh
-        env:
-          WOODS_TEST_FILTER: 'Upstream controls|Control Center|Launcher shortcuts|Bundled runtime|Settings merge|Weather cities|AI proxy keeps|Open application|ChatGPT is|Hidden media|Reminder named|Woods About|Screen snow|Notch AppBar|Phone transfer|Free Woods|Voice command|Torrent download|Browser final-name|Steam progress|AI models|No unhandled|Explicit quit'
-        run: ./scripts/verify-runtime-hosted.ps1 -Executable src-tauri/target/release/woods-island.exe
       - name: Verify native Windows icons
         run: node scripts/verify-windows-icons.mjs src-tauri/icons/icon.ico src-tauri/target/release/woods-island.exe src-tauri/target/release/woods-island-pet-import.exe
       - name: Upload Windows executable
@@ -151,6 +169,69 @@ jobs:
           path: src-tauri/target/release/woods-island.exe
           if-no-files-found: error
           retention-days: 14
+      - name: Stage packaging extras
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist-build-extras -Force | Out-Null
+          Copy-Item -LiteralPath src-tauri/target/release/woods-island-pet-import.exe -Destination dist-build-extras/woods-island-pet-import.exe
+          Copy-Item -LiteralPath src-tauri/target/release/examples/verify-update-package.exe -Destination dist-build-extras/verify-update-package.exe
+          $sdk=@(Get-ChildItem -Path "$env:USERPROFILE/.cargo/registry/src/*/webview2-com-sys-*/x64/WebView2Loader.dll" -File)
+          if ($sdk.Count -ne 1) { throw 'Expected one x64 WebView2 SDK loader' }
+          Copy-Item -LiteralPath $sdk[0].FullName -Destination dist-build-extras/WebView2Loader.dll
+      - name: Upload packaging extras
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: woods-island-build-extras
+          path: dist-build-extras/
+          if-no-files-found: error
+          retention-days: 1
+  runtime-qa:
+    if: github.event_name != 'workflow_dispatch' || inputs.artifact_run_id == ''
+    needs: [windows]
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install QA dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Download Windows executable
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: woods-island-windows-exe
+          path: src-tauri/target/release
+      - name: Verify native feature integration and bundled runtime
+        shell: pwsh
+        env:
+          WOODS_TEST_FILTER: 'Upstream controls|Control Center|Launcher shortcuts|Bundled runtime|Settings merge|Weather cities|AI proxy keeps|Open application|ChatGPT is|Hidden media|Reminder named|Woods About|Screen snow|Notch AppBar|Phone transfer|Free Woods|Voice command|Torrent download|Browser final-name|Steam progress|AI models|No unhandled|Explicit quit'
+        run: ./scripts/verify-runtime-hosted.ps1 -Executable src-tauri/target/release/woods-island.exe
+  peripherals-qa:
+    if: github.event_name != 'workflow_dispatch' || inputs.artifact_run_id == ''
+    needs: [windows]
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Download Windows executable
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: woods-island-windows-exe
+          path: src-tauri/target/release
       - name: Verify peripheral UI and scroll recovery
         shell: pwsh
         run: ./scripts/verify-peripherals-hosted.ps1 -Executable src-tauri/target/release/woods-island.exe
@@ -164,12 +245,59 @@ jobs:
             ${{ runner.temp }}/woods-peripherals-*/*.png
           if-no-files-found: warn
           retention-days: 7
+  package:
+    if: github.event_name == 'workflow_dispatch' && inputs.artifact_run_id == ''
+    needs: [windows]
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install packaging CLI
+        run: pnpm install --frozen-lockfile
+      - name: Download bundled frontend dist
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: woods-island-frontend-dist
+          path: dist
+      - name: Download Windows executable
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: woods-island-windows-exe
+          path: src-tauri/target/release
+      - name: Download packaging extras
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: woods-island-build-extras
+          path: dist-build-extras
+      - name: Place helper binary for packaging
+        shell: pwsh
+        run: Copy-Item -LiteralPath dist-build-extras/woods-island-pet-import.exe -Destination src-tauri/target/release/woods-island-pet-import.exe
+      - name: Cache verified recording tools
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            src-tauri/resources/bin/ffmpeg.exe
+            src-tauri/resources/bin/ffprobe.exe
+          key: recording-tools-3256173f-f0d36ecb
+      - name: Cache Tauri NSIS bundler tools
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/AppData/Local/tauri
+          key: tauri-nsis-tools-v1-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: tauri-nsis-tools-v1-
       - name: Prepare recording tools
-        if: github.event_name == 'workflow_dispatch'
         shell: pwsh
         run: ./scripts/prepare-recording-tools.ps1
       - name: Package Windows portable
-        if: github.event_name == 'workflow_dispatch'
         shell: pwsh
         run: |
           node scripts/package-portable.mjs
@@ -178,18 +306,14 @@ jobs:
           New-Item -ItemType Directory -Path dist-installer -Force | Out-Null
           Compress-Archive -Path dist-portable/* -DestinationPath "dist-installer/Woods-Island-$version-windows-x64-portable.zip"
       - name: Package Windows installer
-        if: github.event_name == 'workflow_dispatch'
         shell: pwsh
         run: |
           $exe='src-tauri/target/release/woods-island.exe'
           $sha=(Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
           node scripts/package-installer.mjs --expected-sha256 $sha
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $sdk=@(Get-ChildItem -Path "$env:USERPROFILE/.cargo/registry/src/*/webview2-com-sys-*/x64/WebView2Loader.dll" -File)
-          if ($sdk.Count -ne 1) { throw 'Expected one x64 WebView2 SDK loader' }
-          Copy-Item -LiteralPath $sdk[0].FullName -Destination dist-installer/WebView2Loader.dll
+          Copy-Item -LiteralPath dist-build-extras/WebView2Loader.dll -Destination dist-installer/WebView2Loader.dll
       - name: Sign and verify updater package
-        if: github.event_name == 'workflow_dispatch'
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
@@ -200,10 +324,9 @@ jobs:
           node scripts/package-updater.mjs $setup[0].FullName
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $manifest=Join-Path $setup[0].DirectoryName 'latest.json'
-          cargo +1.98.1 run --release --locked -j 4 --manifest-path src-tauri/Cargo.toml --example verify-update-package -- $manifest $setup[0].FullName
+          & dist-build-extras/verify-update-package.exe $manifest $setup[0].FullName
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Upload installer payload
-        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: woods-island-installer
@@ -211,8 +334,8 @@ jobs:
           if-no-files-found: error
           retention-days: 7
   installer:
-    if: always() && github.event_name == 'workflow_dispatch' && ((needs.checks.result == 'success' && needs.rust-tests.result == 'success' && needs.windows.result == 'success') || inputs.artifact_run_id != '')
-    needs: [checks, rust-tests, windows]
+    if: always() && github.event_name == 'workflow_dispatch' && ((needs.checks.result == 'success' && needs.rust-tests.result == 'success' && needs.windows.result == 'success' && needs.package.result == 'success') || inputs.artifact_run_id != '')
+    needs: [checks, rust-tests, windows, package]
     runs-on: windows-latest
     timeout-minutes: 20
     strategy:
@@ -251,19 +374,19 @@ jobs:
           }
           $previousRoot=Join-Path $env:RUNNER_TEMP ('woods-previous-release-'+[guid]::NewGuid().ToString('N'))
           New-Item -ItemType Directory -Path $previousRoot | Out-Null
-          $setupName='Woods-Island-1.4.1-windows-x64-Setup.exe'
-          $portableName='Woods-Island-1.4.1-windows-x64-portable.zip'
-          gh release download v1.4.1 --repo $env:GITHUB_REPOSITORY --pattern $setupName --pattern $portableName --dir $previousRoot
+          $setupName='Woods-Island-1.4.2-windows-x64-Setup.exe'
+          $portableName='Woods-Island-1.4.2-windows-x64-portable.zip'
+          gh release download v1.4.2 --repo $env:GITHUB_REPOSITORY --pattern $setupName --pattern $portableName --dir $previousRoot
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $previousSetup=Join-Path $previousRoot $setupName
           $previousPortable=Join-Path $previousRoot $portableName
-          if ((Get-FileHash -LiteralPath $previousSetup -Algorithm SHA256).Hash.ToLowerInvariant() -ne '5f980070faf52682c6432a0308bd519546e3ed52edd2d3226168a6601f1afe5b') { throw 'Previous Setup differs from the accepted public 1.4.1 bytes' }
-          if ((Get-FileHash -LiteralPath $previousPortable -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'cb435b78dfd3d858aa6501fa6f4d3730dd6f381d356fae8d0349634480631070') { throw 'Previous portable differs from the accepted public 1.4.1 bytes' }
+          if ((Get-FileHash -LiteralPath $previousSetup -Algorithm SHA256).Hash.ToLowerInvariant() -ne '57752f0c3d446c26b6bb0746a1154661e8fb9bf37a7e1e1f56ca865287e2a8c8') { throw 'Previous Setup differs from the accepted public 1.4.2 bytes' }
+          if ((Get-FileHash -LiteralPath $previousPortable -Algorithm SHA256).Hash.ToLowerInvariant() -ne '7974d1cbf2488f960c3e3cb74ddeb2cf1810dc7b906e2fb60dab706e9397cfde') { throw 'Previous portable differs from the accepted public 1.4.2 bytes' }
           $portableRoot=Join-Path $previousRoot 'portable'
           Expand-Archive -LiteralPath $previousPortable -DestinationPath $portableRoot
           $previousExe=@(Get-ChildItem -LiteralPath $portableRoot -Recurse -File -Filter 'woods-island.exe')
           if ($previousExe.Count -ne 1) { throw 'Previous portable executable is ambiguous' }
-          if ((Get-FileHash -LiteralPath $previousExe[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant() -ne '423ac8b5dc5acf006bfe8ef7f97f1d6b3237b99be50f61e6fbd54b7b64605926') { throw 'Previous portable EXE differs from the accepted public 1.4.1 build' }
+          if ((Get-FileHash -LiteralPath $previousExe[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'ebf4efe6c8bc16270880d6c073bc72a70323d578599aa0412028108c00818875') { throw 'Previous portable EXE differs from the accepted public 1.4.2 build' }
           "WOODS_PREVIOUS_SETUP=$previousSetup" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "WOODS_PREVIOUS_EXE=$($previousExe[0].FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Verify installation and removal
@@ -276,7 +399,7 @@ jobs:
           $upgrade=@{}
           if ('${{ matrix.scenario }}' -eq 'ExistingRuntime') {
             if ([string]::IsNullOrWhiteSpace($env:WOODS_PREVIOUS_SETUP) -or [string]::IsNullOrWhiteSpace($env:WOODS_PREVIOUS_EXE)) { throw 'Previous release fixtures were not prepared' }
-            $upgrade=@{PreviousInstallerPath=$env:WOODS_PREVIOUS_SETUP;PreviousExePath=$env:WOODS_PREVIOUS_EXE;PreviousVersion='1.4.1'}
+            $upgrade=@{PreviousInstallerPath=$env:WOODS_PREVIOUS_SETUP;PreviousExePath=$env:WOODS_PREVIOUS_EXE;PreviousVersion='1.4.2'}
           }
           ./scripts/verify-installer.ps1 -InstallerPath $setup[0].FullName -InstallerManifestPath $manifest[0].FullName -ExpectedExePath dist-installer/application/woods-island.exe -WebView2LoaderPath dist-installer/WebView2Loader.dll -Scenario '${{ matrix.scenario }}' @upgrade
       - name: Upload acceptance report

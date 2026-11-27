@@ -1,6 +1,6 @@
 # Balance build speed and RAM headroom beside desktop apps on Windows.
 [build]
-jobs = 4
+jobs = 8
 
 [profile.dev]
 debug = 0
