@@ -2045,8 +2045,16 @@ function Rt({ version, onUpdates }) {
   return (0, U.jsx)(AboutSettings, { version, onUpdates });
 }
 // The language provider remounts its children. Keep navigation within this
-// window; a newly created settings webview still honors its requested target.
+// window; a newly created settings webview still honors its requested target
+// even if the language provider remounts before settingsTarget() resolves.
 let woodsLastSettingsPage = null;
+let woodsInitialTargetPromise = null;
+function getInitialSettingsTarget() {
+  if (!woodsInitialTargetPromise) {
+    woodsInitialTargetPromise = r.settingsTarget().catch(() => null);
+  }
+  return woodsInitialTargetPromise;
+}
 function zt() {
   const petLibrary = usePetLibrary();
   const [saveError, setSaveError] = WoodsReact.useState(``);
@@ -2155,9 +2163,17 @@ function zt() {
       return (e(), window.addEventListener(`focus`, e), () => window.removeEventListener(`focus`, e));
     }, []),
     (0, F.useEffect)(() => {
-      (Promise.all([r.settingsGet(), r.settingsTarget().catch(() => null)]).then(([e, target]) => {
+      let cancelled = false;
+      (Promise.all([r.settingsGet(), getInitialSettingsTarget()]).then(([e, target]) => {
+        if (cancelled) return;
         if (!priorPage.current && !targetRequested.current) {
-          b(xt().some((section) => section.id === target) ? target : e.onboardingCompleted === false ? `connections` : `appearance`);
+          const resolvedPage = xt().some((section) => section.id === target)
+            ? target
+            : e.onboardingCompleted === false
+              ? `connections`
+              : `appearance`;
+          woodsLastSettingsPage = resolvedPage;
+          b(resolvedPage);
         }
         ((i.current = e),
           t(e),
@@ -2199,6 +2215,7 @@ function zt() {
       let n = s(`license:changed`, () => u(freeLicense)),
         a = s(`settings:goto`, e);
       return () => {
+        cancelled = true;
         (n.then((e) => e()), a.then((e) => e()));
       };
     }, []),
@@ -2206,9 +2223,9 @@ function zt() {
       z && xt().some((e) => e.id === z.id) && b(z.id);
     }, [z]),
     (0, F.useEffect)(() => {
-      woodsLastSettingsPage = y;
+      if (e) woodsLastSettingsPage = y;
       ie?.scrollTo({ top: 0 });
-    }, [y, ie]));
+    }, [e, y, ie]));
   let B = (e) => {
       r.sttKeySet(e)
         .then((e) => {

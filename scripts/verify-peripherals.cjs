@@ -458,7 +458,10 @@ async function requireFreePort(value) {
   });
   ws.addEventListener("message", receive);
   await command("Runtime.enable");
-  await waitFor('!!document.querySelector(".peripheral-settings")', "Battery settings did not render");
+  await waitFor(
+    '!!document.querySelector(\'.peripheral-settings button[aria-label="Показывать на главной"]\')',
+    "Battery settings did not render",
+  );
   const toggleSetting = async (label) => {
     await evaluate(`document.querySelector('.peripheral-settings button[aria-label=${JSON.stringify(label)}]').click()`);
     await pause(250);
