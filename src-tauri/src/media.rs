@@ -87,6 +87,15 @@ enum MediaAction {
         ms: u64,
         reply: mpsc::SyncSender<bool>,
     },
+    Refresh {
+        reply: mpsc::SyncSender<bool>,
+    },
+}
+
+#[derive(Default)]
+struct WakeState {
+    immediate: bool,
+    gsmtc_event: bool,
 }
 
 static PICKED_APP_ID: Mutex<Option<String>> = Mutex::new(None);
@@ -99,21 +108,53 @@ static CACHED_MEDIA: Mutex<Option<Value>> = Mutex::new(None);
 static CACHED_GSMTC_SOURCES: Mutex<Vec<CachedGsmtcSource>> = Mutex::new(Vec::new());
 static PENDING_ACTIONS: Mutex<Vec<MediaAction>> = Mutex::new(Vec::new());
 static MEDIA_LOOP_RUNNING: AtomicBool = AtomicBool::new(false);
-static MEDIA_WAKE: OnceLock<(Mutex<bool>, Condvar)> = OnceLock::new();
+static MEDIA_WAKE: OnceLock<(Mutex<WakeState>, Condvar)> = OnceLock::new();
 static LAST_GSMTC_ERROR: Mutex<Option<(String, Instant)>> = Mutex::new(None);
 static LEGACY_CACHE: Mutex<Option<(Instant, Vec<Value>)>> = Mutex::new(None);
 static BROWSER_CACHE: Mutex<Option<(Instant, Vec<Value>)>> = Mutex::new(None);
 
-fn wake_pair() -> &'static (Mutex<bool>, Condvar) {
-    MEDIA_WAKE.get_or_init(|| (Mutex::new(true), Condvar::new()))
+fn wake_pair() -> &'static (Mutex<WakeState>, Condvar) {
+    MEDIA_WAKE.get_or_init(|| {
+        (
+            Mutex::new(WakeState {
+                immediate: true,
+                gsmtc_event: false,
+            }),
+            Condvar::new(),
+        )
+    })
 }
 
 pub fn notify_wake() {
     let (lock, cvar) = wake_pair();
-    if let Ok(mut dirty) = lock.lock() {
-        *dirty = true;
+    if let Ok(mut state) = lock.lock() {
+        state.immediate = true;
         cvar.notify_all();
     }
+}
+
+fn notify_gsmtc_wake() {
+    let (lock, cvar) = wake_pair();
+    if let Ok(mut state) = lock.lock() {
+        state.gsmtc_event = true;
+        cvar.notify_all();
+    }
+}
+
+pub fn refresh_now_sync() {
+    if !MEDIA_LOOP_RUNNING.load(Ordering::Acquire) {
+        notify_wake();
+        return;
+    }
+    let (tx, rx) = mpsc::sync_channel(1);
+    if let Ok(mut queue) = PENDING_ACTIONS.lock() {
+        queue.push(MediaAction::Refresh { reply: tx });
+    } else {
+        notify_wake();
+        return;
+    }
+    notify_wake();
+    let _ = rx.recv_timeout(Duration::from_millis(600));
 }
 
 pub fn invalidate_names_cache() {
@@ -230,12 +271,14 @@ fn cached_registered_app_name(app_id: &str) -> Option<String> {
 pub fn configure(settings: &Value) {
     let hidden: Vec<String> = settings["mediaHidden"].as_array().into_iter().flatten()
         .filter_map(Value::as_str).filter(|id| !id.is_empty()).map(str::to_owned).collect();
-    let mut picked = PICKED_APP_ID.lock().unwrap();
-    if picked.as_ref().is_some_and(|id| hidden.iter().any(|h| h.eq_ignore_ascii_case(id))) {
-        *picked = None;
+    {
+        let mut picked = PICKED_APP_ID.lock().unwrap();
+        if picked.as_ref().is_some_and(|id| hidden.iter().any(|h| h.eq_ignore_ascii_case(id))) {
+            *picked = None;
+        }
+        *HIDDEN_APP_IDS.lock().unwrap() = hidden;
     }
-    *HIDDEN_APP_IDS.lock().unwrap() = hidden;
-    notify_wake();
+    refresh_now_sync();
 }
 
 fn is_hidden(id: &str) -> bool {
@@ -998,7 +1041,7 @@ pub fn set_picked_source(id: Option<String>) {
     if let Ok(mut lock) = PICKED_APP_ID.lock() {
         *lock = id;
     }
-    notify_wake();
+    refresh_now_sync();
 }
 
 pub fn media_pick(id: &str) {
@@ -1257,13 +1300,13 @@ impl ManagerBinding {
         let mgr = request_manager_no_com()?;
         let sessions_token = mgr
             .SessionsChanged(&TypedEventHandler::new(|_, _| {
-                notify_wake();
+                notify_gsmtc_wake();
                 Ok(())
             }))
             .ok();
         let current_token = mgr
             .CurrentSessionChanged(&TypedEventHandler::new(|_, _| {
-                notify_wake();
+                notify_gsmtc_wake();
                 Ok(())
             }))
             .ok();
@@ -1299,7 +1342,7 @@ impl SessionBinding {
         let snapshot = Arc::new(Mutex::new(SessionSnapshot::default()));
         let media_token = session
             .MediaPropertiesChanged(&TypedEventHandler::new(|_, _| {
-                notify_wake();
+                notify_gsmtc_wake();
                 Ok(())
             }))
             .ok();
@@ -1314,7 +1357,7 @@ impl SessionBinding {
                             }
                         }
                     }
-                    notify_wake();
+                    notify_gsmtc_wake();
                     Ok(())
                 },
             ))
@@ -1330,7 +1373,7 @@ impl SessionBinding {
                             }
                         }
                     }
-                    notify_wake();
+                    notify_gsmtc_wake();
                     Ok(())
                 },
             ))
@@ -1449,32 +1492,46 @@ fn select_session_for_action(
 fn drain_pending_actions(
     mgr: Option<&GlobalSystemMediaTransportControlsSessionManager>,
     registry: &mut SessionRegistry,
-) -> bool {
+) -> (bool, Vec<mpsc::SyncSender<bool>>) {
     let actions: Vec<MediaAction> = PENDING_ACTIONS
         .lock()
         .map(|mut q| std::mem::take(&mut *q))
         .unwrap_or_default();
     if actions.is_empty() {
-        return false;
+        return (false, Vec::new());
     }
-    let session = mgr.and_then(|m| select_session_for_action(m, registry));
+    let has_session_cmd = actions
+        .iter()
+        .any(|a| !matches!(a, MediaAction::Refresh { .. }));
+    let session = if has_session_cmd {
+        mgr.and_then(|m| select_session_for_action(m, registry))
+    } else {
+        None
+    };
+    let mut had_cmd = false;
+    let mut refresh_waiters = Vec::new();
     for action in actions {
         match action {
             MediaAction::Control { action, reply } => {
+                had_cmd = true;
                 let ok = session
                     .as_ref()
                     .is_some_and(|s| execute_session_control(s, &action));
                 let _ = reply.send(ok);
             }
             MediaAction::Seek { ms, reply } => {
+                had_cmd = true;
                 let ok = session
                     .as_ref()
                     .is_some_and(|s| execute_session_seek(s, ms));
                 let _ = reply.send(ok);
             }
+            MediaAction::Refresh { reply } => {
+                refresh_waiters.push(reply);
+            }
         }
     }
-    true
+    (had_cmd, refresh_waiters)
 }
 
 pub fn start_media_loop(app: tauri::AppHandle) {
@@ -1505,11 +1562,13 @@ pub fn start_media_loop(app: tauri::AppHandle) {
             loop {
                 let low_power = crate::is_low_power();
                 let (lock, cvar) = wake_pair();
-                let woken_by_event = {
-                    let mut dirty = lock.lock().unwrap_or_else(|e| e.into_inner());
-                    if *dirty {
-                        *dirty = false;
-                        true
+                let (mut was_immediate, mut was_gsmtc) = {
+                    let mut state = lock.lock().unwrap_or_else(|e| e.into_inner());
+                    if state.immediate || state.gsmtc_event {
+                        let out = (state.immediate, state.gsmtc_event);
+                        state.immediate = false;
+                        state.gsmtc_event = false;
+                        out
                     } else {
                         let wait = if low_power {
                             Duration::from_secs(5)
@@ -1520,31 +1579,40 @@ pub fn start_media_loop(app: tauri::AppHandle) {
                         };
                         let wait = cover_retry.wait(Instant::now()).map_or(wait, |delay| delay.min(wait));
                         let (mut guard, _) = cvar
-                            .wait_timeout(dirty, wait)
+                            .wait_timeout(state, wait)
                             .unwrap_or_else(|e| e.into_inner());
-                        let was_dirty = *guard;
-                        *guard = false;
-                        was_dirty
+                        let out = (guard.immediate, guard.gsmtc_event);
+                        guard.immediate = false;
+                        guard.gsmtc_event = false;
+                        out
                     }
                 };
 
                 // Handle interactive user control/seek commands immediately (0ms debounce)
-                let had_actions = drain_pending_actions(
+                let (mut had_actions, mut refresh_waiters) = drain_pending_actions(
                     manager_binding.as_ref().map(|b| &b.mgr),
                     &mut session_registry,
                 );
 
-                // Coalesce rapid YouTube/browser GSMTC event bursts (e.g. Media + Playback + Timeline
-                // arriving within a few milliseconds) into one clean poll.
-                if woken_by_event && !had_actions {
-                    std::thread::sleep(Duration::from_millis(50));
-                    if let Ok(mut dirty) = lock.lock() {
-                        *dirty = false;
-                    }
-                    let _ = drain_pending_actions(
+                // Coalesce rapid WinRT GSMTC event bursts (e.g. Media + Playback + Timeline
+                // arriving within a few milliseconds) into one clean poll, while breaking out
+                // immediately if any user/internal wake arrives.
+                if was_gsmtc && !was_immediate && !had_actions && refresh_waiters.is_empty() {
+                    let state = lock.lock().unwrap_or_else(|e| e.into_inner());
+                    let (mut guard, _) = cvar
+                        .wait_timeout_while(state, Duration::from_millis(50), |s| !s.immediate)
+                        .unwrap_or_else(|e| e.into_inner());
+                    was_immediate |= guard.immediate;
+                    was_gsmtc |= guard.gsmtc_event;
+                    guard.immediate = false;
+                    guard.gsmtc_event = false;
+                    drop(guard);
+                    let (more_actions, more_waiters) = drain_pending_actions(
                         manager_binding.as_ref().map(|b| &b.mgr),
                         &mut session_registry,
                     );
+                    had_actions |= more_actions;
+                    refresh_waiters.extend(more_waiters);
                 }
 
                 let low_power = crate::is_low_power();
@@ -1555,8 +1623,8 @@ pub fn start_media_loop(app: tauri::AppHandle) {
                 } else {
                     Duration::from_secs(6)
                 };
-                let need_full_poll = woken_by_event
-                    || had_actions
+                let woke_refresh = was_immediate || was_gsmtc || had_actions || !refresh_waiters.is_empty();
+                let need_full_poll = woke_refresh
                     || cover_retry.take_due(Instant::now())
                     || last_full_poll.elapsed() >= safety_interval
                     || (manager_binding.is_none() && Instant::now() >= next_manager_retry);
@@ -1572,7 +1640,7 @@ pub fn start_media_loop(app: tauri::AppHandle) {
                     let (polled, app_id, rpc_ok) = poll_current_media_with_manager(
                         manager_binding.as_ref().map(|b| &b.mgr),
                         &mut session_registry,
-                        woken_by_event || had_actions,
+                        woke_refresh,
                     );
                     last_full_poll = Instant::now();
 
@@ -1587,6 +1655,9 @@ pub fn start_media_loop(app: tauri::AppHandle) {
 
                     if let Ok(mut guard) = CACHED_MEDIA.lock() {
                         *guard = polled.clone();
+                    }
+                    for waiter in refresh_waiters.drain(..) {
+                        let _ = waiter.send(true);
                     }
                     polled
                 } else if last_playing {

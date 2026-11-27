@@ -103,7 +103,7 @@ function k({ scene: t, live: stageLive, s: i, license: o = freeLicense, pausable
   const realMedia=m(state=>actual?state.media:null),realLive=m(state=>actual?state.mediaLive:false),realBattery=m(state=>actual?state.battery:null),realShelf=m(state=>actual?state.shelf.length:0),realPeripherals=m(state=>actual?state.peripherals:null),realDesktop=m(state=>actual?state.vdesk:null),realLayout=m(state=>actual?state.layoutCode:''),realCaps=m(state=>actual?state.caps:false),realWeather=u(state=>actual?state.data:null),accent=m(state=>actual?state.accent:y);
   let A = i.moduleMedia !== !1,
     j = (t === `music` || t === `home` || t === 'current' && realLive) && A && (!actual || !!realMedia),
-    M = t === `home` && A;
+    M = t === `home` && A && (!actual || !!realMedia);
   ((0, g.useLayoutEffect)(() => {
     if (actual) {m.setState({settings:i,license:o});s(i.clockFormat);return;}
     (m.setState({

@@ -109,7 +109,7 @@ fn handle(mut stream: TcpStream) -> Result<(), String> {
                         diff
                     };
                     *STATUS.lock().unwrap() = None;
-                    if changed { crate::media::notify_wake(); }
+                    if changed { crate::media::refresh_now_sync(); }
                     (200,json!({}))
                 },
                 Err(error) => (400,json!({"error":error})),

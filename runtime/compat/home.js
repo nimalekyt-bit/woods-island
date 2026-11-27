@@ -2485,10 +2485,11 @@ function Om(e, t, n) {
 }
 function usePlaybackPosition(e) {
   let [t, n] = (0, ReactRuntime.useState)(null),
-    r = (0, ReactRuntime.useRef)(!1);
-  Mp(e.playing && t === null, 500);
-  let i = t === null ? _f(e) : t * e.durationMs,
-    a = e.durationMs > 0 ? Math.min(1, Math.max(0, i / e.durationMs)) : 0,
+    r = (0, ReactRuntime.useRef)(!1),
+    durationMs = e?.durationMs ?? 0;
+  Mp(Boolean(e?.playing) && t === null, 500);
+  let i = !e ? 0 : t === null ? _f(e) : t * durationMs,
+    a = durationMs > 0 ? Math.min(1, Math.max(0, i / durationMs)) : 0,
     o = (e) => {
       let t = e.currentTarget.getBoundingClientRect();
       return wf(e.clientX, t.left, t.width);
@@ -2504,13 +2505,13 @@ function usePlaybackPosition(e) {
       [],
     ),
     {
-      seekable: e.canSeek !== false,
+      seekable: e?.canSeek !== false && durationMs > 0,
       pos: i,
       frac: a,
       held: t,
       handlers: {
         onPointerDown: (t) => {
-          if (!(t.button !== 0 || e.durationMs <= 0 || e.canSeek === false)) {
+          if (!(t.button !== 0 || durationMs <= 0 || e?.canSeek === false)) {
             t.stopPropagation();
             try {
               t.currentTarget.setPointerCapture(t.pointerId);
@@ -2524,7 +2525,7 @@ function usePlaybackPosition(e) {
         onPointerUp: (r) => {
           if (t === null) return;
           let i = o(r);
-          (n(null), s(!1), seekPlayback(i * e.durationMs));
+          (n(null), s(!1), seekPlayback(i * durationMs));
         },
         onPointerCancel: () => {
           t !== null && (n(null), s(!1));
