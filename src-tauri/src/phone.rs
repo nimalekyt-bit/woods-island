@@ -38,6 +38,7 @@ const DISK_RESERVE: u64 = 512 * 1024 * 1024;
 const TRANSFER_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const PERSIST_SECRET_NAME: &str = "phone_session";
 static SERVICE: OnceLock<Arc<PhoneService>> = OnceLock::new();
+static DRAINING_STOP: Mutex<Option<Arc<AtomicBool>>> = Mutex::new(None);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -435,6 +436,11 @@ impl PhoneService {
         saved: Option<PersistedPhoneSession>,
     ) -> Result<PhoneState, String> {
         let _action = self.action.lock().map_err(|_| "Phone action failed")?;
+        if let Ok(mut drain) = DRAINING_STOP.lock() {
+            if let Some(prev) = drain.take() {
+                prev.store(true, Ordering::Release);
+            }
+        }
         if self
             .session
             .lock()
@@ -593,6 +599,7 @@ impl PhoneService {
     }
     fn stop_internal(&self, clear_saved: bool) -> PhoneState {
         let _action = self.action.lock().unwrap_or_else(|e| e.into_inner());
+        let mut drained: Option<Arc<AtomicBool>> = None;
         if let Some(session) = self
             .session
             .lock()
@@ -601,14 +608,31 @@ impl PhoneService {
         {
             if clear_saved {
                 clear_persisted_session();
+                // Keep the listener alive briefly with session=None so the phone's next poll
+                // receives HTTP 410 {"error":"disconnected"} and shows a clear message immediately.
+                drained = Some(session.stopped.clone());
             } else {
                 save_persisted_session(&session);
+                session.stopped.store(true, Ordering::Release);
             }
-            session.stopped.store(true, Ordering::Release);
         } else if clear_saved {
             clear_persisted_session();
         }
-        self.close_connections(None);
+        if let Some(flag) = drained {
+            if let Ok(mut slot) = DRAINING_STOP.lock() {
+                if let Some(prev) = slot.replace(flag.clone()) {
+                    prev.store(true, Ordering::Release);
+                }
+            }
+            let _ = std::thread::Builder::new()
+                .name("woods-phone-drain".into())
+                .spawn(move || {
+                    std::thread::sleep(Duration::from_millis(2600));
+                    flag.store(true, Ordering::Release);
+                });
+        } else {
+            self.close_connections(None);
+        }
         self.emit();
         self.state()
     }

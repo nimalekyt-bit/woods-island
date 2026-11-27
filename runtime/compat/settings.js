@@ -417,52 +417,71 @@ function nt({ value: e, onChange: t, pro: r, onLocked: i, favorites = [], onTogg
       { name: c, desc: l } = re(item),
       isFav = favSet.has(item.id);
     return (0, U.jsxs)(
-      `button`,
+      `div`,
       {
-        "data-character-option": keyPrefix ? void 0 : item.id,
-        disabled: unavailable,
-        onClick: () => (s ? i() : t(item.id)),
-        title: unavailable ? l + ' · ' + item.id : l,
-        "aria-pressed": selected,
-        className: `flex flex-col gap-1.5 rounded-xl p-1.5 text-left transition-colors disabled:opacity-40 ${selected ? `bg-[#8ea2ff]/15 ring-1 ring-[#8ea2ff]` : `hover:bg-white/[0.05]`}`,
+        className: `wi-char-card-wrap`,
         children: [
-          (0, U.jsxs)(`div`, {
-            className: `relative h-[78px] overflow-hidden rounded-lg bg-[#1d1d20]`,
+          (0, U.jsxs)(`button`, {
+            "data-character-option": keyPrefix ? void 0 : item.id,
+            disabled: unavailable,
+            onClick: () => (s ? i() : t(item.id)),
+            title: unavailable ? l + ' · ' + item.id : l,
+            "aria-pressed": selected,
+            className: `group flex w-full flex-col gap-1.5 rounded-xl p-1.5 text-left transition-colors disabled:opacity-40 ${selected ? `bg-[#8ea2ff]/15 ring-1 ring-[#8ea2ff]` : `hover:bg-white/[0.05]`}`,
             children: [
-              (0, U.jsx)(tt, { c: item, mood: a }),
-              onToggleFav &&
-                (0, U.jsx)(`span`, {
-                  role: `button`,
-                  tabIndex: 0,
-                  "data-fav": isFav ? `true` : void 0,
-                  title: isFav ? n(`Убрать из избранного`, `Remove from favorites`) : n(`Закрепить в избранном`, `Pin to favorites`),
-                  onClick: (ev) => {
-                    ev.stopPropagation();
-                    ev.preventDefault();
-                    onToggleFav(item.id);
-                  },
-                  onKeyDown: (ev) => {
-                    if (ev.key === `Enter` || ev.key === ` `) {
-                      ev.stopPropagation();
-                      ev.preventDefault();
-                      onToggleFav(item.id);
-                    }
-                  },
-                  className: `wi-fav-star`,
-                  children: isFav ? `★` : `☆`,
-                }),
-            ],
-          }),
-          (0, U.jsxs)(`div`, {
-            className: `px-1 pb-0.5`,
-            children: [
-              (0, U.jsx)(`div`, {
-                className: `text-[12.5px] font-medium ${selected ? `text-white` : `text-white/85`}`,
-                children: c,
+              (0, U.jsxs)(`div`, {
+                className: `relative h-[78px] overflow-hidden rounded-lg bg-[#1d1d20]`,
+                children: [
+                  (0, U.jsx)(tt, { c: item, mood: a }),
+                  onToggleFav &&
+                    (0, U.jsx)(`span`, {
+                      role: `button`,
+                      tabIndex: 0,
+                      "data-fav": isFav ? `true` : void 0,
+                      title: isFav ? n(`Убрать из избранного`, `Remove from favorites`) : n(`Добавить в избранное`, `Add to favorites`),
+                      "aria-label": isFav ? n(`Убрать из избранного`, `Remove from favorites`) : n(`Добавить в избранное`, `Add to favorites`),
+                      onClick: (ev) => {
+                        ev.stopPropagation();
+                        ev.preventDefault();
+                        onToggleFav(item.id);
+                      },
+                      onKeyDown: (ev) => {
+                        if (ev.key === `Enter` || ev.key === ` `) {
+                          ev.stopPropagation();
+                          ev.preventDefault();
+                          onToggleFav(item.id);
+                        }
+                      },
+                      className: `wi-fav-star`,
+                      children: (0, U.jsx)(`svg`, {
+                        width: 12,
+                        height: 12,
+                        viewBox: `0 0 24 24`,
+                        fill: isFav ? `currentColor` : `none`,
+                        stroke: `currentColor`,
+                        strokeWidth: 2,
+                        strokeLinecap: `round`,
+                        strokeLinejoin: `round`,
+                        "aria-hidden": !0,
+                        children: (0, U.jsx)(`polygon`, {
+                          points: `12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2`,
+                        }),
+                      }),
+                    }),
+                ],
               }),
-              (0, U.jsx)(`div`, {
-                className: `line-clamp-2 text-[11px] leading-snug text-white/40`,
-                children: l,
+              (0, U.jsxs)(`div`, {
+                className: `px-1 pb-0.5`,
+                children: [
+                  (0, U.jsx)(`div`, {
+                    className: `text-[12.5px] font-medium ${selected ? `text-white` : `text-white/85`}`,
+                    children: c,
+                  }),
+                  (0, U.jsx)(`div`, {
+                    className: `line-clamp-2 text-[11px] leading-snug text-white/40`,
+                    children: l,
+                  }),
+                ],
               }),
             ],
           }),
@@ -488,12 +507,25 @@ function nt({ value: e, onChange: t, pro: r, onLocked: i, favorites = [], onTogg
                 children: n(`Все`, `All`),
               }),
               favItems.length > 0 &&
-                (0, U.jsx)(`button`, {
+                (0, U.jsxs)(`button`, {
                   type: `button`,
                   "aria-pressed": cat === `favorites`,
                   onClick: () => setCat(`favorites`),
-                  className: `wi-cat-chip`,
-                  children: `★ ${n(`Избранные`, `Favorites`)} (${favItems.length})`,
+                  className: `wi-cat-chip wi-cat-chip-fav`,
+                  children: [
+                    (0, U.jsx)(`svg`, {
+                      width: 11,
+                      height: 11,
+                      viewBox: `0 0 24 24`,
+                      fill: `currentColor`,
+                      "aria-hidden": !0,
+                      children: (0, U.jsx)(`polygon`, {
+                        points: `12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2`,
+                      }),
+                    }),
+                    (0, U.jsx)(`span`, { children: n(`Избранные`, `Favorites`) }),
+                    (0, U.jsx)(`span`, { className: `wi-cat-count`, children: favItems.length }),
+                  ],
                 }),
               groups.map((g) =>
                 (0, U.jsx)(
@@ -540,11 +572,33 @@ function nt({ value: e, onChange: t, pro: r, onLocked: i, favorites = [], onTogg
       (cat === `all` || cat === `favorites`) &&
         favItems.length > 0 &&
         (0, U.jsxs)(`div`, {
-          className: `flex flex-col gap-2`,
+          className: `wi-fav-section`,
           children: [
-            (0, U.jsx)(`div`, {
-              className: `px-1 text-[11px] font-semibold tracking-wider text-[#ffd257]/80 uppercase`,
-              children: `★ ${n(`Избранные`, `Favorites`)}`,
+            (0, U.jsxs)(`div`, {
+              className: `wi-fav-section-head`,
+              children: [
+                (0, U.jsx)(`span`, {
+                  className: `wi-fav-section-icon`,
+                  "aria-hidden": !0,
+                  children: (0, U.jsx)(`svg`, {
+                    width: 12,
+                    height: 12,
+                    viewBox: `0 0 24 24`,
+                    fill: `currentColor`,
+                    children: (0, U.jsx)(`polygon`, {
+                      points: `12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2`,
+                    }),
+                  }),
+                }),
+                (0, U.jsx)(`span`, {
+                  className: `wi-fav-section-title`,
+                  children: n(`Избранные питомцы`, `Favorite pets`),
+                }),
+                (0, U.jsx)(`span`, {
+                  className: `wi-fav-section-count`,
+                  children: favItems.length,
+                }),
+              ],
             }),
             (0, U.jsx)(`div`, {
               className: `grid grid-cols-3 gap-2`,
@@ -1198,17 +1252,20 @@ function St({ version: e, search, onSearch }) {
       className: `wi-settings-nav flex w-[212px] shrink-0 flex-col border-r border-white/[0.06]`,
       children: [
         (0, U.jsxs)(`header`, {
-          className: `flex items-center gap-3 px-4 pt-4 pb-3`,
+          className: `flex items-center gap-2.5 px-3.5 pt-2 pb-2.5`,
           children: [
-            (0, U.jsx)(`div`, {
-              className: `wi-logo-badge`,
-              children: (0, U.jsx)(`img`, { src: woodsLogo, alt: ``, width: 30, height: 30 }),
+            (0, U.jsx)(`img`, {
+              src: woodsLogo,
+              alt: ``,
+              width: 30,
+              height: 30,
+              className: `wi-logo-img`,
             }),
             (0, U.jsxs)(`div`, {
               className: `min-w-0`,
               children: [
                 (0, U.jsx)(`h1`, {
-                  className: `text-[15.5px] leading-tight font-semibold tracking-tight text-white`,
+                  className: `text-[15px] leading-tight font-semibold tracking-tight text-white`,
                   children: `Woods Island`,
                 }),
                 (0, U.jsx)(`p`, {
@@ -1266,11 +1323,12 @@ function St({ version: e, search, onSearch }) {
               children: n(`Изменения сохраняются сразу`, `Changes are saved right away`),
             }),
             (0, U.jsxs)(`button`, {
+              type: `button`,
               onClick: () => void r.quit(),
-              className: `flex h-8.5 w-full items-center gap-2.5 rounded-lg px-2.5 text-[12.5px] text-[#ff8b8b] hover:bg-[#ff6b6b]/10`,
+              className: `wi-quit-btn`,
               children: [
                 (0, U.jsx)(g, { size: 15, className: `shrink-0` }),
-                n(`Выйти из Woods Island`, `Quit Woods Island`),
+                (0, U.jsx)(`span`, { children: n(`Выйти из Woods Island`, `Quit Woods Island`) }),
               ],
             }),
           ],

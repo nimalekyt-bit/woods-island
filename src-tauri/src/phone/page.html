@@ -37,154 +37,289 @@
             </div>
           </section>
 
+          <section id="disconnect-banner" class="disconnect-banner" hidden role="alert">
+            <div class="disconnect-icon" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18.36 6.64A9 9 0 0 1 20.77 15" />
+                <path d="M6.16 6.16a9 9 0 1 0 12.68 12.68" />
+                <path d="M12 2v4" />
+                <line x1="2" y1="2" x2="22" y2="22" />
+              </svg>
+            </div>
+            <div class="disconnect-body">
+              <strong id="disconnect-banner-title"></strong>
+              <p id="disconnect-banner-detail"></p>
+            </div>
+            <button id="disconnect-retry" class="disconnect-retry" hidden data-i18n="retryConnection"></button>
+          </section>
+
           <nav class="mode-tabs" role="tablist" aria-label="Mode">
-            <button id="tab-files" class="mode-tab" role="tab" aria-selected="true" data-mode="files" data-i18n="tabFiles"></button>
-            <button id="tab-remote" class="mode-tab" role="tab" aria-selected="false" data-mode="remote" data-i18n="tabRemote"></button>
+            <button id="tab-files" class="mode-tab" role="tab" aria-selected="true" data-mode="files">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+              <span data-i18n="tabFiles"></span>
+            </button>
+            <button id="tab-remote" class="mode-tab" role="tab" aria-selected="false" data-mode="remote">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="2" y="3" width="20" height="14" rx="2" />
+                <line x1="8" y1="21" x2="16" y2="21" />
+                <line x1="12" y1="17" x2="12" y2="21" />
+              </svg>
+              <span data-i18n="tabRemote"></span>
+            </button>
           </nav>
 
-          <div id="files-view">
-          <section class="send-section">
-            <p class="sr-only" data-i18n="localHint"></p>
-            <div class="actions">
-              <button
-                id="pick-files"
-                class="action-tile primary"
-                disabled
-                aria-describedby="file-limit"
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <rect x="3" y="3" width="18" height="18" rx="3" />
-                  <circle cx="9" cy="9" r="2" />
-                  <path d="m21 15-5-5L6 21" />
-                </svg>
-                <span data-i18n="photosFiles"></span>
-              </button>
-              <button
-                id="pick-options"
-                class="pick-options"
-                disabled
-                aria-expanded="false"
-                aria-controls="gallery-menu"
-              >
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                  aria-hidden="true"
-                >
-                  <circle cx="5" cy="12" r="1.6" />
-                  <circle cx="12" cy="12" r="1.6" />
-                  <circle cx="19" cy="12" r="1.6" />
-                </svg>
-              </button>
-              <div id="gallery-menu" class="gallery-menu" hidden>
-                <button id="pick-photos" disabled data-i18n="photos"></button>
-              </div>
-            </div>
-            <input
-              id="photos"
-              type="file"
-              accept="image/*,video/*"
-              multiple
-              hidden
-            />
-            <input id="files" type="file" multiple hidden />
-            <div id="upload-progress" class="progress-box" hidden>
-              <div class="progress-top">
-                <span id="progress-label"></span>
+          <div id="files-view" class="files-view">
+            <section class="send-section">
+              <p class="sr-only" data-i18n="localHint"></p>
+              <div class="actions">
                 <button
-                  id="cancel-upload"
-                  class="cancel-btn"
-                  data-i18n="cancel"
-                ></button>
-              </div>
-              <progress id="progress" max="100" value="0"></progress>
-            </div>
-            <div id="sent-list" class="sent-list" hidden></div>
-            <p id="file-limit" class="sr-only" data-i18n="fileLimit"></p>
-          </section>
-
-          <section class="text-section">
-            <label class="sr-only" for="text" data-i18n="textTitle"></label>
-            <div class="compose">
-              <textarea
-                id="text"
-                rows="1"
-                maxlength="32000"
-                disabled
-              ></textarea>
-              <button id="send-text" class="send-btn" disabled>
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.6"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
+                  id="pick-files"
+                  class="action-tile primary"
+                  disabled
+                  aria-describedby="file-limit"
                 >
-                  <path d="m5 12 7-7 7 7M12 19V5" />
-                </svg>
-                <span class="sr-only" data-i18n="sendText"></span>
-              </button>
-            </div>
-          </section>
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="3" y="3" width="18" height="18" rx="3" />
+                    <circle cx="9" cy="9" r="2" />
+                    <path d="m21 15-5-5L6 21" />
+                  </svg>
+                  <span data-i18n="photosFiles"></span>
+                </button>
+                <button
+                  id="pick-options"
+                  class="pick-options"
+                  disabled
+                  aria-expanded="false"
+                  aria-controls="gallery-menu"
+                >
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
+                    <circle cx="5" cy="12" r="1.6" />
+                    <circle cx="12" cy="12" r="1.6" />
+                    <circle cx="19" cy="12" r="1.6" />
+                  </svg>
+                </button>
+                <div id="gallery-menu" class="gallery-menu" hidden>
+                  <button id="pick-photos" disabled data-i18n="photos"></button>
+                </div>
+              </div>
+              <input
+                id="photos"
+                type="file"
+                accept="image/*,video/*"
+                multiple
+                hidden
+              />
+              <input id="files" type="file" multiple hidden />
+              <div id="upload-progress" class="progress-box" hidden>
+                <div class="progress-top">
+                  <span id="progress-label"></span>
+                  <button
+                    id="cancel-upload"
+                    class="cancel-btn"
+                    data-i18n="cancel"
+                  ></button>
+                </div>
+                <progress id="progress" max="100" value="0"></progress>
+              </div>
+              <div id="sent-list" class="sent-list" hidden></div>
+              <p id="file-limit" class="sr-only" data-i18n="fileLimit"></p>
+            </section>
+
+            <section class="text-section">
+              <label class="sr-only" for="text" data-i18n="textTitle"></label>
+              <div class="compose">
+                <textarea
+                  id="text"
+                  rows="1"
+                  maxlength="32000"
+                  disabled
+                ></textarea>
+                <button id="send-text" class="send-btn" disabled>
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.6"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="m5 12 7-7 7 7M12 19V5" />
+                  </svg>
+                  <span class="sr-only" data-i18n="sendText"></span>
+                </button>
+              </div>
+            </section>
           </div>
 
           <section id="remote-view" class="remote-view" hidden>
-            <div class="remote-card">
-              <div class="remote-media">
-                <img id="remote-cover" class="remote-cover" alt="" hidden />
-                <div class="remote-media-info">
+            <!-- 1. Media Player Card -->
+            <div class="rc-card rc-media-card">
+              <div id="remote-glow" class="rc-media-glow" aria-hidden="true"></div>
+              <div class="rc-media-top">
+                <div class="rc-cover-wrap">
+                  <img id="remote-cover" class="rc-cover" alt="" hidden />
+                  <div id="remote-cover-fallback" class="rc-cover-fallback" aria-hidden="true">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M9 18V5l12-2v13" />
+                      <circle cx="6" cy="18" r="3" />
+                      <circle cx="18" cy="16" r="3" />
+                    </svg>
+                  </div>
+                </div>
+                <div class="rc-media-info">
+                  <span id="remote-status-pill" class="rc-status-pill" data-playing="false" data-i18n="remoteIdleBadge"></span>
                   <strong id="remote-track"></strong>
-                  <span id="remote-artist"></span>
+                  <span id="remote-artist" class="rc-media-sub"></span>
                 </div>
               </div>
-              <div class="remote-controls">
-                <button id="remote-prev" class="remote-btn" disabled aria-label="Previous">⏮</button>
-                <button id="remote-play" class="remote-btn primary" disabled aria-label="Play / Pause">⏯</button>
-                <button id="remote-next" class="remote-btn" disabled aria-label="Next">⏭</button>
-              </div>
-              <div class="remote-vol-row">
-                <button id="remote-mute" class="remote-chip" disabled data-i18n="remoteMute"></button>
-                <input id="remote-vol" class="remote-slider" type="range" min="0" max="100" value="50" disabled />
-                <span id="remote-vol-val" class="remote-vol-val">50%</span>
-              </div>
-              <div class="remote-quick-row">
-                <button id="remote-mic" class="remote-chip" disabled data-i18n="remoteMic"></button>
-                <button id="remote-shot" class="remote-chip" disabled data-i18n="remoteShot"></button>
-                <button id="remote-lock" class="remote-chip" disabled data-i18n="remoteLock"></button>
-                <button id="remote-sleep" class="remote-chip danger" disabled data-i18n="remoteSleep"></button>
-              </div>
-            </div>
-
-            <div class="remote-card">
-              <div class="remote-card-title" data-i18n="remoteLinkTitle"></div>
-              <div class="compose">
-                <input id="remote-url" type="url" class="remote-input" disabled />
-                <button id="remote-open-url" class="send-btn" disabled aria-label="Open">↗</button>
-              </div>
-            </div>
-
-            <div class="remote-card">
-              <div class="remote-timer-head">
-                <span class="remote-card-title" data-i18n="remoteTimerTitle"></span>
-                <span id="remote-timer-status" class="remote-timer-status"></span>
-              </div>
-              <div class="remote-quick-row">
-                <button id="remote-t5" class="remote-chip" disabled>5 мин</button>
-                <button id="remote-t15" class="remote-chip" disabled>15 мин</button>
-                <button id="remote-t25" class="remote-chip" disabled>25 мин</button>
-                <button id="remote-treset" class="remote-chip" disabled data-i18n="remoteTimerReset"></button>
+              <div class="rc-transport">
+                <button id="remote-prev" class="rc-transport-btn" disabled aria-label="Previous">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <rect x="4" y="5" width="2.6" height="14" rx="1.2" />
+                    <path d="M19.5 5.8a1 1 0 0 0-1.54-.84l-9.2 6.2a1 1 0 0 0 0 1.66l9.2 6.2a1 1 0 0 0 1.54-.84V5.8Z" />
+                  </svg>
+                </button>
+                <button id="remote-play" class="rc-transport-btn primary" disabled aria-label="Play / Pause" data-playing="false">
+                  <svg class="rc-ico-play" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M7.5 5.2a1.2 1.2 0 0 1 1.85-1l11 6.8a1.2 1.2 0 0 1 0 2.04l-11 6.8a1.2 1.2 0 0 1-1.85-1V5.2Z" />
+                  </svg>
+                  <svg class="rc-ico-pause" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <rect x="6" y="4.5" width="4.4" height="15" rx="1.6" />
+                    <rect x="13.6" y="4.5" width="4.4" height="15" rx="1.6" />
+                  </svg>
+                </button>
+                <button id="remote-next" class="rc-transport-btn" disabled aria-label="Next">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <rect x="17.4" y="5" width="2.6" height="14" rx="1.2" />
+                    <path d="M4.5 5.8a1 1 0 0 1 1.54-.84l9.2 6.2a1 1 0 0 1 0 1.66l-9.2 6.2a1 1 0 0 1-1.54-.84V5.8Z" />
+                  </svg>
+                </button>
               </div>
             </div>
 
-            <div id="remote-shot-box" class="remote-card" hidden>
-              <img id="remote-shot-img" class="remote-shot-img" alt="PC screenshot" />
-              <a id="remote-shot-save" class="remote-chip primary" download="pc-screenshot.jpg" data-i18n="remoteSaveShot"></a>
+            <!-- 2. Volume & Mic Card -->
+            <div class="rc-card">
+              <div class="rc-head">
+                <span class="rc-label" data-i18n="remoteAudioTitle"></span>
+                <span id="remote-vol-val" class="rc-vol-badge">50%</span>
+              </div>
+              <div class="rc-vol-track-wrap">
+                <div id="remote-vol-fill" class="rc-vol-fill" style="width: 50%"></div>
+                <svg class="rc-vol-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                  <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+                </svg>
+                <input id="remote-vol" class="rc-vol-slider" type="range" min="0" max="100" value="50" disabled aria-label="Volume" />
+              </div>
+              <div class="rc-toggle-grid">
+                <button id="remote-mute" class="rc-toggle-tile" disabled data-muted="false">
+                  <span class="rc-toggle-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                      <line x1="23" y1="9" x2="17" y2="15" />
+                      <line x1="17" y1="9" x2="23" y2="15" />
+                    </svg>
+                  </span>
+                  <span class="rc-toggle-copy">
+                    <strong data-i18n="remoteMute"></strong>
+                    <small id="remote-mute-state" data-i18n="remoteStateOn"></small>
+                  </span>
+                </button>
+                <button id="remote-mic" class="rc-toggle-tile" disabled data-muted="false">
+                  <span class="rc-toggle-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                      <line x1="12" y1="19" x2="12" y2="22" />
+                    </svg>
+                  </span>
+                  <span class="rc-toggle-copy">
+                    <strong data-i18n="remoteMic"></strong>
+                    <small id="remote-mic-state" data-i18n="remoteStateOn"></small>
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            <!-- 3. PC Timer Card -->
+            <div class="rc-card">
+              <div class="rc-head">
+                <span class="rc-label" data-i18n="remoteTimerTitle"></span>
+                <span id="remote-timer-status" class="rc-timer-badge"></span>
+              </div>
+              <div class="rc-timer-grid">
+                <button id="remote-t5" class="rc-preset-btn" disabled>5 мин</button>
+                <button id="remote-t10" class="rc-preset-btn" disabled>10 мин</button>
+                <button id="remote-t15" class="rc-preset-btn" disabled>15 мин</button>
+                <button id="remote-t25" class="rc-preset-btn" disabled>25 мин</button>
+                <button id="remote-treset" class="rc-preset-btn reset" disabled data-i18n="remoteTimerReset"></button>
+              </div>
+            </div>
+
+            <!-- 4. Open URL on PC -->
+            <div class="rc-card">
+              <div class="rc-head">
+                <span class="rc-label" data-i18n="remoteLinkTitle"></span>
+              </div>
+              <div class="rc-url-box">
+                <input id="remote-url" type="url" class="rc-url-input" disabled />
+                <button id="remote-open-url" class="rc-url-go" disabled aria-label="Open">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <line x1="7" y1="17" x2="17" y2="7" />
+                    <polyline points="7 7 17 7 17 17" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- 5. Screen & Power Actions -->
+            <div class="rc-card">
+              <div class="rc-head">
+                <span class="rc-label" data-i18n="remotePowerTitle"></span>
+              </div>
+              <div class="rc-action-grid">
+                <button id="remote-shot" class="rc-action-btn" disabled>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z" />
+                    <circle cx="12" cy="13" r="3" />
+                  </svg>
+                  <span data-i18n="remoteShot"></span>
+                </button>
+                <button id="remote-lock" class="rc-action-btn" disabled>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="3" y="11" width="18" height="11" rx="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                  <span data-i18n="remoteLock"></span>
+                </button>
+                <button id="remote-sleep" class="rc-action-btn danger" disabled>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+                  </svg>
+                  <span data-i18n="remoteSleep"></span>
+                </button>
+              </div>
+              <div id="remote-shot-box" class="rc-shot-box" hidden>
+                <img id="remote-shot-img" class="rc-shot-img" alt="PC screenshot" />
+                <div class="rc-shot-actions">
+                  <a id="remote-shot-save" class="rc-shot-btn primary" download="pc-screenshot.jpg" data-i18n="remoteSaveShot"></a>
+                  <button id="remote-shot-hide" type="button" class="rc-shot-btn" data-i18n="remoteHideShot"></button>
+                </div>
+              </div>
             </div>
           </section>
 

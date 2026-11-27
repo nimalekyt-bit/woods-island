@@ -3589,8 +3589,8 @@ function oh({
           onClick: (e) => {
             (e.stopPropagation(), useIslandStore.getState().close(), i.openCaptures(o.kind));
           },
-          className: `absolute -top-1.5 -right-1.5 grid size-[18px] place-items-center rounded-full bg-island text-ink-2 opacity-0 ring-1 ring-line transition-opacity group-hover:opacity-100 hover:text-ink`,
-          children: (0, jsxRuntime.jsx)(Vf, { size: 10 }),
+          className: `press absolute top-1.5 right-1.5 z-10 grid size-5 place-items-center rounded-md bg-white/10 text-ink-2 opacity-0 transition-all group-hover:opacity-100 hover:bg-white/20 hover:text-ink`,
+          children: (0, jsxRuntime.jsx)(Vf, { size: 11 }),
         }),
       (0, jsxRuntime.jsx)(`span`, {
         className: `shrink-0 text-ink-2 ${s ? `[&>svg]:size-[22px]` : ``}`,
@@ -3715,10 +3715,12 @@ function Launcher() {
     [l, u] = (0, ReactRuntime.useState)(null),
     [d, f] = (0, ReactRuntime.useState)(null),
     [p, m] = (0, ReactRuntime.useState)(null),
+    [ctxMenu, setCtxMenu] = (0, ReactRuntime.useState)(null),
     h = (0, ReactRuntime.useRef)(null),
     g = (0, ReactRuntime.useRef)(!1),
     _ = (0, ReactRuntime.useRef)(!1),
     v = (0, ReactRuntime.useRef)(null),
+    rowRef = (0, ReactRuntime.useRef)(null),
     y = (0, ReactRuntime.useRef)(null),
     b = (0, ReactRuntime.useRef)(null),
     x = () => {
@@ -3788,20 +3790,68 @@ function Launcher() {
     ee = Sm(e, t),
     te = a === null ? null : ee.find((e) => e.kind === `group` && e.group.id === a),
     w = te && te.kind === `group` ? te : null,
-    ne = (e, t, n) => {
-      for (let r of document.elementsFromPoint(e, t)) {
-        let slot = r.dataset?.launcherSlot;
-        if (slot && slot !== `item:${n}`) {
-          if (slot.startsWith(`item:`)) {
-            let box = r.getBoundingClientRect();
-            let ratio = box.width > 0 ? (e - box.left) / box.width : 0.5;
-            if (ratio < 0.32) return `${slot}:before`;
-            if (ratio > 0.68) return `${slot}:after`;
+    ne = (clientX, clientY, draggedId) => {
+      let rowEl = rowRef.current;
+      if (rowEl) {
+        let rowBox = rowEl.getBoundingClientRect();
+        if (clientY >= rowBox.top - 24 && clientY <= rowBox.bottom + 24 && clientX >= rowBox.left - 24 && clientX <= rowBox.right + 24) {
+          let slots = [...rowEl.querySelectorAll(`[data-launcher-slot]`)];
+          let items = [];
+          for (let el of slots) {
+            let slot = el.dataset.launcherSlot;
+            if (!slot || slot === `row:` || slot === `item:${draggedId}`) continue;
+            let box = el.getBoundingClientRect();
+            if (slot.startsWith(`group:`)) {
+              if (clientX >= box.left && clientX <= box.right && clientY >= box.top - 10 && clientY <= box.bottom + 10) {
+                return slot;
+              }
+            } else if (slot.startsWith(`item:`)) {
+              items.push({ slot, box });
+            }
           }
-          return slot;
+          // Check strict center drop onto another item first (creates a group)
+          for (let it of items) {
+            let ratio = it.box.width > 0 ? (clientX - it.box.left) / it.box.width : 0.5;
+            if (ratio >= 0.34 && ratio <= 0.66 && clientY >= it.box.top - 6 && clientY <= it.box.bottom + 6) {
+              return it.slot;
+            }
+          }
+          // Otherwise always snap cleanly to the nearest reorder boundary (even in gaps or row edges!)
+          if (items.length > 0) {
+            let best = null;
+            let bestDist = Infinity;
+            for (let it of items) {
+              let cx = it.box.left + it.box.width / 2;
+              let dist = Math.abs(clientX - cx);
+              if (dist < bestDist) {
+                bestDist = dist;
+                best = it;
+              }
+            }
+            if (best) {
+              let cx = best.box.left + best.box.width / 2;
+              return clientX < cx ? `${best.slot}:before` : `${best.slot}:after`;
+            }
+          }
         }
       }
+      for (let r of document.elementsFromPoint(clientX, clientY)) {
+        let slot = r.dataset?.launcherSlot;
+        if (slot && slot !== `item:${draggedId}`) return slot;
+      }
       return null;
+    },
+    moveItemOrder = (itemId, delta) => {
+      let current = useIslandStore.getState().launcher;
+      let idx = current.findIndex((x) => String(x.id) === String(itemId));
+      if (idx < 0) return;
+      let nextIdx = Math.max(0, Math.min(current.length - 1, idx + delta));
+      if (nextIdx === idx) return;
+      let copy = [...current];
+      let [moved] = copy.splice(idx, 1);
+      copy.splice(nextIdx, 0, moved);
+      useIslandStore.setState({ launcher: copy });
+      void i.launcherReorder(copy.map((x) => String(x.id))).catch(() => {});
     },
     re = (e, t) => {
       if (e.button === 0) {
@@ -3896,23 +3946,32 @@ function Launcher() {
       looking: !1,
       saving: !1,
     }),
-    de = (e, t) => {
-      fe(t.path) &&
-        (e.preventDefault(),
-        i.takeFocus(),
-        useIslandStore.getState().setHoldOpen(!0),
-        o(null),
-        m({
-          id: t.id,
-          link: t.path,
-          name: t.name,
-          bad: null,
-          auto: !1,
-          picture: t.icon,
-          had: t.icon,
-          looking: !1,
-          saving: !1,
-        }));
+    de = (ev, item) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      o(null);
+      m(null);
+      let wrapBox = v.current?.getBoundingClientRect();
+      let left = wrapBox ? Math.max(4, Math.min(wrapBox.width - 178, ev.clientX - wrapBox.left - 80)) : 8;
+      setCtxMenu({ item, left });
+    },
+    openLinkEditor = (item) => {
+      if (!fe(item.path)) return;
+      i.takeFocus();
+      useIslandStore.getState().setHoldOpen(!0);
+      o(null);
+      setCtxMenu(null);
+      m({
+        id: item.id,
+        link: item.path,
+        name: item.name,
+        bad: null,
+        auto: !1,
+        picture: item.icon,
+        had: item.icon,
+        looking: !1,
+        saving: !1,
+      });
     },
     pe = () => {
       (useIslandStore.setState({ asking: !0 }),
@@ -4141,9 +4200,84 @@ function Launcher() {
             }),
           ],
         }),
+      ctxMenu &&
+        (0, jsxRuntime.jsxs)(`div`, {
+          "data-launcher-ctx-menu": !0,
+          onMouseLeave: () => setCtxMenu(null),
+          style: {
+            position: `absolute`,
+            bottom: `calc(100% + 6px)`,
+            left: ctxMenu.left,
+            zIndex: 45,
+            minWidth: 168,
+            padding: 5,
+            borderRadius: 14,
+            background: `var(--color-sheet)`,
+            border: `1px solid var(--color-line)`,
+            boxShadow: `0 14px 34px rgba(0, 0, 0, 0.45)`,
+            display: `flex`,
+            flexDirection: `column`,
+            gap: 2,
+          },
+          children: [
+            (0, jsxRuntime.jsx)(`div`, {
+              className: `truncate px-2 py-1 text-[10.5px] font-semibold text-ink-3`,
+              children: ctxMenu.item.name,
+            }),
+            (() => {
+              let idx = e.findIndex((x) => String(x.id) === String(ctxMenu.item.id));
+              return (0, jsxRuntime.jsxs)(jsxRuntime.Fragment, {
+                children: [
+                  idx > 0 &&
+                    (0, jsxRuntime.jsx)(`button`, {
+                      type: `button`,
+                      onClick: () => {
+                        moveItemOrder(ctxMenu.item.id, -1);
+                        setCtxMenu(null);
+                      },
+                      className: `press flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11.5px] text-ink hover:bg-white/10`,
+                      children: r(`← Сдвинуть влево`, `← Move left`),
+                    }),
+                  idx >= 0 &&
+                    idx < e.length - 1 &&
+                    (0, jsxRuntime.jsx)(`button`, {
+                      type: `button`,
+                      onClick: () => {
+                        moveItemOrder(ctxMenu.item.id, 1);
+                        setCtxMenu(null);
+                      },
+                      className: `press flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11.5px] text-ink hover:bg-white/10`,
+                      children: r(`→ Сдвинуть вправо`, `→ Move right`),
+                    }),
+                ],
+              });
+            })(),
+            fe(ctxMenu.item.path) &&
+              (0, jsxRuntime.jsx)(`button`, {
+                type: `button`,
+                onClick: () => openLinkEditor(ctxMenu.item),
+                className: `press flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11.5px] text-ink hover:bg-white/10`,
+                children: r(`Изменить ссылку`, `Edit link`),
+              }),
+            (0, jsxRuntime.jsx)(`button`, {
+              type: `button`,
+              onClick: () => {
+                let id = ctxMenu.item.id;
+                setCtxMenu(null);
+                void i.launcherRemove(id).then((list) => {
+                  (useIslandStore.setState({ launcher: list }), C(t));
+                });
+              },
+              className: `press flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11.5px] text-danger hover:bg-white/10`,
+              children: r(`Убрать из лаунчера`, `Remove`),
+            }),
+          ],
+        }),
       (0, jsxRuntime.jsxs)(`div`, {
+        ref: rowRef,
         "data-launcher-slot": `row:`,
         onScroll: x,
+        onClick: () => ctxMenu && setCtxMenu(null),
         className: `scroll-thin flex h-[54px] items-center gap-1 overflow-x-auto rounded-2xl bg-tile px-1.5`,
         children: [
           ee.map((e) =>
@@ -4173,16 +4307,39 @@ function Launcher() {
                     children: [
                       s?.over === `item:${e.item.id}:before` &&
                         (0, jsxRuntime.jsx)(`span`, {
-                          className: `pointer-events-none absolute top-1 bottom-1 -left-1 z-10 w-[3px] rounded-full bg-[#8ea2ff] shadow-[0_0_8px_rgba(142,162,255,0.8)]`,
+                          "data-launcher-drop-indicator": `before`,
+                          style: {
+                            pointerEvents: `none`,
+                            position: `absolute`,
+                            top: 5,
+                            bottom: 5,
+                            left: -3,
+                            zIndex: 15,
+                            width: 3,
+                            borderRadius: 999,
+                            background: `var(--color-accent)`,
+                          },
                         }),
                       s?.over === `item:${e.item.id}:after` &&
                         (0, jsxRuntime.jsx)(`span`, {
-                          className: `pointer-events-none absolute top-1 -right-1 bottom-1 z-10 w-[3px] rounded-full bg-[#8ea2ff] shadow-[0_0_8px_rgba(142,162,255,0.8)]`,
+                          "data-launcher-drop-indicator": `after`,
+                          style: {
+                            pointerEvents: `none`,
+                            position: `absolute`,
+                            top: 5,
+                            bottom: 5,
+                            right: -3,
+                            zIndex: 15,
+                            width: 3,
+                            borderRadius: 999,
+                            background: `var(--color-accent)`,
+                          },
                         }),
                       (0, jsxRuntime.jsx)(`button`, {
                         "data-launcher-slot": `item:${e.item.id}`,
-                        title: e.item.name,
+                        title: `${e.item.name} · ${r(`Потяни, чтобы переставить · ПКМ — меню`, `Drag to reorder · Right-click for menu`)}`,
                         className: `${ge} ${s?.item.id === e.item.id ? `opacity-35` : ``} ${s?.over === `item:${e.item.id}` ? _e : ``}`,
+                        style: { cursor: s ? `grabbing` : `grab` },
                         ...T(e.item),
                         onContextMenu: (t) => de(t, e.item),
                         children: (0, jsxRuntime.jsx)(lh, { item: e.item }),
@@ -4206,16 +4363,35 @@ function Launcher() {
           (0, jsxRuntime.jsx)(`button`, {
             "data-launcher-plus": !0,
             title: r(
-              `Нажми, чтобы добавить ссылку (изменить её потом — правым кликом). Ярлык, программу или папку перетащи на остров, в правую половину; ярлык, перетащенный на другой ярлык, объединяется с ним в группу`,
-              `Press to add a link (to change it later, right-click it). Drag a shortcut, app or folder onto the right half of the island; a shortcut dragged onto another one makes a group with it`,
+              `Добавить ссылку. Перетаскивай ярлыки влево/вправо, чтобы менять порядок, или на центр другого — чтобы создать группу. Правый клик — меню`,
+              `Add a link. Drag shortcuts left/right to reorder, or onto another shortcut's center to group. Right-click for menu`,
             ),
             onClick: () => {
               if (p) return ce();
+              setCtxMenu(null);
               (i.takeFocus(), useIslandStore.getState().setHoldOpen(!0), o(null), m(ue()));
             },
             className: `press grid size-[46px] shrink-0 place-items-center rounded-xl border border-dashed border-white/15 text-ink-3 hover:border-white/30 hover:text-ink-2 ${p ? `border-white/30 text-ink-2` : ``}`,
             children: (0, jsxRuntime.jsx)(dp, { size: 18 }),
           }),
+          e.length >= 2 &&
+            !s &&
+            (0, jsxRuntime.jsx)(`span`, {
+              title: r(
+                `Ярлыки можно перетаскивать, чтобы менять порядок, или сдвигать через правый клик`,
+                `Drag shortcuts to reorder, or right-click to move`,
+              ),
+              style: {
+                marginLeft: `auto`,
+                paddingRight: 6,
+                fontSize: 10.5,
+                color: `var(--color-ink-3)`,
+                whiteSpace: `nowrap`,
+                userSelect: `none`,
+                flexShrink: 0,
+              },
+              children: r(`⇄ потяни или ПКМ`, `⇄ drag or right-click`),
+            }),
           e.length === 0 &&
             (0, jsxRuntime.jsx)(`span`, {
               className: `pl-2 text-[12px] text-ink-3`,
@@ -4227,11 +4403,55 @@ function Launcher() {
         ],
       }),
       s &&
-        (0, jsxRuntime.jsx)(`div`, {
+        (0, jsxRuntime.jsxs)(`div`, {
           "data-launcher-ghost": !0,
-          className: `pointer-events-none fixed z-20 grid size-[46px] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-xl bg-white/10`,
-          style: { left: s.x, top: s.y },
-          children: (0, jsxRuntime.jsx)(lh, { item: s.item }),
+          style: {
+            pointerEvents: `none`,
+            position: `fixed`,
+            zIndex: 55,
+            left: s.x,
+            top: s.y,
+            transform: `translate(-50%, -50%)`,
+            display: `flex`,
+            flexDirection: `column`,
+            alignItems: `center`,
+            gap: 4,
+          },
+          children: [
+            (0, jsxRuntime.jsx)(`div`, {
+              style: {
+                display: `grid`,
+                width: 46,
+                height: 46,
+                placeItems: `center`,
+                borderRadius: 12,
+                background: `var(--color-sheet)`,
+                border: `1px solid var(--color-line)`,
+                boxShadow: `0 10px 26px rgba(0, 0, 0, 0.45)`,
+              },
+              children: (0, jsxRuntime.jsx)(lh, { item: s.item }),
+            }),
+            s.over &&
+              (0, jsxRuntime.jsx)(`span`, {
+                style: {
+                  padding: `2px 8px`,
+                  borderRadius: 999,
+                  background: s.over.endsWith(`:before`) || s.over.endsWith(`:after`) ? `var(--color-ink)` : `var(--color-sheet)`,
+                  color: s.over.endsWith(`:before`) || s.over.endsWith(`:after`) ? `var(--color-island)` : `var(--color-ink)`,
+                  border: `1px solid var(--color-line)`,
+                  fontSize: 10,
+                  fontWeight: 600,
+                  whiteSpace: `nowrap`,
+                  boxShadow: `0 4px 12px rgba(0,0,0,0.35)`,
+                },
+                children:
+                  s.over.endsWith(`:before`) || s.over.endsWith(`:after`)
+                    ? r(`Переместить сюда`, `Move here`)
+                    : s.over.startsWith(`group:`)
+                      ? r(`Добавить в группу`, `Add to group`)
+                      : r(`Создать группу`, `Create group`),
+              }),
+          ],
         }),
     ],
   });

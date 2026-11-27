@@ -335,24 +335,29 @@ var useIslandStore = ce((e, t) => ({
     webAiPopped: null,
     headerMin: 0,
     recentEvents: [],
+    overlayView: null,
     clearRecentEvents: () => e({ recentEvents: [] }),
-    open: (t, n) => {
+    removeRecentEvent: (id) => e((s) => ({ recentEvents: (s.recentEvents ?? []).filter((item) => item.id !== id) })),
+    toggleOverlayView: (view) => e((s) => ({ overlayView: s.overlayView === view ? null : view })),
+    closeOverlayView: () => e({ overlayView: null }),
+    open: (trigger, n) => {
+      if (t().settings?.through === !0 && (trigger === `click` || trigger === `hover`)) return;
       (clearTimeout(N),
         e((e) => ({
           expanded: !0,
-          openedBy: t,
+          openedBy: trigger,
           enteredSinceOpen: e.hovered,
           tab: n ?? e.tab,
           peek: null,
           queue: [],
         })),
-        t === `hotkey` && r.takeFocus());
+        trigger === `hotkey` && r.takeFocus());
     },
     close: () => {
       t().expanded &&
-        (e({ expanded: !1, pinned: !1, holdOpen: !1, tall: !1, openedBy: null }), r.releaseFocus());
+        (e({ expanded: !1, pinned: !1, holdOpen: !1, tall: !1, openedBy: null, overlayView: null }), r.releaseFocus());
     },
-    setTab: (t) => e({ tab: t }),
+    setTab: (t) => e({ tab: t, overlayView: null }),
     togglePin: () => e((e) => ({ pinned: !e.pinned })),
     setHoldOpen: (t) => e({ holdOpen: t }),
     pushPeek: (n) => {

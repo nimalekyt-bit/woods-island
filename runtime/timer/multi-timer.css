@@ -1,0 +1,265 @@
+/* Multi-Timer & Pomodoro — 100% native Woods Island pill tokens (dark, light & custom colors) */
+.wi-mt-root {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--color-line);
+}
+
+.wi-mt-bar {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.wi-mt-chip {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-ink) 7%, transparent);
+  color: var(--color-ink-2);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.wi-mt-chip:hover {
+  background: color-mix(in srgb, var(--color-ink) 14%, transparent);
+  color: var(--color-ink);
+}
+
+.wi-mt-chip.focus {
+  background: color-mix(in srgb, var(--color-timer) 15%, transparent);
+  color: var(--color-timer);
+}
+
+.wi-mt-chip.focus:hover {
+  background: color-mix(in srgb, var(--color-timer) 24%, transparent);
+}
+
+.wi-mt-pomo-active {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-timer) 12%, transparent);
+}
+
+.wi-mt-pomo-active[data-phase="break"] {
+  background: color-mix(in srgb, var(--color-ok) 12%, transparent);
+}
+
+.wi-mt-dot {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--color-timer);
+}
+
+.wi-mt-pomo-active[data-phase="break"] .wi-mt-dot {
+  background: var(--color-ok);
+}
+
+.wi-mt-pomo-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.wi-mt-pomo-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.wi-mt-pomo-label {
+  font-weight: 600;
+  color: var(--color-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wi-mt-pomo-clock {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--color-timer);
+}
+
+.wi-mt-pomo-active[data-phase="break"] .wi-mt-pomo-clock {
+  color: var(--color-ok);
+}
+
+.wi-mt-track {
+  margin-top: 4px;
+  height: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-ink) 12%, transparent);
+  overflow: hidden;
+}
+
+.wi-mt-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-timer);
+  transition: width 300ms linear;
+}
+
+.wi-mt-pomo-active[data-phase="break"] .wi-mt-fill {
+  background: var(--color-ok);
+}
+
+.wi-mt-mini-btn {
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-ink) 9%, transparent);
+  color: var(--color-ink-2);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.wi-mt-mini-btn:hover {
+  background: color-mix(in srgb, var(--color-ink) 16%, transparent);
+  color: var(--color-ink);
+}
+
+.wi-mt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 76px;
+  overflow-y: auto;
+}
+
+.wi-mt-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-ink) 6%, transparent);
+  font-size: 11px;
+}
+
+.wi-mt-row-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  color: var(--color-ink);
+}
+
+.wi-mt-row-time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--color-ink-2);
+  margin-right: 2px;
+}
+
+.wi-mt-row[data-done="true"] .wi-mt-row-name,
+.wi-mt-row[data-done="true"] .wi-mt-row-time {
+  color: var(--color-timer);
+}
+
+.wi-mt-form {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wi-mt-input-name {
+  min-width: 0;
+  flex: 1;
+  height: 26px;
+  border-radius: 999px;
+  border: 0;
+  background: color-mix(in srgb, var(--color-ink) 8%, transparent);
+  padding: 0 10px;
+  color: var(--color-ink);
+  font-size: 11px;
+  outline: none;
+}
+
+.wi-mt-input-name::placeholder {
+  color: var(--color-ink-3);
+}
+
+.wi-mt-input-name:focus,
+.wi-mt-input-name:focus-visible,
+.wi-mt-input-min:focus,
+.wi-mt-input-min:focus-visible {
+  background: color-mix(in srgb, var(--color-ink) 13%, transparent);
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.wi-mt-input-min {
+  width: 36px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  border: 0;
+  background: color-mix(in srgb, var(--color-ink) 8%, transparent);
+  padding: 0 4px;
+  text-align: center;
+  color: var(--color-ink);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+}
+
+.wi-mt-ok {
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-timer);
+  color: var(--color-island);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.wi-mt-cancel {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-ink) 7%, transparent);
+  color: var(--color-ink-3);
+  font-size: 13px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.wi-mt-cancel:hover {
+  background: color-mix(in srgb, var(--color-ink) 14%, transparent);
+  color: var(--color-ink);
+}

@@ -1,5 +1,6 @@
 import { useTimerLabelCharacters } from './home.js';
-import { RecentEventsButton } from '../events/RecentEventsButton';
+import { RecentEventsButton, RecentEventsView } from '../events/RecentEventsButton';
+import { AudioMixerView } from '../controls/AudioMixer';
 import { MultiTimerSection } from '../timer/MultiTimerSection';
 import { AnimatedWeatherValue, useWeatherTween } from '../weather/AnimatedWeatherValue';
 import { WEATHER_GAUGE_TWEEN } from '../weather/animation';
@@ -4770,24 +4771,39 @@ function rk() {
                       children: [
                         (0, jsxRuntime.jsx)(`button`, {
                           "data-timer-add": !0,
-                          className: C,
-                          title: o(`Добавить минуту`, `Add a minute`),
+                          className: `press h-7 min-w-0 flex-1 rounded-full bg-white/[0.08] px-1 text-[11px] font-medium whitespace-nowrap text-ink-2 hover:bg-white/14 hover:text-ink`,
+                          title: o(`Добавить 1 минуту`, `Add 1 minute`),
                           onClick: () => d(tk),
-                          children: o(`+1 мин`, `+1 min`),
+                          children: o(`+1м`, `+1m`),
                         }),
                         (0, jsxRuntime.jsx)(`button`, {
                           "data-timer-add5": !0,
-                          className: C,
+                          className: `press h-7 min-w-0 flex-1 rounded-full bg-white/[0.08] px-1 text-[11px] font-medium whitespace-nowrap text-ink-2 hover:bg-white/14 hover:text-ink`,
                           title: o(`Добавить 5 минут`, `Add 5 minutes`),
                           onClick: () => d(5 * tk),
-                          children: o(`+5 мин`, `+5 min`),
+                          children: o(`+5м`, `+5m`),
                         }),
                         (0, jsxRuntime.jsx)(`button`, {
                           "data-timer-reset": !0,
-                          className: C,
+                          className: `press grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white/[0.08] text-ink-2 hover:bg-white/14 hover:text-ink`,
                           title: o(`Сбросить таймер`, `Reset the timer`),
+                          "aria-label": o(`Сбросить таймер`, `Reset the timer`),
                           onClick: () => f(),
-                          children: o(`Сброс`, `Reset`),
+                          children: (0, jsxRuntime.jsx)(`svg`, {
+                            width: 12,
+                            height: 12,
+                            viewBox: `0 0 24 24`,
+                            fill: `none`,
+                            stroke: `currentColor`,
+                            strokeWidth: 2.2,
+                            strokeLinecap: `round`,
+                            strokeLinejoin: `round`,
+                            "aria-hidden": !0,
+                            children: [
+                              (0, jsxRuntime.jsx)(`path`, { d: `M3 12a9 9 0 1 0 3-6.7L3 8` }, `a`),
+                              (0, jsxRuntime.jsx)(`path`, { d: `M3 3v5h5` }, `b`),
+                            ],
+                          }),
                         }),
                       ],
                     }),
@@ -4997,11 +5013,14 @@ function ik({ seed: e }) {
           })
         : (0, jsxRuntime.jsx)(`div`, {
             "data-reminders-empty": !0,
-            className: `grid min-h-0 flex-1 place-items-center px-2 text-center text-[11px] leading-snug text-ink-3`,
-            children: o(
-              `Напиши ниже, о чём и когда: «позвонить маме завтра в 9», «таблетки каждый день в 23:00», «через 20 минут выключить плиту».`,
-              `Type below what and when: “call mum tomorrow at 9”, “pills every day at 23:00”, “in 20 minutes turn the stove off”.`,
-            ),
+            className: `flex min-h-0 flex-1 items-center justify-center overflow-hidden px-1.5 py-0.5 text-center text-[10.5px] leading-snug text-ink-3`,
+            children: (0, jsxRuntime.jsx)(`span`, {
+              className: `line-clamp-3`,
+              children: o(
+                `Напиши ниже, о чём и когда: «завтра в 9», «каждый день в 23:00», «через 20 мин».`,
+                `Type what and when below: “tomorrow at 9”, “every day at 23:00”, “in 20 min”.`,
+              ),
+            }),
           }),
       (0, jsxRuntime.jsx)(`input`, {
         ref: l,
@@ -5075,7 +5094,7 @@ function ak({ seed: e }) {
     (0, ReactRuntime.useEffect)(() => () => useIslandStore.setState({ holdOpen: !1 }), []),
     (0, jsxRuntime.jsxs)(`div`, {
       "data-time-side": !0,
-      className: `flex w-[232px] shrink-0 flex-col gap-2.5 rounded-2xl bg-tile p-2.5`,
+      className: `scroll-thin flex min-h-0 w-[232px] shrink-0 flex-col gap-2 overflow-y-auto rounded-2xl bg-tile p-2.5`,
       children: [
         (0, jsxRuntime.jsx)(rk, {}),
         (0, jsxRuntime.jsx)(`div`, { className: `h-px shrink-0 bg-line` }),
@@ -8001,6 +8020,10 @@ function OA({ tab: e }) {
       return (0, jsxRuntime.jsx)(EA, {});
     case `controls`:
       return (0, jsxRuntime.jsx)(Sc, {});
+    case `events`:
+      return (0, jsxRuntime.jsx)(RecentEventsView, {});
+    case `audio`:
+      return (0, jsxRuntime.jsx)(AudioMixerView, {});
   }
 }
 function kA() {
@@ -8098,6 +8121,7 @@ ${e.active === null ? o(`Клик — выбрать команду VPN`, `Click
 }
 function jA() {
   let e = useIslandStore((e) => e.tab),
+    overlayView = useIslandStore((e) => e.overlayView),
     t = useIslandStore((e) => e.setTab),
     n = useIslandStore((e) => e.pinned),
     r = useIslandStore((e) => e.togglePin),
@@ -8130,7 +8154,7 @@ function jA() {
       children: [
         (0, jsxRuntime.jsxs)(`header`, {
           ref: m,
-          className: `flex h-9 shrink-0 items-center gap-1`,
+          className: `relative z-30 flex h-9 shrink-0 items-center gap-1`,
           children: [
             p.map((e) =>
               (0, jsxRuntime.jsxs)(
@@ -8215,9 +8239,9 @@ function jA() {
                 initial: { opacity: 0, y: 5 },
                 animate: { opacity: 1, y: 0, transition: { duration: 0.14, ease: [0.2, 0.8, 0.2, 1] } },
                 exit: { opacity: 0, y: -3, transition: { duration: 0.06 } },
-                children: (0, jsxRuntime.jsx)(OA, { tab: f }),
+                children: (0, jsxRuntime.jsx)(OA, { tab: overlayView ?? f }),
               },
-              f,
+              overlayView ?? f,
             ),
           }),
         }),
@@ -11012,10 +11036,28 @@ function IslandApp() {
       }),
     ),
     [te, ne] = (0, ReactRuntime.useState)(!1),
+    [tuckedSettled, setTuckedSettled] = (0, ReactRuntime.useState)(!1),
+    [monitorMove, setMonitorMove] = (0, ReactRuntime.useState)(null),
     veNotch = useIslandStore((e) => e.settings?.notchBar === !0);
   ((0, ReactRuntime.useEffect)(() => {
     veNotch && (a === `idle` || a === `liveMedia`) && u.notchPill(c);
   }, [veNotch, a, c]),
+    (0, ReactRuntime.useEffect)(() => {
+      let timer = 0;
+      const unsub = subscribeEvent(`island:monitor-move`, (payload) => {
+        clearTimeout(timer);
+        if (payload?.phase === `leave`) {
+          setMonitorMove({ phase: `leave`, dir: payload.direction === `left` ? -1 : 1 });
+        } else if (payload?.phase === `arrive`) {
+          setMonitorMove({ phase: `arrive`, dir: payload.direction === `left` ? -1 : 1 });
+          timer = window.setTimeout(() => setMonitorMove(null), 420);
+        }
+      });
+      return () => {
+        clearTimeout(timer);
+        void unsub.then((fn) => fn());
+      };
+    }, []),
     (0, ReactRuntime.useEffect)(() => {
     if (ee) {
       ne(!1);
@@ -11026,10 +11068,14 @@ function IslandApp() {
   }, [ee]),
     (0, ReactRuntime.useEffect)(() => {
       if (!te) {
+        setTuckedSettled(!1);
         lr(`tucked`, !1);
         return;
       }
-      let e = setTimeout(() => lr(`tucked`, !0), 500);
+      let e = setTimeout(() => {
+        setTuckedSettled(!0);
+        lr(`tucked`, !0);
+      }, 500);
       return () => clearTimeout(e);
     }, [te]));
   let re = useIslandStore((e) => _(e.settings?.through === !0, a)),
@@ -11257,8 +11303,16 @@ function IslandApp() {
       "data-island-shell": !0,
       "data-alert-glow": ye || void 0,
       initial: !1,
-      animate: { y: te ? -(c + D + 18) : 0, opacity: ae },
-      transition: { y: te ? Hj : Vj, opacity: { duration: 0.22 } },
+      animate:
+        monitorMove?.phase === `leave`
+          ? { y: -(c + D + 26), x: monitorMove.dir * 24, scale: 0.9, opacity: 0 }
+          : { y: te ? -(c + D + 18) : 0, x: 0, scale: 1, opacity: ae },
+      transition:
+        monitorMove?.phase === `leave`
+          ? { duration: 0.14, ease: [0.4, 0, 1, 1] }
+          : monitorMove?.phase === `arrive`
+            ? { type: `spring`, stiffness: 390, damping: 26, mass: 0.75 }
+            : { y: te ? Hj : Vj, x: { duration: 0.2 }, scale: { duration: 0.2 }, opacity: { duration: 0.22 } },
       children: (0, jsxRuntime.jsxs)(Et.div, {
         "data-island": !0,
         className: `relative text-ink ${g ? `` : `bg-island`}`,
@@ -11274,7 +11328,7 @@ function IslandApp() {
         },
         transition: de,
         onUpdate: g ? () => Oe.postRender(Zn) : void 0,
-        onClick: ve ? () => f(`click`) : void 0,
+        onClick: ve && !re ? () => f(`click`) : void 0,
         onWheel: be,
         children: [
           g &&
@@ -11286,7 +11340,7 @@ function IslandApp() {
               rain: T && a === `idle` && !te,
               tint: he,
             }),
-          jsxRuntime.jsx(IslandHolidayEffects, { width: s, height: c, capsule: p, visible: ee && !te, mode: a }),
+          jsxRuntime.jsx(IslandHolidayEffects, { width: s, height: c, capsule: p, visible: !tuckedSettled, mode: a }),
           m.kind === `attach` &&
             (0, jsxRuntime.jsx)(tr, {
               id: m.id,

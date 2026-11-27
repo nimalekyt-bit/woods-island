@@ -43,6 +43,32 @@ unsafe fn path(pid: u32) -> Option<String> {
     result.ok()?;
     Some(String::from_utf16_lossy(&buffer[..count as usize]))
 }
+fn normalize_session_name(
+    display: Option<String>,
+    path: Option<&str>,
+    pid: u32,
+    system: bool,
+) -> String {
+    let clean_display = display.and_then(|raw| {
+        let trimmed = raw.trim();
+        // Windows often returns indirect DLL resource strings such as
+        // "@%SystemRoot%\System32\AudioSrv.Dll,-202" for System Sounds.
+        if trimmed.is_empty() || trimmed.starts_with('@') {
+            None
+        } else {
+            Some(trimmed.to_owned())
+        }
+    });
+    if system {
+        return clean_display.unwrap_or_else(|| "System Sounds".into());
+    }
+    clean_display.unwrap_or_else(|| {
+        path.and_then(|p| Path::new(p).file_name())
+            .map(|p| crate::media::format_app_name(&p.to_string_lossy()))
+            .unwrap_or_else(|| format!("Application {pid}"))
+    })
+}
+
 fn group_id(path: Option<&str>, pid: u32, system: bool) -> String {
     if system {
         return "system".into();
@@ -97,16 +123,7 @@ unsafe fn sessions() -> Result<Vec<Session>, String> {
                     text
                 })
                 .filter(|name| !name.trim().is_empty());
-            let name = display.unwrap_or_else(|| {
-                if system {
-                    "Windows".into()
-                } else {
-                    path.as_deref()
-                        .and_then(|p| Path::new(p).file_name())
-                        .map(|p| crate::media::format_app_name(&p.to_string_lossy()))
-                        .unwrap_or_else(|| format!("Application {pid}"))
-                }
-            });
+            let name = normalize_session_name(display, path.as_deref(), pid, system);
             sessions.push(Session {
                 id: group_id(path.as_deref(), pid, system),
                 name,
@@ -337,5 +354,30 @@ mod tests {
         );
         assert_eq!(group_id(None, 0, true), "system");
         assert_eq!(group_id(None, 42, false), "pid:42");
+    }
+    #[test]
+    fn normalizes_windows_indirect_system_sounds_name() {
+        assert_eq!(
+            normalize_session_name(
+                Some("@%SystemRoot%\\System32\\AudioSrv.Dll,-202".into()),
+                None,
+                0,
+                true
+            ),
+            "System Sounds"
+        );
+        assert_eq!(
+            normalize_session_name(
+                Some("@%SystemRoot%\\System32\\AudioSrv.Dll,-202".into()),
+                Some("C:\\Apps\\Spotify.exe"),
+                1234,
+                false
+            ),
+            "Spotify"
+        );
+        assert_eq!(
+            normalize_session_name(Some("Microsoft Edge".into()), None, 10, false),
+            "Microsoft Edge"
+        );
     }
 }

@@ -357,6 +357,8 @@ fn start_cursor_loop(app: AppHandle, state: Arc<AppState>) {
         let mut cached_settings_ver = SETTINGS_VERSION.load(Ordering::Relaxed);
         let mut geometry_key = String::new();
         let mut last_scale_factor: f64 = 0.0;
+        let mut last_monitor_name: Option<String> = None;
+        let mut last_monitor_x: i32 = 0;
         let mut pending_cursor_monitor: Option<String> = None;
         let mut allow_edge = false;
 
@@ -422,9 +424,11 @@ fn start_cursor_loop(app: AppHandle, state: Arc<AppState>) {
                 mouse_down = false;
             }
 
-            win::WindowManager::set_hover_passthrough(!inside_pill);
-            if inside_pill != is_hovered {
-                is_hovered = inside_pill;
+            let click_through = state.click_through.load(Ordering::Relaxed);
+            let effective_inside = inside_pill && !click_through;
+            win::WindowManager::set_hover_passthrough(!effective_inside);
+            if effective_inside != is_hovered {
+                is_hovered = effective_inside;
                 let _ = app.emit_to("main", "hover", is_hovered);
             }
 
@@ -525,13 +529,28 @@ fn start_cursor_loop(app: AppHandle, state: Arc<AppState>) {
                             }
                             let key = format!("{}|{}|{}|{}|{}|{:?}|{:?}|{}", settings["scale"], settings["monitor"], target_name, settings["offsetX"], settings["underTaskbar"], monitor.position(), monitor.size(), monitor.scale_factor());
                             if dpi_dirty || key != geometry_key {
+                                let moved_monitor = last_monitor_name
+                                    .as_deref()
+                                    .is_some_and(|prev| prev != target_name.as_str());
+                                let move_dir = if monitor.position().x >= last_monitor_x { "right" } else { "left" };
+                                last_monitor_name = Some(target_name.clone());
+                                last_monitor_x = monitor.position().x;
                                 geometry_key = key;
                                 let scale_changed = last_scale_factor > 0.0 && (monitor.scale_factor() - last_scale_factor).abs() > 0.01;
                                 last_scale_factor = monitor.scale_factor();
+                                if moved_monitor && !tucked && !hidden {
+                                    let _ = app.emit_to("main", "island:monitor-move", json!({"phase": "leave", "direction": move_dir}));
+                                    std::thread::sleep(std::time::Duration::from_millis(145));
+                                }
                                 if let Err(e) = apply_island_geometry(&app, &state) {
                                     app_log(&format!("Island geometry: {e}"));
-                                } else if dpi_dirty || scale_changed {
-                                    let _ = app.emit_to("main", "island:dpi-changed", monitor.scale_factor());
+                                } else {
+                                    if dpi_dirty || scale_changed {
+                                        let _ = app.emit_to("main", "island:dpi-changed", monitor.scale_factor());
+                                    }
+                                    if moved_monitor && !tucked && !hidden {
+                                        let _ = app.emit_to("main", "island:monitor-move", json!({"phase": "arrive", "direction": move_dir}));
+                                    }
                                 }
                             }
                         }
@@ -1849,7 +1868,7 @@ fn register_hotkeys(app:&AppHandle,settings:&Value)->Vec<String>{
 fn handle_hotkey(app:&AppHandle,key:&str){let state=app.state::<Arc<AppState>>();match key{
  "hotkeyAutoHide"=>{if let Err(error)=auto_hide_toggle(app.clone(),state){let _=app.emit("island:warn",error);}},
  "hotkeyFullscreen"=>{let on=!state.settings.lock().unwrap()["hideInFullscreen"].as_bool().unwrap_or(true);let _=settings_set(Some(json!({"hideInFullscreen":on})),app.clone(),state);},
- "hotkeyPalette"=>{let _=app.emit("island:palette",());},"hotkeyToggle"=>{let _=app.emit("island:toggle",json!({}));},"hotkeyClipboard"=>{let _=app.emit("island:toggle",json!({"tab":"clipboard"}));},"hotkeyChat"=>{let _=app.emit("island:toggle",json!({"tab":"chat"}));},
+ "hotkeyPalette"=>{take_focus(app.clone());let _=app.emit("island:palette",());},"hotkeyToggle"=>{let _=app.emit("island:toggle",json!({}));},"hotkeyClipboard"=>{let _=app.emit("island:toggle",json!({"tab":"clipboard"}));},"hotkeyChat"=>{let _=app.emit("island:toggle",json!({"tab":"chat"}));},
  "hotkeyArea"|"hotkeyScreen"|"hotkeyOcr"|"hotkeyQr"|"hotkeyColor"|"hotkeyRecord"=>{let mode=match key{"hotkeyScreen"=>"screen","hotkeyOcr"=>"ocr","hotkeyQr"=>"qr","hotkeyColor"=>"color","hotkeyRecord"=>"record",_=>"area"};let _=capture_start(Some(mode.into()),app.clone(),state);},
  "hotkeyPlainPaste"=>{if let Some(text)=clip_current_text(){let _=clipboard::paste_to_focused_window(&text);}},"hotkeyMic"=>{let _=audio::toggle_mute(true);},"hotkeyThrough"=>{let _=through_toggle(app.clone(),state);},"hotkeyTheme"=>{let mut settings=state.settings.lock().unwrap();let next=if settings["theme"]==json!("dark"){"light"}else{"dark"};settings["theme"]=json!(next);let _=storage::save_json_file("settings.json",&settings);let _=app.emit("settings:changed",settings.clone());},
  "hotkeyMediaPill"=>{let mut settings=state.settings.lock().unwrap();let kinds=["normal","title","player","lyrics"];let current=settings["mediaPill"].as_str().unwrap_or("normal");let next=kinds[(kinds.iter().position(|s|*s==current).unwrap_or(0)+1)%kinds.len()];settings["mediaPill"]=json!(next);let _=storage::save_json_file("settings.json",&settings);let _=app.emit("settings:changed",settings.clone());},

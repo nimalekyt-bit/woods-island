@@ -115,21 +115,45 @@
     error: ["Нужно проверить связь", "Connection needs attention"],
     tabFiles: ["Файлы", "Files"],
     tabRemote: ["Пульт ПК", "PC Remote"],
-    remoteNothing: ["Музыка на паузе", "Nothing playing"],
-    remoteMute: ["🔇 Звук", "🔇 Mute"],
-    remoteMic: ["🎤 Микрофон", "🎤 Mic"],
-    remoteShot: ["📸 Скриншот", "📸 Screen"],
-    remoteLock: ["🔒 Блок", "🔒 Lock"],
-    remoteSleep: ["🌙 Сон", "🌙 Sleep"],
-    remoteLinkTitle: ["Открыть ссылку в браузере ПК", "Open link in PC browser"],
-    remoteUrlPlaceholder: ["https://youtube.com/…", "https://example.com/…"],
+    remoteNothing: ["Сейчас ничего не играет", "Nothing playing"],
+    remoteIdleBadge: ["На паузе", "Paused"],
+    remotePlayingBadge: ["Играет", "Playing"],
+    remoteAudioTitle: ["Громкость и микрофон", "Volume & microphone"],
+    remoteMute: ["Звук ПК", "PC Sound"],
+    remoteMic: ["Микрофон", "Microphone"],
+    remoteStateOn: ["Включён", "Active"],
+    remoteStateMuted: ["Выключен", "Muted"],
+    remotePowerTitle: ["Экран и питание", "Screen & power"],
+    remoteShot: ["Скриншот", "Screenshot"],
+    remoteLock: ["Блокировка", "Lock PC"],
+    remoteSleep: ["Сон", "Sleep"],
+    remoteLinkTitle: ["Открыть ссылку на ПК", "Open link on PC"],
+    remoteUrlPlaceholder: ["Вставь ссылку (https://…)", "Paste link (https://…)"],
     remoteTimerTitle: ["Таймер на ПК", "PC Timer"],
     remoteTimerIdle: ["Не запущен", "Idle"],
-    remoteTimerReset: ["Сброс", "Reset"],
-    remoteSaveShot: ["Скачать скриншот", "Save screenshot"],
+    remoteTimerReset: ["Сбросить таймер", "Reset timer"],
+    remoteSaveShot: ["Сохранить скриншот", "Save screenshot"],
+    remoteHideShot: ["Скрыть", "Hide"],
     remoteOpened: ["Ссылка открыта на ПК.", "Link opened on PC."],
     remoteDone: ["Команда выполнена.", "Done."],
     remoteSleepConfirm: ["Перевести компьютер в сон?", "Put the PC to sleep?"],
+    pcDisconnectedTitle: [
+      "Подключение остановлено на ПК",
+      "Disconnected from PC",
+    ],
+    pcDisconnectedDetail: [
+      "Вы отключили телефон в Woods Island. Создай новый QR-код на полке и отсканируй его снова.",
+      "This phone was disconnected in Woods Island. Create a new QR code on the shelf and scan it again.",
+    ],
+    lostConnectionTitle: [
+      "Связь с ПК потеряна",
+      "Connection to PC lost",
+    ],
+    lostConnectionDetail: [
+      "Если ты отключил телефон на пилюле — отсканируй новый QR-код. Если Woods Island перезапускается — подожди или проверь связь.",
+      "If you turned off phone sync on the island, scan a new QR code. If Woods Island is restarting, wait or retry.",
+    ],
+    retryConnection: ["Проверить", "Retry"],
   };
   const t = (key) => strings[key]?.[lang === "ru" ? 0 : 1] || key;
   const element = (id) => document.getElementById(id);
@@ -195,8 +219,21 @@
     upload = null,
     offerSignature = "",
     stopped = false,
-    reconnecting = false;
+    reconnecting = false,
+    consecutivePollErrors = 0;
   const recentSent = [];
+  const showDisconnectBanner = (titleKey, detailKey, allowRetry) => {
+    const banner = element("disconnect-banner");
+    if (!banner) return;
+    element("disconnect-banner-title").textContent = t(titleKey);
+    element("disconnect-banner-detail").textContent = t(detailKey);
+    if (element("disconnect-retry")) element("disconnect-retry").hidden = !allowRetry;
+    banner.hidden = false;
+  };
+  const hideDisconnectBanner = () => {
+    const banner = element("disconnect-banner");
+    if (banner) banner.hidden = true;
+  };
 
   const bytes = (amount) =>
     amount >= 1048576
@@ -276,6 +313,7 @@
       "remote-url",
       "remote-open-url",
       "remote-t5",
+      "remote-t10",
       "remote-t15",
       "remote-t25",
       "remote-treset",
@@ -448,7 +486,9 @@
     polling = true;
     try {
       const data = await api("/state");
+      consecutivePollErrors = 0;
       reconnecting = false;
+      hideDisconnectBanner();
       if (!linked) setConnected(true);
       renderOffers(data.offered || []);
       connection("connected", "connectedDetail", "connected");
@@ -458,11 +498,19 @@
         reconnecting = false;
         forget();
         setConnected(false);
-        connection("disconnected", "disconnectedDetail", "error");
+        connection("pcDisconnectedTitle", "pcDisconnectedDetail", "error");
+        showDisconnectBanner("pcDisconnectedTitle", "pcDisconnectedDetail", false);
         upload?.abort();
       } else {
+        consecutivePollErrors += 1;
         reconnecting = true;
-        connection("reconnecting", "reconnectingDetail", "reconnecting");
+        if (consecutivePollErrors >= 3) {
+          setConnected(false);
+          connection("lostConnectionTitle", "lostConnectionDetail", "error");
+          showDisconnectBanner("lostConnectionTitle", "lostConnectionDetail", true);
+        } else {
+          connection("reconnecting", "reconnectingDetail", "reconnecting");
+        }
       }
     } finally {
       polling = false;
@@ -637,10 +685,26 @@
   });
   setInterval(() => void poll(), 2000);
 
+  element("disconnect-retry")?.addEventListener("click", () => {
+    consecutivePollErrors = 0;
+    reconnecting = true;
+    connection("reconnecting", "reconnectingDetail", "reconnecting");
+    void poll();
+  });
+
   // Phone QR 2.0 — PC Remote Control tab logic
   let activeMode = "files";
   let volTimer = null;
   if (element("remote-url")) element("remote-url").placeholder = t("remoteUrlPlaceholder");
+  const updateVolVisual = (pct, muted) => {
+    const safePct = Math.max(0, Math.min(100, Math.round(pct)));
+    if (element("remote-vol-fill")) {
+      element("remote-vol-fill").style.width = (muted ? 0 : safePct) + "%";
+    }
+    if (element("remote-vol-val")) {
+      element("remote-vol-val").textContent = muted ? t("remoteStateMuted") : safePct + "%";
+    }
+  };
   function switchMode(mode) {
     activeMode = mode;
     element("tab-files")?.setAttribute("aria-selected", String(mode === "files"));
@@ -663,7 +727,15 @@
       void pollRemote();
       return res;
     } catch (error) {
-      message(errorMessage(error), true);
+      if (isRevoked(error.code)) {
+        stopped = true;
+        forget();
+        setConnected(false);
+        connection("pcDisconnectedTitle", "pcDisconnectedDetail", "error");
+        showDisconnectBanner("pcDisconnectedTitle", "pcDisconnectedDetail", false);
+      } else {
+        message(errorMessage(error), true);
+      }
       return null;
     }
   }
@@ -673,28 +745,47 @@
     try {
       const st = await api("/remote/state");
       const m = st.media;
+      const playing = Boolean(m?.playing);
       const trackEl = element("remote-track");
       const artistEl = element("remote-artist");
       const coverEl = element("remote-cover");
+      const fallbackEl = element("remote-cover-fallback");
+      const glowEl = element("remote-glow");
+      const statusEl = element("remote-status-pill");
       if (trackEl) trackEl.textContent = m?.title || t("remoteNothing");
       if (artistEl) artistEl.textContent = m ? [m.artist, m.appName].filter(Boolean).join(" · ") : "";
+      if (statusEl) {
+        statusEl.dataset.playing = String(playing);
+        statusEl.textContent = playing ? t("remotePlayingBadge") : t("remoteIdleBadge");
+      }
       if (coverEl) {
         if (st.cover) {
           coverEl.src = st.cover;
           coverEl.hidden = false;
+          if (fallbackEl) fallbackEl.hidden = true;
+          if (glowEl) {
+            glowEl.style.backgroundImage = `url("${st.cover}")`;
+            glowEl.dataset.active = "true";
+          }
         } else {
           coverEl.hidden = true;
+          if (fallbackEl) fallbackEl.hidden = false;
+          if (glowEl) glowEl.dataset.active = "false";
         }
       }
-      if (element("remote-play")) element("remote-play").textContent = m?.playing ? "⏸" : "▶";
+      if (element("remote-play")) element("remote-play").dataset.playing = String(playing);
       if (st.audio && typeof st.audio.level === "number") {
         const pct = Math.round(st.audio.level * 100);
+        const muted = Boolean(st.audio.muted);
+        const micMuted = Boolean(st.audio.micMuted);
         if (element("remote-vol") && document.activeElement !== element("remote-vol")) {
           element("remote-vol").value = String(pct);
         }
-        if (element("remote-vol-val")) {
-          element("remote-vol-val").textContent = st.audio.muted ? "🔇" : pct + "%";
-        }
+        updateVolVisual(pct, muted);
+        if (element("remote-mute")) element("remote-mute").dataset.muted = String(muted);
+        if (element("remote-mute-state")) element("remote-mute-state").textContent = muted ? t("remoteStateMuted") : t("remoteStateOn");
+        if (element("remote-mic")) element("remote-mic").dataset.muted = String(micMuted);
+        if (element("remote-mic-state")) element("remote-mic-state").textContent = micMuted ? t("remoteStateMuted") : t("remoteStateOn");
       }
       const tm = st.timer;
       const tmEl = element("remote-timer-status");
@@ -708,7 +799,15 @@
           tmEl.textContent = t("remoteTimerIdle");
         }
       }
-    } catch {}
+    } catch (error) {
+      if (isRevoked(error.code)) {
+        stopped = true;
+        forget();
+        setConnected(false);
+        connection("pcDisconnectedTitle", "pcDisconnectedDetail", "error");
+        showDisconnectBanner("pcDisconnectedTitle", "pcDisconnectedDetail", false);
+      }
+    }
   }
   setInterval(() => void pollRemote(), 1500);
 
@@ -719,7 +818,7 @@
   element("remote-mic")?.addEventListener("click", () => void remoteAction({ action: "mic_mute" }));
   element("remote-vol")?.addEventListener("input", (ev) => {
     const val = Number(ev.target.value);
-    if (element("remote-vol-val")) element("remote-vol-val").textContent = val + "%";
+    updateVolVisual(val, false);
     clearTimeout(volTimer);
     volTimer = setTimeout(() => void remoteAction({ action: "volume_set", level: val / 100 }), 80);
   });
@@ -736,6 +835,9 @@
       message(t("remoteDone"));
     }
   });
+  element("remote-shot-hide")?.addEventListener("click", () => {
+    if (element("remote-shot-box")) element("remote-shot-box").hidden = true;
+  });
   element("remote-open-url")?.addEventListener("click", async () => {
     const raw = (element("remote-url").value || "").trim();
     if (!raw) return;
@@ -746,7 +848,11 @@
       message(t("remoteOpened"));
     }
   });
+  element("remote-url")?.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") element("remote-open-url")?.click();
+  });
   element("remote-t5")?.addEventListener("click", () => void remoteAction({ action: "timer_start", minutes: 5 }));
+  element("remote-t10")?.addEventListener("click", () => void remoteAction({ action: "timer_start", minutes: 10 }));
   element("remote-t15")?.addEventListener("click", () => void remoteAction({ action: "timer_start", minutes: 15 }));
   element("remote-t25")?.addEventListener("click", () => void remoteAction({ action: "timer_start", minutes: 25, label: "Фокус" }));
   element("remote-treset")?.addEventListener("click", () => void remoteAction({ action: "timer_reset" }));

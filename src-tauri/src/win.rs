@@ -6,8 +6,10 @@ use windows::Win32::Graphics::Dwm::{
     DWMWA_USE_IMMERSIVE_DARK_MODE, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND,
 };
 use windows::Win32::Graphics::Gdi::{CreateRectRgn, DeleteObject, GetMonitorInfoW, MonitorFromPoint, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST, SetWindowRgn};
+use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
+use windows::Win32::UI::Input::KeyboardAndMouse::SetFocus;
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetClientRect, GetCursorPos, GetForegroundWindow, GetSystemMetrics, GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId,
+    BringWindowToTop, GetClientRect, GetCursorPos, GetForegroundWindow, GetSystemMetrics, GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId,
     SetWindowLongPtrW, SetWindowPos,
     GWL_EXSTYLE, GWL_STYLE, HWND_TOPMOST, SM_CXSCREEN,
     SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW,
@@ -340,7 +342,20 @@ impl WindowManager {
                 );
             }
             if active {
+                // Temporarily lift hover passthrough so the window can receive focus immediately
+                // even when activated by keyboard shortcut (e.g. Alt+Space) while cursor is elsewhere.
+                HOVER_PASSTHROUGH.store(false, Ordering::Relaxed);
+                Self::apply_input_transparent();
+                let fg = GetForegroundWindow();
+                let fg_tid = if !fg.0.is_null() { GetWindowThreadProcessId(fg, None) } else { 0 };
+                let cur_tid = GetCurrentThreadId();
+                let attached = fg_tid != 0 && fg_tid != cur_tid && AttachThreadInput(fg_tid, cur_tid, true).as_bool();
+                let _ = BringWindowToTop(hwnd);
                 let _ = windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow(hwnd);
+                let _ = SetFocus(hwnd);
+                if attached {
+                    let _ = AttachThreadInput(fg_tid, cur_tid, false);
+                }
             } else if !keep_activatable {
                 let previous=std::mem::take(&mut *PREVIOUS_FOCUS.lock().unwrap());
                 if previous!=0 && GetForegroundWindow()==hwnd { let _=windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow(HWND(previous as _)); }
@@ -628,6 +643,12 @@ impl WindowManager {
                 let next = if effective { old | WS_EX_TRANSPARENT.0 as isize } else { old & !(WS_EX_TRANSPARENT.0 as isize) };
                 if next != old {
                     SetWindowLongPtrW(hwnd, GWL_EXSTYLE, next);
+                    let _ = SetWindowPos(
+                        hwnd,
+                        HWND(std::ptr::null_mut()),
+                        0, 0, 0, 0,
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+                    );
                 }
             }
         }

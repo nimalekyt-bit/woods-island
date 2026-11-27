@@ -269,32 +269,32 @@ export function AppearancePresets({
       id: 'notch',
       active: settings.style !== 'capsule' && settings.notchBar !== true && scale === 100,
       title: en ? 'Classic notch' : 'Классика',
-      sub: en ? 'Notch · 100%' : 'Вырез · 100%',
-      visual: 'wi-preset-notch',
+      sub: en ? 'Edge notch · 100%' : 'Вырез у края · 100%',
+      badge: null as string | null,
       patch: { style: 'notch', notchBar: false, scale: 100 },
     },
     {
       id: 'capsule',
       active: settings.style === 'capsule' && settings.notchBar !== true && scale === 100,
       title: en ? 'Floating pill' : 'Капсула',
-      sub: en ? 'Capsule · 100%' : 'Парящая · 100%',
-      visual: 'wi-preset-capsule',
+      sub: en ? 'Floating · 100%' : 'Парит сверху · 100%',
+      badge: null as string | null,
       patch: { style: 'capsule', notchBar: false, scale: 100 },
     },
     {
       id: 'macbook',
       active: settings.notchBar === true,
       title: 'MacBook',
-      sub: en ? 'Top bar reserve' : 'Полоса выреза',
-      visual: 'wi-preset-macbook',
+      sub: en ? 'Top bar · macOS style' : 'Полоса как в macOS',
+      badge: 'BAR' as string | null,
       patch: { style: 'notch', notchBar: true },
     },
     {
       id: '4k',
       active: settings.style === 'capsule' && settings.notchBar !== true && scale >= 125,
-      title: en ? '4K / Large' : 'Для 4K',
-      sub: en ? 'Capsule · 125%' : 'Капсула · 125%',
-      visual: 'wi-preset-4k',
+      title: en ? '4K / HiDPI' : 'Для 4K',
+      sub: en ? 'Large capsule · 125%' : 'Крупная капсула · 125%',
+      badge: '4K' as string | null,
       patch: { style: 'capsule', notchBar: false, scale: 125 },
     },
   ];
@@ -315,11 +315,41 @@ export function AppearancePresets({
             onClick={() => onApply(preset.patch)}
             className="wi-preset-card"
           >
-            <div className="wi-preset-preview">
-              <div className={preset.visual} />
+            <div className={`wi-preset-screen wi-preset-screen-${preset.id}`}>
+              {preset.id === 'macbook' ? (
+                <div className="wi-preset-menubar">
+                  <span className="wi-preset-mb-dots">
+                    <i />
+                    <i />
+                  </span>
+                  <span className="wi-preset-mb-notch">
+                    <i />
+                    <i />
+                  </span>
+                  <span className="wi-preset-mb-clock">12:00</span>
+                </div>
+              ) : (
+                <div className={`wi-preset-island wi-preset-island-${preset.id}`}>
+                  <span className="wi-preset-eyes">
+                    <i />
+                    <i />
+                  </span>
+                </div>
+              )}
+              {preset.badge && <span className="wi-preset-tag">{preset.badge}</span>}
+              <span className="wi-preset-dock" aria-hidden="true" />
             </div>
-            <div>
-              <div className="wi-preset-title">{preset.title}</div>
+            <div className="wi-preset-meta">
+              <div className="wi-preset-title-row">
+                <span className="wi-preset-title">{preset.title}</span>
+                {preset.active && (
+                  <span className="wi-preset-check" aria-hidden="true">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  </span>
+                )}
+              </div>
               <div className="wi-preset-sub">{preset.sub}</div>
             </div>
           </button>
