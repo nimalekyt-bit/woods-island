@@ -331,6 +331,38 @@ impl WindowManager {
         }
     }
 
+    /// Clears `WS_EX_NOACTIVATE` and moves Win32 foreground/keyboard focus to `hwnd`.
+    pub fn activate_window(hwnd: HWND) {
+        if Self::passive_qa() { return; }
+        unsafe {
+            let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+            let next = style & !(WS_EX_NOACTIVATE.0 as isize);
+            if next != style {
+                SetWindowLongPtrW(hwnd, GWL_EXSTYLE, next);
+                let _ = SetWindowPos(
+                    hwnd,
+                    HWND(std::ptr::null_mut()),
+                    0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+                );
+            }
+            let fg = GetForegroundWindow();
+            let fg_tid = if !fg.0.is_null() { GetWindowThreadProcessId(fg, None) } else { 0 };
+            let cur_tid = GetCurrentThreadId();
+            let attached = fg_tid != 0 && fg_tid != cur_tid && AttachThreadInput(fg_tid, cur_tid, true).as_bool();
+            let _ = windows::Win32::UI::WindowsAndMessaging::AllowSetForegroundWindow(
+                windows::Win32::UI::WindowsAndMessaging::ASFW_ANY,
+            );
+            let _ = BringWindowToTop(hwnd);
+            let _ = windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow(hwnd);
+            let _ = windows::Win32::UI::Input::KeyboardAndMouse::SetActiveWindow(hwnd);
+            let _ = SetFocus(hwnd);
+            if attached {
+                let _ = AttachThreadInput(fg_tid, cur_tid, false);
+            }
+        }
+    }
+
     pub fn keyboard_focus(hwnd: HWND, active: bool) {
         if Self::passive_qa() { return; }
         unsafe {
@@ -356,20 +388,7 @@ impl WindowManager {
                 KEYBOARD_FOCUS_GUARD_UNTIL_MS.store(now_epoch_ms().saturating_add(400), Ordering::Relaxed);
                 HOVER_PASSTHROUGH.store(false, Ordering::Relaxed);
                 Self::apply_input_transparent();
-                let fg = GetForegroundWindow();
-                let fg_tid = if !fg.0.is_null() { GetWindowThreadProcessId(fg, None) } else { 0 };
-                let cur_tid = GetCurrentThreadId();
-                let attached = fg_tid != 0 && fg_tid != cur_tid && AttachThreadInput(fg_tid, cur_tid, true).as_bool();
-                let _ = windows::Win32::UI::WindowsAndMessaging::AllowSetForegroundWindow(
-                    windows::Win32::UI::WindowsAndMessaging::ASFW_ANY,
-                );
-                let _ = BringWindowToTop(hwnd);
-                let _ = windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow(hwnd);
-                let _ = windows::Win32::UI::Input::KeyboardAndMouse::SetActiveWindow(hwnd);
-                let _ = SetFocus(hwnd);
-                if attached {
-                    let _ = AttachThreadInput(fg_tid, cur_tid, false);
-                }
+                Self::activate_window(hwnd);
             } else if !keep_activatable {
                 KEYBOARD_FOCUS_GUARD_UNTIL_MS.store(0, Ordering::Relaxed);
                 let previous=std::mem::take(&mut *PREVIOUS_FOCUS.lock().unwrap());

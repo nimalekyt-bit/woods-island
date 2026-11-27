@@ -418,9 +418,13 @@ function L() {
             (T.current = !1),
             t === `record` && n.settingsGet().then((e) => u(e.recordFormat)),
             t === `area` && n.settingsGet().then((e) => b(e.shotDraw === !0)));
+          requestAnimationFrame(() => window.focus());
         }),
         t = (e) => {
-          e.key === `Escape` && n.captureCancel();
+          if (e.key === `Escape`) {
+            e.preventDefault();
+            n.captureCancel();
+          }
         };
       return (
         window.addEventListener(`keydown`, t),

@@ -348,6 +348,7 @@ fn start_cursor_loop(app: AppHandle, state: Arc<AppState>) {
         let mut is_hovered = false;
         let mut is_edge = false;
         let mut mouse_down = false;
+        let mut esc_was_down = false;
         let mut last_near: Option<(i32, i32)> = None;
         let mut unfolded_anchor: Option<visibility::Bounds> = None;
         let mut last_context = Value::Null;
@@ -423,6 +424,23 @@ fn start_cursor_loop(app: AppHandle, state: Arc<AppState>) {
             } else {
                 mouse_down = false;
             }
+            let esc_down = unsafe {
+                windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(
+                    windows::Win32::UI::Input::KeyboardAndMouse::VK_ESCAPE.0 as i32,
+                ) < 0
+            };
+            if capture::is_capturing() {
+                if let Some(overlay) = app.get_webview_window("overlay") {
+                    let visible = overlay.is_visible().unwrap_or(false);
+                    let focused = overlay.hwnd().ok().is_some_and(|oh| unsafe {
+                        windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow().0 == oh.0 as _
+                    });
+                    if esc_down && !esc_was_down && visible && !focused && !win::WindowManager::qa_input_disabled() {
+                        capture_cancel(app.clone());
+                    }
+                }
+            }
+            esc_was_down = esc_down;
 
             let click_through = state.click_through.load(Ordering::Relaxed);
             let effective_inside = inside_pill && !click_through;
@@ -1012,6 +1030,15 @@ async fn weather_search(query: Option<String>) -> Vec<Value> {
 #[tauri::command]
 async fn rates()->Result<Value,String>{weather::rates().await}
 
+fn move_webview_focus(webview: &tauri::Webview) {
+    let _ = webview.set_focus();
+    let _ = webview.with_webview(|platform| unsafe {
+        let _ = platform.controller().MoveFocus(
+            webview2_com::Microsoft::Web::WebView2::Win32::COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC,
+        );
+    });
+}
+
 fn focus_main_window_now(app: &AppHandle) {
     if win::WindowManager::passive_qa() { return; }
     // Use get_window + get_webview separately: Tauri's get_webview_window("main") returns
@@ -1025,12 +1052,21 @@ fn focus_main_window_now(app: &AppHandle) {
         let _ = window.set_focus();
     }
     if let Some(webview) = app.get_webview("main") {
-        let _ = webview.set_focus();
-        let _ = webview.with_webview(|platform| unsafe {
-            let _ = platform.controller().MoveFocus(
-                webview2_com::Microsoft::Web::WebView2::Win32::COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC,
-            );
-        });
+        move_webview_focus(&webview);
+    }
+}
+
+fn focus_overlay_now(app: &AppHandle) {
+    if win::WindowManager::passive_qa() { return; }
+    if let Some(overlay) = app.get_webview_window("overlay") {
+        let _ = overlay.set_focusable(true);
+        if let Ok(hwnd) = overlay.hwnd() {
+            win::WindowManager::activate_window(HWND(hwnd.0 as _));
+        }
+        let _ = overlay.set_focus();
+    }
+    if let Some(webview) = app.get_webview("overlay") {
+        move_webview_focus(&webview);
     }
 }
 
@@ -1593,7 +1629,31 @@ fn capture_start(mode:Option<String>,app:AppHandle,state:tauri::State<'_, Arc<Ap
     let frame=capture::data_url(shared.as_ref())?;
     let _=app.emit_to("overlay","overlay:start",json!({"mode":mode,"frame":frame,"below":0}));
     overlay.show().map_err(|e|e.to_string())?;
-    if !win::WindowManager::passive_qa(){overlay.set_focus().map_err(|e|e.to_string())?;}
+    if !win::WindowManager::passive_qa() {
+        let on_overlay_thread = overlay
+            .hwnd()
+            .ok()
+            .map(|hwnd| unsafe {
+                let owner_tid = windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId(
+                    HWND(hwnd.0 as _),
+                    None,
+                );
+                owner_tid != 0 && owner_tid == windows::Win32::System::Threading::GetCurrentThreadId()
+            })
+            .unwrap_or(false);
+        if on_overlay_thread {
+            focus_overlay_now(&app);
+        } else {
+            let (tx, rx) = std::sync::mpsc::sync_channel::<()>(1);
+            let app_clone = app.clone();
+            if app.run_on_main_thread(move || {
+                focus_overlay_now(&app_clone);
+                let _ = tx.send(());
+            }).is_ok() {
+                let _ = rx.recv_timeout(std::time::Duration::from_millis(250));
+            }
+        }
+    }
     visibility.keep_hidden();
     Ok(true)
 }
@@ -1613,6 +1673,9 @@ fn hide_overlay_cleanly(app: &AppHandle) {
         if guard.as_ref().is_some_and(|(id, _)| *id == token) { *guard = None; }
     }
     let _ = overlay.hide();
+    if !win::WindowManager::passive_qa() {
+        let _ = overlay.set_focusable(false);
+    }
 }
 
 #[tauri::command]

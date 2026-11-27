@@ -8041,11 +8041,11 @@ function kA() {
           `Microphone: ${t.join(`, `)} · click to ${n ? `unmute` : `mute`}`,
         ),
         onClick: () => void u.micToggle(),
-        className: `press flex h-7 items-center gap-1 rounded-full px-2.5 text-[11.5px] font-semibold ${n ? `bg-danger/20 text-danger` : `bg-orange-400/20 text-orange-300`}`,
+        className: `press flex h-7 items-center gap-1 rounded-full px-2 text-[11.5px] font-semibold ${n ? `bg-danger/20 text-danger` : `bg-orange-400/20 text-orange-300`}`,
         children: [
           n ? (0, jsxRuntime.jsx)(Lo, { size: 13 }) : (0, jsxRuntime.jsx)(jn, { size: 13 }),
           (0, jsxRuntime.jsx)(`span`, {
-            className: `max-w-[96px] truncate`,
+            className: `max-w-[64px] truncate`,
             children: n ? o(`выкл`, `off`) : t[0],
           }),
         ],
@@ -8110,7 +8110,7 @@ ${e.active === null ? o(`Клик — выбрать команду VPN`, `Click
     onContextMenu: (e) => {
       (e.preventDefault(), u.vpnRefresh());
     },
-    className: `press flex h-7 items-center gap-1 rounded-full px-2.5 text-[11.5px] font-semibold ${r ? `bg-rose-500/15 text-stop-ink` : e.active ? `bg-emerald-400/15 text-emerald-300` : `bg-white/8 text-ink-3`}`,
+    className: `press flex h-7 items-center gap-1 rounded-full px-2 text-[11.5px] font-semibold ${r ? `bg-rose-500/15 text-stop-ink` : e.active ? `bg-emerald-400/15 text-emerald-300` : `bg-white/8 text-ink-3`}`,
     children: [
       t
         ? (0, jsxRuntime.jsx)(Ve, { size: 13, className: `animate-spin` })
@@ -8134,6 +8134,9 @@ function jA() {
     s = useIslandStore((e) => e.settings?.moduleWeather !== !1),
     c = useIslandStore((e) => e.settings?.moduleControls !== !1),
     l = useIslandStore((e) => e.settings?.tabsHidden),
+    privacyMicCount = useIslandStore((e) => (e.settings?.showPrivacy !== !1 ? e.privacy.mic.length : 0)),
+    vpnKey = useIslandStore((e) => (e.settings?.showVpn !== !1 && e.vpn ? (e.vpn.countryCode ?? (e.vpn.active ? `1` : `0`)) : ``)),
+    recentCount = useIslandStore((e) => (e.recentEvents ?? []).length),
     d = DA.filter((e) => (e.id !== `shelf` || i) && (e.id !== `weather` || s) && (e.id !== `controls` || c)),
     f = d.some((t) => t.id === e) ? e : `home`,
     p = d.filter((e) => e.id === f || !l?.includes(e.id)),
@@ -8151,53 +8154,57 @@ function jA() {
     }
     ((n = Math.ceil(n)),
       Math.abs(useIslandStore.getState().headerMin - n) > 2 && useIslandStore.setState({ headerMin: n }));
-  }, [p.length, f, a]);
+  }, [p.length, f, a, privacyMicCount, vpnKey, recentCount]);
   return (
     (0, jsxRuntime.jsxs)(`div`, {
       className: `flex h-full flex-col px-4 pt-3 pb-4`,
       children: [
         (0, jsxRuntime.jsxs)(`header`, {
           ref: m,
-          className: `relative z-30 flex h-9 shrink-0 items-center gap-1`,
+          className: `relative z-30 flex h-8 shrink-0 items-center gap-1`,
           children: [
-            p.map((e) =>
-              (0, jsxRuntime.jsxs)(
-                `button`,
-                {
-                  onClick: () => t(e.id),
-                  className: `press relative flex h-8 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-medium ${f === e.id ? `min-w-0 text-ink` : `shrink-0 text-ink-3 hover:text-ink-2`}`,
-                  children: [
-                    (0, jsxRuntime.jsx)(`span`, {
-                      className: `absolute inset-0 rounded-full bg-white/12 transition-opacity duration-150 ${f === e.id ? `opacity-100` : `opacity-0`}`,
-                    }),
-                    (0, jsxRuntime.jsx)(
-                      `span`,
-                      {
-                        className: `relative shrink-0 ${f === e.id ? `pop-in` : ``}`,
-                        title: e.label,
-                        children: e.icon,
-                      },
-                      f === e.id ? `on` : `off`,
-                    ),
-                    f === e.id &&
+            (0, jsxRuntime.jsx)(`div`, {
+              "data-island-tabs": !0,
+              className: `flex min-w-0 shrink-0 items-center gap-0.5`,
+              children: p.map((e) =>
+                (0, jsxRuntime.jsxs)(
+                  `button`,
+                  {
+                    onClick: () => t(e.id),
+                    className: `press relative flex h-7 shrink-0 items-center rounded-full text-[12px] font-medium ${f === e.id ? `gap-1.5 px-2.5 text-ink` : e.id === `shelf` && a > 0 ? `gap-1 px-1.5 text-ink-3 hover:text-ink-2` : `w-7 justify-center px-0 text-ink-3 hover:text-ink-2`}`,
+                    children: [
                       (0, jsxRuntime.jsx)(`span`, {
-                        className: `tab-name relative min-w-0 truncate`,
-                        children: e.label,
+                        className: `absolute inset-0 rounded-full bg-white/12 transition-opacity duration-150 ${f === e.id ? `opacity-100` : `opacity-0`}`,
                       }),
-                    e.id === `shelf` &&
-                      a > 0 &&
-                      (0, jsxRuntime.jsx)(`span`, {
-                        className: `tabular relative rounded-full bg-white/15 px-1.5 text-[10px] leading-4 text-ink`,
-                        children: a,
-                      }),
-                  ],
-                },
-                e.id,
+                      (0, jsxRuntime.jsx)(
+                        `span`,
+                        {
+                          className: `relative shrink-0 ${f === e.id ? `pop-in` : ``}`,
+                          title: e.label,
+                          children: e.icon,
+                        },
+                        f === e.id ? `on` : `off`,
+                      ),
+                      f === e.id &&
+                        (0, jsxRuntime.jsx)(`span`, {
+                          className: `tab-name relative whitespace-nowrap`,
+                          children: e.label,
+                        }),
+                      e.id === `shelf` &&
+                        a > 0 &&
+                        (0, jsxRuntime.jsx)(`span`, {
+                          className: `tabular relative rounded-full bg-white/15 px-1.5 text-[10px] leading-4 text-ink`,
+                          children: a,
+                        }),
+                    ],
+                  },
+                  e.id,
+                ),
               ),
-            ),
+            }),
             (0, jsxRuntime.jsx)(`div`, { className: `flex-1` }),
             (0, jsxRuntime.jsxs)(`div`, {
-              className: `mr-1 flex shrink-0 items-center gap-1.5`,
+              className: `mr-0.5 flex shrink-0 items-center gap-1`,
               children: [(0, jsxRuntime.jsx)(kA, {}), (0, jsxRuntime.jsx)(AA, {})],
             }),
             (0, jsxRuntime.jsx)(RecentEventsButton, {}),
