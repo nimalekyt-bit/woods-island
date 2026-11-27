@@ -7,11 +7,11 @@
 **Dynamic Island для Windows · 100% бесплатно · Woods Personal Corp**
 
 [![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011%20x64-18181b?style=flat-square)](https://github.com/nimalekyt-bit/woods-island/releases)
-[![Version](https://img.shields.io/badge/version-1.4.2-b4b8ff?style=flat-square)](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.4.2)
+[![Version](https://img.shields.io/badge/version-1.4.3-b4b8ff?style=flat-square)](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.4.3)
 ![RU / EN](https://img.shields.io/badge/interface-%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9%20%7C%20English-18181b?style=flat-square)
 ![Free](https://img.shields.io/badge/access-100%25%20free-2f9e66?style=flat-square)
 
-[**Скачать установщик 1.4.2**](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.4.2) · [**Что нового**](RELEASE_NOTES_1.4.2.md) · [**Сообщить об ошибке**](https://github.com/nimalekyt-bit/woods-island/issues/new/choose) · [**Telegram**](https://t.me/woodskilla)
+[**Скачать установщик 1.4.3**](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.4.3) · [**Что нового**](RELEASE_NOTES_1.4.3.md) · [**Сообщить об ошибке**](https://github.com/nimalekyt-bit/woods-island/issues/new/choose) · [**Telegram**](https://t.me/woodskilla)
 
 [**Сайт Woods Island**](https://island.woodslab.top/) · [**Портфолио автора**](https://me.woodslab.top/) · [**Woods Lab**](https://woodslab.top/) · [**support@woodslab.top**](mailto:support@woodslab.top)
 
@@ -43,7 +43,7 @@ Woods Island живёт поверх всех окон, посередине в�
 прямо туда, где стоял курсор.
 
 <div align="center">
-<img src="assets/readme/demo-ru.webp" width="760" alt="Демонстрация Woods Island 1.4.2: музыка и 24-полосный эквалайзер, Главная, Буфер, Полка и телефон по QR, Текст, Чат с ИИ, Заметка, Погода, Центр управления, Командная строка, Праздники и Светлая тема">
+<img src="assets/readme/demo-ru.webp" width="760" alt="Демонстрация Woods Island 1.4.3: музыка и 24-полосный эквалайзер, Главная, Буфер, Полка и телефон по QR, Текст, Чат с ИИ, Заметка, Погода, Центр управления, Командная строка, Праздники и Светлая тема">
 </div>
 
 ## Пилюля живая
@@ -146,20 +146,20 @@ Logitech G435) · нагрузка CPU/GPU/RAM/сети · уведомлени�
 </tr>
 </table>
 
-## Что нового в 1.4.2
+## Что нового в 1.4.3
 
-- **Плавность 165 FPS без фризов:** убраны GPU-фризы Skia Graphite (Dawn D3D12) на первом открытии и переключениях вкладок, синхронные IPC переведены в фоновый пул, убран лишний ресайз окна при открытии/закрытии, гирлянда залочена на контур пилюли без отставания.
-- **24-полосный эквалайзер 30 Гц с адаптивным AGC:** живая жидкая волна и 4-зонный мини-эквалайзер в цвет обложки с чистым затуханием в тишине; улучшен поиск синхронизированных текстов песен (LRCLIB fallback).
-- **Центр управления и устройства:** адаптивные карточки, микшер приложений, яркость мониторов (DDC/CI), нагрузка CPU/GPU/RAM/сети по требованию, подписи таймеров и компактный заряд периферии ([подробности](docs/peripheral-support.md)).
-- **Телефон по QR, полка и экранный снег:** обновлённый интерфейс телефона, статус сети и подтверждения, карточки и превью файлов на полке, исправленный полноэкранный снег и прозрачность кликов в зоне свечения.
-- **Полный список изменений:** [RELEASE_NOTES_1.4.2.md](RELEASE_NOTES_1.4.2.md).
+- **Настройки 2.0 и интерфейс пилюли:** полный редизайн настроек (живой поиск, сгруппированное меню, карточки, быстрые пресеты, кастомные ползунки, живой переключатель превью), нативный стиль микшера и уведомлений, лента последних событий в шапке, защита вкладок от обрезки при активных чипах Discord/VPN, скругление углов, скрытие иконки в трее и подсказки конфликтов хоткеев.
+- **Мульти-таймеры, Pomodoro и Phone QR 2.0:** до 5 параллельных таймеров с кнопками +1/+5 мин, бейджем +N и режимом Pomodoro; в Phone QR 2.0 добавлен пульт управления ПК (медиа, громкость, блокировка/сон, скриншот, ссылки и таймеры).
+- **Поиск Everything, лаунчер и голос:** мгновенный поиск файлов Voidtools Everything в `Alt+Space`, перетаскивание ярлыков и создание групп в лаунчере, избранные питомцы, переключение аудиовыхода/микрофона в 1 клик и улучшенные естественные русские голосовые команды.
+- **Мультимонитор, 4K и стабильность:** автоэвакуация на свободный экран в играх и следование за курсором, исправленная геометрия 4K/high-DPI, отмена скриншота по `Esc`, фикс падения Windows 11 MediaControl (`0xc0000374`) при просмотре YouTube, ложных перезапусков watchdog с Web AI и гонки фокуса `Alt+Space`.
+- **Полный список изменений:** [RELEASE_NOTES_1.4.3.md](RELEASE_NOTES_1.4.3.md).
 
 ## Установка
 
-Скачай **Woods-Island-1.4.2-windows-x64-Setup.exe** из
-[релиза v1.4.2](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.4.2) (**Windows 10/11 x64**).
+Скачай **Woods-Island-1.4.3-windows-x64-Setup.exe** из
+[релиза v1.4.3](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.4.3) (**Windows 10/11 x64**).
 FFmpeg для записи MP4/GIF уже в комплекте; автообновления проверяют цифровую подпись. Перед запуском можно сверить
-SHA256 с **SHA256SUMS.txt**. Также доступен портативный архив **Woods-Island-1.4.2-windows-x64-portable.zip**.
+SHA256 с **SHA256SUMS.txt**. Также доступен портативный архив **Woods-Island-1.4.3-windows-x64-portable.zip**.
 
 ### Горячие клавиши
 
@@ -204,7 +204,7 @@ It never steals keyboard focus from the window you are typing in, so clicking a 
 where your caret is.
 
 <div align="center">
-<img src="assets/readme/demo-en.webp" width="760" alt="Woods Island 1.4.2 walkthrough: music and 24-band equalizer, Home, Clipboard, Shelf and QR phone transfer, Text, AI Chat, Note, Weather, Control Center, Command Bar, Holidays and Light theme">
+<img src="assets/readme/demo-en.webp" width="760" alt="Woods Island 1.4.3 walkthrough: music and 24-band equalizer, Home, Clipboard, Shelf and QR phone transfer, Text, AI Chat, Note, Weather, Control Center, Command Bar, Holidays and Light theme">
 </div>
 
 ## The pill is alive
@@ -302,20 +302,20 @@ Open-Meteo fallback — zero API keys required.
 </tr>
 </table>
 
-## What's new in 1.4.2
+## What's new in 1.4.3
 
-- **Zero-freeze 165 FPS smoothness:** eliminated WebView2 Skia Graphite shader-compile stalls on first open and tab switching, moved sync IPC commands off the UI thread, eliminated open/close window resize churn, and frame-locked holiday garland to the liquid contour.
-- **24-band 30 Hz AGC equalizer:** responsive liquid wave and 4-zone mini equalizer tinted to album artwork with clean silence decay, plus improved LRCLIB synced lyrics fallback.
-- **Control center & devices:** adaptive cards, per-app audio mixer, DDC/CI monitor brightness, demand-driven CPU/GPU/RAM/network readings, labeled timers and compact peripheral batteries ([details](docs/peripheral-support.md)).
-- **Phone QR, shelf & full-screen snow:** refreshed phone panel with network/approval states, file preview cards on shelf, fixed full-screen snow overlay and click-through visual overscan.
-- **Full release notes:** [RELEASE_NOTES_1.4.2.md](RELEASE_NOTES_1.4.2.md).
+- **Settings 2.0 & pill UI:** redesigned settings with live search, grouped sidebar, cards, quick presets, custom sliders and live preview switcher; native in-pill mixer and notifications, Recent Events popover, unclipped header tabs with active Discord/VPN chips, corner radius, hide tray icon and hotkey conflict hints.
+- **Multi-timers, Pomodoro & Phone QR 2.0:** up to 5 concurrent timers with +1/+5m controls, +N badge and Pomodoro focus mode; Phone QR 2.0 adds a PC Remote tab (media, volume, lock/sleep, screenshot, links and timers).
+- **Everything search, launcher & voice:** Voidtools Everything instant file search in `Alt+Space`, launcher drag-reorder and group creation, favorite pets, 1-click audio output/mic switching and reliable natural Russian voice commands.
+- **Multi-monitor, 4K & stability:** game auto-evacuation to a free monitor and follow-cursor mode, refined 4K high-DPI geometry, `Esc` screenshot cancellation, fixed Windows 11 MediaControl crash (`0xc0000374`) during YouTube playback, false Web AI watchdog restarts and `Alt+Space` focus race.
+- **Full release notes:** [RELEASE_NOTES_1.4.3.md](RELEASE_NOTES_1.4.3.md).
 
 ## Install
 
-Download **Woods-Island-1.4.2-windows-x64-Setup.exe** from
-[release v1.4.2](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.4.2) (**Windows 10/11 x64**).
+Download **Woods-Island-1.4.3-windows-x64-Setup.exe** from
+[release v1.4.3](https://github.com/nimalekyt-bit/woods-island/releases/tag/v1.4.3) (**Windows 10/11 x64**).
 FFmpeg is bundled for MP4/GIF capture and signed auto-updates are built in. Verify SHA256 against
-**SHA256SUMS.txt**, or use **Woods-Island-1.4.2-windows-x64-portable.zip**.
+**SHA256SUMS.txt**, or use **Woods-Island-1.4.3-windows-x64-portable.zip**.
 
 Settings, SQLite history and notes stay local in `%APPDATA%\woods-island`; API keys and phone session tokens
 are protected with Windows DPAPI.
