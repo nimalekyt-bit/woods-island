@@ -13,6 +13,10 @@ export function focusInputAfterActivation(
   };
   const ensureBrowserFocus = () => {
     if (cancelled || typeof document === 'undefined') return;
+    if (typeof document.hasFocus === 'function' && !document.hasFocus()) {
+      void Promise.resolve().then(() => activate()).then(focus).catch(focus);
+      return;
+    }
     const el = input();
     if (el && document.activeElement !== (el as unknown as Element)) {
       el.focus({ preventScroll: true });

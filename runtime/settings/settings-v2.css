@@ -11,10 +11,17 @@
   background: linear-gradient(180deg, #0b0b0e 0%, #0d0d11 100%);
 }
 
-/* Clean Woods Island brand logo in sidebar header (no extra frame box) */
+/* Clean Woods Island brand header in sidebar with balanced top breathing room */
+.wi-sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 18px 16px 14px;
+}
+
 .wi-logo-img {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   flex-shrink: 0;
   object-fit: contain;
   border-radius: 8px;

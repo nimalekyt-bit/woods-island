@@ -9331,6 +9331,7 @@ function ij({ onResize: e }) {
             (0, jsxRuntime.jsx)(kn, { size: 18, className: `text-ink-3` }),
             (0, jsxRuntime.jsx)(`input`, {
               ref: x,
+              autoFocus: !0,
               "data-palette-input": !0,
               value: n,
               onChange: (e) => {

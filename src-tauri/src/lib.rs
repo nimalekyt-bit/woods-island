@@ -1012,24 +1012,61 @@ async fn weather_search(query: Option<String>) -> Vec<Value> {
 #[tauri::command]
 async fn rates()->Result<Value,String>{weather::rates().await}
 
+fn focus_main_window_now(app: &AppHandle) {
+    if win::WindowManager::passive_qa() { return; }
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        if let Ok(hwnd) = window.hwnd() {
+            win::WindowManager::keyboard_focus(HWND(hwnd.0 as _), true);
+        }
+        let _ = window.set_focus();
+        let _ = window.with_webview(|platform| unsafe {
+            let _ = platform.controller().MoveFocus(
+                webview2_com::Microsoft::Web::WebView2::Win32::COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC,
+            );
+        });
+    }
+}
+
 #[tauri::command]
 fn take_focus(app: AppHandle) {
     if win::WindowManager::passive_qa() { return; }
-    if let Some(window) = app.get_window("main") {
-        let _ = window.unminimize();
-        let _ = window.show();
-        if let Ok(hwnd) = window.hwnd() { win::WindowManager::keyboard_focus(HWND(hwnd.0 as _),true); }
-        if !win::WindowManager::passive_qa() { let _ = window.set_focus(); }
+    let on_main_thread = app
+        .get_webview_window("main")
+        .and_then(|w| w.hwnd().ok())
+        .map(|hwnd| unsafe {
+            let owner_tid = windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId(
+                HWND(hwnd.0 as _),
+                None,
+            );
+            owner_tid != 0 && owner_tid == windows::Win32::System::Threading::GetCurrentThreadId()
+        })
+        .unwrap_or(false);
+    if on_main_thread {
+        focus_main_window_now(&app);
+        return;
+    }
+    let (tx, rx) = std::sync::mpsc::sync_channel::<()>(1);
+    let app_clone = app.clone();
+    if app.run_on_main_thread(move || {
+        focus_main_window_now(&app_clone);
+        let _ = tx.send(());
+    }).is_ok() {
+        let _ = rx.recv_timeout(std::time::Duration::from_millis(250));
     }
 }
 
 #[tauri::command]
 fn release_focus(app: AppHandle) {
-    if let Some(window) = app.get_window("main") {
-        if let Ok(hwnd) = window.hwnd() {
-            win::WindowManager::keyboard_focus(HWND(hwnd.0 as _),false);
+    let app_clone = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if let Some(window) = app_clone.get_webview_window("main") {
+            if let Ok(hwnd) = window.hwnd() {
+                win::WindowManager::keyboard_focus(HWND(hwnd.0 as _), false);
+            }
         }
-    }
+    });
 }
 
 #[tauri::command]

@@ -350,8 +350,12 @@ impl WindowManager {
                 let fg_tid = if !fg.0.is_null() { GetWindowThreadProcessId(fg, None) } else { 0 };
                 let cur_tid = GetCurrentThreadId();
                 let attached = fg_tid != 0 && fg_tid != cur_tid && AttachThreadInput(fg_tid, cur_tid, true).as_bool();
+                let _ = windows::Win32::UI::WindowsAndMessaging::AllowSetForegroundWindow(
+                    windows::Win32::UI::WindowsAndMessaging::ASFW_ANY,
+                );
                 let _ = BringWindowToTop(hwnd);
                 let _ = windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow(hwnd);
+                let _ = windows::Win32::UI::Input::KeyboardAndMouse::SetActiveWindow(hwnd);
                 let _ = SetFocus(hwnd);
                 if attached {
                     let _ = AttachThreadInput(fg_tid, cur_tid, false);

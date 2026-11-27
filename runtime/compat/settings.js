@@ -1252,13 +1252,13 @@ function St({ version: e, search, onSearch }) {
       className: `wi-settings-nav flex w-[212px] shrink-0 flex-col border-r border-white/[0.06]`,
       children: [
         (0, U.jsxs)(`header`, {
-          className: `flex items-center gap-2.5 px-3.5 pt-2 pb-2.5`,
+          className: `wi-sidebar-brand`,
           children: [
             (0, U.jsx)(`img`, {
               src: woodsLogo,
               alt: ``,
-              width: 30,
-              height: 30,
+              width: 32,
+              height: 32,
               className: `wi-logo-img`,
             }),
             (0, U.jsxs)(`div`, {
