@@ -3,10 +3,10 @@ pub mod legacy;
 pub mod names;
 mod cover_retry;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    Condvar, Mutex, OnceLock,
+    mpsc, Arc, Condvar, Mutex, OnceLock,
 };
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{Emitter, Manager};
@@ -16,6 +16,7 @@ use windows::Foundation::TypedEventHandler;
 use windows::Media::Control::{
     GlobalSystemMediaTransportControlsSession,
     GlobalSystemMediaTransportControlsSessionManager,
+    GlobalSystemMediaTransportControlsSessionMediaProperties,
     GlobalSystemMediaTransportControlsSessionPlaybackStatus,
 };
 use windows::Storage::Streams::DataReader;
@@ -24,6 +25,70 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     VK_VOLUME_DOWN, VK_VOLUME_MUTE, VK_VOLUME_UP,
 };
 
+/// Cached playback & timeline state for a single WinRT `CSmtcSession`.
+///
+/// Windows 11's `Windows.Media.MediaControl.dll` (`smtcsession.cpp:84,94,150,155`)
+/// mutates `m_playbackInfo` and `m_timelineProperties` via unlocked
+/// `ComPtr::ReleaseAndGetAddressOf()` on an `SHCore` serialized task-pool queue
+/// while `GetPlaybackInfo()` / `GetTimelineProperties()` read those raw pointers
+/// with zero synchronization. Calling either getter from another thread while
+/// events fire (e.g. YouTube/browser updates) triggers a double-free
+/// (`0xc0000374` `STATUS_HEAP_CORRUPTION`).
+///
+/// Because `PlaybackInfoChanged` and `TimelinePropertiesChanged` handlers run
+/// synchronously inside that same serialized `SHCore` task-pool context right
+/// after the fields are updated, reading those getters inside the callbacks (and
+/// seeding once on first discovery) avoids concurrent unlocked reads while
+/// preserving 100% update freshness.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct SessionSnapshot {
+    playback_loaded: bool,
+    is_playing: bool,
+    can_seek: bool,
+    timeline_loaded: bool,
+    raw_pos_ms: u64,
+    duration_ms: u64,
+    timeline_at: i64,
+}
+
+impl SessionSnapshot {
+    fn apply_playback(&mut self, is_playing: bool, can_seek: bool, from_callback: bool) {
+        if from_callback || !self.playback_loaded {
+            self.playback_loaded = true;
+            self.is_playing = is_playing;
+            self.can_seek = can_seek;
+        }
+    }
+
+    fn apply_timeline(&mut self, raw_pos_ms: u64, duration_ms: u64, timeline_at: i64, from_callback: bool) {
+        if from_callback || !self.timeline_loaded {
+            self.timeline_loaded = true;
+            self.raw_pos_ms = raw_pos_ms;
+            self.duration_ms = duration_ms;
+            self.timeline_at = timeline_at;
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct CachedGsmtcSource {
+    id: String,
+    name: String,
+    title: String,
+    playing: bool,
+}
+
+enum MediaAction {
+    Control {
+        action: String,
+        reply: mpsc::SyncSender<bool>,
+    },
+    Seek {
+        ms: u64,
+        reply: mpsc::SyncSender<bool>,
+    },
+}
+
 static PICKED_APP_ID: Mutex<Option<String>> = Mutex::new(None);
 static HIDDEN_APP_IDS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 static LAST_COVER_CACHE: Mutex<Option<(String, String)>> = Mutex::new(None); // (key, cover_url)
@@ -31,6 +96,8 @@ static PLAYBACK_TRACKER: Mutex<Option<PlaybackProgress>> = Mutex::new(None);
 static APP_NAME_CACHE: OnceLock<Mutex<HashMap<String, Option<String>>>> = OnceLock::new();
 static MEDIA_NAMES_CACHE: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
 static CACHED_MEDIA: Mutex<Option<Value>> = Mutex::new(None);
+static CACHED_GSMTC_SOURCES: Mutex<Vec<CachedGsmtcSource>> = Mutex::new(Vec::new());
+static PENDING_ACTIONS: Mutex<Vec<MediaAction>> = Mutex::new(Vec::new());
 static MEDIA_LOOP_RUNNING: AtomicBool = AtomicBool::new(false);
 static MEDIA_WAKE: OnceLock<(Mutex<bool>, Condvar)> = OnceLock::new();
 static LAST_GSMTC_ERROR: Mutex<Option<(String, Instant)>> = Mutex::new(None);
@@ -289,12 +356,100 @@ pub fn get_manager() -> Option<GlobalSystemMediaTransportControlsSessionManager>
     request_manager_no_com()
 }
 
-fn session_is_playing(session: &GlobalSystemMediaTransportControlsSession) -> bool {
-    session
-        .GetPlaybackInfo()
+fn read_playback_info(session: &GlobalSystemMediaTransportControlsSession) -> Option<(bool, bool)> {
+    let playback = session.GetPlaybackInfo().ok()?;
+    let can_seek = playback
+        .Controls()
+        .and_then(|controls| controls.IsPlaybackPositionEnabled())
+        .unwrap_or(false);
+    let is_playing = playback
+        .PlaybackStatus()
         .ok()
-        .and_then(|p| p.PlaybackStatus().ok())
-        .is_some_and(|s| s == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing)
+        .is_some_and(|s| s == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing);
+    Some((is_playing, can_seek))
+}
+
+fn read_timeline_info(session: &GlobalSystemMediaTransportControlsSession) -> Option<(u64, u64, i64)> {
+    let timeline = session.GetTimelineProperties().ok()?;
+    let raw_pos_ms = (timeline.Position().unwrap_or_default().Duration / 10000).max(0) as u64;
+    let duration_ms = (timeline.EndTime().unwrap_or_default().Duration / 10000).max(0) as u64;
+    let timeline_at = timeline.LastUpdatedTime().unwrap_or_default().UniversalTime;
+    Some((raw_pos_ms, duration_ms, timeline_at))
+}
+
+struct SessionCandidate {
+    app_id: String,
+    raw_ptr: usize,
+    visible: bool,
+    playing: bool,
+    has_title: bool,
+}
+
+fn pick_session_index(
+    candidates: &[SessionCandidate],
+    picked_app_id: Option<&str>,
+    current_ptr: Option<usize>,
+) -> Option<usize> {
+    // 1. Prioritize user picked session (prefer playing + non-empty title when a browser has multiple)
+    if let Some(target) = picked_app_id {
+        if let Some(idx) = candidates
+            .iter()
+            .position(|c| c.visible && c.app_id == target && c.playing && c.has_title)
+        {
+            return Some(idx);
+        }
+        if let Some(idx) = candidates
+            .iter()
+            .position(|c| c.visible && c.app_id == target && c.has_title)
+        {
+            return Some(idx);
+        }
+        if let Some(idx) = candidates
+            .iter()
+            .position(|c| c.visible && c.app_id == target)
+        {
+            return Some(idx);
+        }
+    }
+
+    let current_idx = current_ptr.and_then(|ptr| {
+        candidates
+            .iter()
+            .position(|c| c.visible && c.raw_ptr == ptr)
+    });
+
+    // 2. Default current session if Playing AND has a non-empty title
+    if let Some(idx) = current_idx {
+        if candidates[idx].playing && candidates[idx].has_title {
+            return Some(idx);
+        }
+    }
+
+    // 3. Any visible Playing session with a non-empty title (skips empty browser/Alice ghost sessions)
+    if let Some(idx) = candidates
+        .iter()
+        .position(|c| c.visible && c.playing && c.has_title)
+    {
+        return Some(idx);
+    }
+
+    // 4. Default current session with a non-empty title (paused)
+    if let Some(idx) = current_idx {
+        if candidates[idx].has_title {
+            return Some(idx);
+        }
+    }
+
+    // 5. Any visible session with a non-empty title
+    if let Some(idx) = candidates.iter().position(|c| c.visible && c.has_title) {
+        return Some(idx);
+    }
+
+    // 6. Keep a handle to a playing/current session
+    if let Some(idx) = candidates.iter().position(|c| c.visible && c.playing) {
+        return Some(idx);
+    }
+    current_idx
 }
 
 fn session_has_title(session: &GlobalSystemMediaTransportControlsSession) -> bool {
@@ -310,67 +465,34 @@ pub fn get_active_session(
     mgr: &GlobalSystemMediaTransportControlsSessionManager,
 ) -> Option<GlobalSystemMediaTransportControlsSession> {
     let picked = PICKED_APP_ID.lock().ok().and_then(|p| p.clone());
-
-    if let Ok(all) = mgr.GetSessions() {
-        let sessions: Vec<_> = all.into_iter().filter(session_visible).collect();
-        // 1. Prioritize user picked session (prefer one with a non-empty title when the browser has multiple)
-        if let Some(target) = picked {
-            let matching: Vec<_> = sessions
-                .iter()
-                .filter(|s| s.SourceAppUserModelId().unwrap_or_default().to_string() == target)
-                .cloned()
-                .collect();
-            if let Some(s) = matching.iter().find(|s| session_is_playing(s) && session_has_title(s)) {
-                return Some(s.clone());
+    let all = mgr.GetSessions().ok()?;
+    let sessions: Vec<_> = all.into_iter().collect();
+    let current_ptr = mgr
+        .GetCurrentSession()
+        .ok()
+        .filter(session_visible)
+        .map(|s| s.as_raw() as usize);
+    let candidates: Vec<_> = sessions
+        .iter()
+        .map(|s| {
+            let app_id = s.SourceAppUserModelId().unwrap_or_default().to_string();
+            let visible = !is_hidden(&app_id);
+            let playing = if visible {
+                read_playback_info(s).map(|(p, _)| p).unwrap_or(false)
+            } else {
+                false
+            };
+            let has_title = if visible { session_has_title(s) } else { false };
+            SessionCandidate {
+                app_id,
+                raw_ptr: s.as_raw() as usize,
+                visible,
+                playing,
+                has_title,
             }
-            if let Some(s) = matching.iter().find(|s| session_has_title(s)) {
-                return Some(s.clone());
-            }
-            if let Some(s) = matching.into_iter().next() {
-                return Some(s);
-            }
-        }
-
-        let current = mgr.GetCurrentSession().ok().filter(session_visible);
-
-        // 2. Default current session if Playing AND has a non-empty title
-        if let Some(ref cur) = current {
-            if session_is_playing(cur) && session_has_title(cur) {
-                return Some(cur.clone());
-            }
-        }
-
-        // 3. Any visible Playing session with a non-empty title (skips empty browser/Alice ghost sessions)
-        for session in &sessions {
-            if session_is_playing(session) && session_has_title(session) {
-                return Some(session.clone());
-            }
-        }
-
-        // 4. Default current session with a non-empty title (paused)
-        if let Some(ref cur) = current {
-            if session_has_title(cur) {
-                return Some(cur.clone());
-            }
-        }
-
-        // 5. Any visible session with a non-empty title
-        for session in &sessions {
-            if session_has_title(session) {
-                return Some(session.clone());
-            }
-        }
-
-        // 6. Keep a handle to a playing/current session solely for event subscription
-        if let Some(session) = sessions.iter().find(|s| session_is_playing(s)) {
-            return Some(session.clone());
-        }
-        if let Some(cur) = current {
-            return Some(cur);
-        }
-    }
-
-    None
+        })
+        .collect();
+    pick_session_index(&candidates, picked.as_deref(), current_ptr).map(|idx| sessions[idx].clone())
 }
 
 /// Attempts to read the thumbnail image from already-fetched GSMTC properties
@@ -508,13 +630,15 @@ pub fn get_current_media() -> Option<Value> {
         return advance_cached_media_position();
     }
     let mgr = get_manager();
-    poll_current_media_with_manager(mgr.as_ref(), true).0
+    let mut registry = SessionRegistry::default();
+    poll_current_media_with_manager(mgr.as_ref(), &mut registry, true).0
 }
 
 fn poll_current_media_with_manager(
     mgr: Option<&GlobalSystemMediaTransportControlsSessionManager>,
+    registry: &mut SessionRegistry,
     force_legacy: bool,
-) -> (Option<Value>, Option<GlobalSystemMediaTransportControlsSession>, bool) {
+) -> (Option<Value>, Option<String>, bool) {
     let mut bridge = crate::music_bridge::current().filter(|_| !is_hidden(crate::music_bridge::APP_ID));
     let legacy_visible: Vec<Value> = cached_legacy_snapshots(force_legacy)
         .into_iter()
@@ -528,7 +652,7 @@ fn poll_current_media_with_manager(
         .collect();
     let picked = PICKED_APP_ID.lock().unwrap().clone();
     let mut rpc_ok = true;
-    let mut active_session: Option<GlobalSystemMediaTransportControlsSession> = None;
+    let mut active_app_id: Option<String> = None;
     let mut current = if let Some(ref picked_id) = picked {
         if picked_id == crate::music_bridge::APP_ID {
             bridge.clone()
@@ -539,18 +663,18 @@ fn poll_current_media_with_manager(
                 .into_iter()
                 .find(|m| m["app"].as_str() == Some(picked_id.as_str()))
         } else {
-            let (val, sess, ok) = read_current_media_from_manager(mgr);
+            let (val, app_id, ok) = read_current_media_from_manager(mgr, registry);
             rpc_ok = ok;
-            active_session = sess;
+            active_app_id = app_id;
             val
         }
     } else {
         None
     };
     if current.is_none() {
-        let (gsmtc, sess, ok) = read_current_media_from_manager(mgr);
+        let (gsmtc, app_id, ok) = read_current_media_from_manager(mgr, registry);
         rpc_ok = ok;
-        active_session = sess;
+        active_app_id = app_id;
         if let (Some(bridge),Some(native))=(bridge.as_mut(),gsmtc.as_ref()) {
             merge_matching_cover(bridge,native);
         }
@@ -593,8 +717,8 @@ fn poll_current_media_with_manager(
             gsmtc.or(bridge).or(legacy_any).or(browser_any)
         };
     }
-    if current.as_ref().is_some_and(|media|media["app"]==crate::music_bridge::APP_ID&&media["cover"].is_null())&&active_session.is_none() {
-        let (native,session,ok)=read_current_media_from_manager(mgr);rpc_ok&=ok;active_session=session;
+    if current.as_ref().is_some_and(|media|media["app"]==crate::music_bridge::APP_ID&&media["cover"].is_null())&&active_app_id.is_none() {
+        let (native,app_id,ok)=read_current_media_from_manager(mgr, registry);rpc_ok&=ok;active_app_id=app_id;
         if let (Some(media),Some(native))=(current.as_mut(),native.as_ref()){merge_matching_cover(media,native);}
     }
     if let Some(ref mut media) = current {
@@ -612,7 +736,7 @@ fn poll_current_media_with_manager(
         *PLAYBACK_TRACKER.lock().unwrap() = None;
         *LAST_COVER_CACHE.lock().unwrap() = None;
     }
-    (current, active_session, rpc_ok)
+    (current, active_app_id, rpc_ok)
 }
 
 fn merge_matching_cover(target:&mut Value,source:&Value) {
@@ -629,51 +753,92 @@ fn merge_matching_cover(target:&mut Value,source:&Value) {
 
 fn read_current_media_from_manager(
     mgr: Option<&GlobalSystemMediaTransportControlsSessionManager>,
-) -> (Option<Value>, Option<GlobalSystemMediaTransportControlsSession>, bool) {
-    let Some(mgr) = mgr else { return (None, None, false); };
+    registry: &mut SessionRegistry,
+) -> (Option<Value>, Option<String>, bool) {
+    let Some(mgr) = mgr else {
+        if let Ok(mut cached) = CACHED_GSMTC_SOURCES.lock() {
+            cached.clear();
+        }
+        return (None, None, false);
+    };
     let Ok(all_sessions) = mgr.GetSessions() else {
         return (None, None, false);
     };
-    let sources_count = all_sessions.Size().unwrap_or(1);
-    let Some(session) = get_active_session(mgr) else {
+    let sessions: Vec<_> = all_sessions.into_iter().collect();
+    let sources_count = sessions.len() as u32;
+    registry.sync(&sessions);
+
+    let current_ptr = mgr
+        .GetCurrentSession()
+        .ok()
+        .filter(session_visible)
+        .map(|s| s.as_raw() as usize);
+    let picked = PICKED_APP_ID.lock().ok().and_then(|p| p.clone());
+
+    let mut candidates = Vec::with_capacity(sessions.len());
+    let mut fetched_props: Vec<Option<GlobalSystemMediaTransportControlsSessionMediaProperties>> =
+        Vec::with_capacity(sessions.len());
+    let mut snapshots = Vec::with_capacity(sessions.len());
+    let mut cached_sources = Vec::with_capacity(sessions.len());
+
+    for session in &sessions {
+        let app_id = session.SourceAppUserModelId().unwrap_or_default().to_string();
+        let snap = registry.snapshot_for(session);
+        let props = session
+            .TryGetMediaPropertiesAsync()
+            .ok()
+            .and_then(|op| op.get().ok());
+        let title = props
+            .as_ref()
+            .and_then(|p| p.Title().ok())
+            .map(|t| t.to_string())
+            .unwrap_or_default();
+        let has_title = !title.trim().is_empty();
+        cached_sources.push(CachedGsmtcSource {
+            id: app_id.clone(),
+            name: format_app_name(&app_id),
+            title,
+            playing: snap.is_playing,
+        });
+        candidates.push(SessionCandidate {
+            app_id: app_id.clone(),
+            raw_ptr: session.as_raw() as usize,
+            visible: !is_hidden(&app_id),
+            playing: snap.is_playing,
+            has_title,
+        });
+        fetched_props.push(props);
+        snapshots.push(snap);
+    }
+
+    if let Ok(mut guard) = CACHED_GSMTC_SOURCES.lock() {
+        *guard = cached_sources;
+    }
+
+    let Some(idx) = pick_session_index(&candidates, picked.as_deref(), current_ptr) else {
         return (None, None, true);
     };
 
-    let app_id = session.SourceAppUserModelId().unwrap_or_default().to_string();
+    let app_id = candidates[idx].app_id.clone();
     let app_name = format_app_name(&app_id);
-
-    let Ok(prop_op) = session.TryGetMediaPropertiesAsync() else {
-        return (None, Some(session), true);
-    };
-    let Ok(props) = prop_op.get() else {
-        return (None, Some(session), true);
+    let Some(ref props) = fetched_props[idx] else {
+        return (None, Some(app_id), true);
     };
 
     let title = props.Title().unwrap_or_default().to_string();
     if title.is_empty() {
-        return (None, Some(session), true);
+        return (None, Some(app_id), true);
     }
 
     let artist = props.Artist().unwrap_or_default().to_string();
     let album = props.AlbumTitle().unwrap_or_default().to_string();
 
-    let mut is_playing = false;
-    let mut can_seek = false;
-    if let Ok(playback) = session.GetPlaybackInfo() {
-        can_seek = playback.Controls().and_then(|controls| controls.IsPlaybackPositionEnabled()).unwrap_or(false);
-        if let Ok(status) = playback.PlaybackStatus() {
-            is_playing = status == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
-        }
-    }
-
-    let mut raw_pos_ms: u64 = 0;
-    let mut duration_ms: u64 = 0;
-    let mut timeline_at = 0;
-    if let Ok(timeline) = session.GetTimelineProperties() {
-        raw_pos_ms = (timeline.Position().unwrap_or_default().Duration / 10000).max(0) as u64;
-        duration_ms = (timeline.EndTime().unwrap_or_default().Duration / 10000).max(0) as u64;
-        timeline_at = timeline.LastUpdatedTime().unwrap_or_default().UniversalTime;
-    }
+    let snap = &snapshots[idx];
+    let is_playing = snap.is_playing;
+    let can_seek = snap.can_seek;
+    let raw_pos_ms = snap.raw_pos_ms;
+    let duration_ms = snap.duration_ms;
+    let timeline_at = snap.timeline_at;
 
     let key = format!("{}|{}|{}|{}", app_id, artist, album, title);
     let now = now_ms();
@@ -711,7 +876,7 @@ fn read_current_media_from_manager(
 
     if cover_url.is_none() {
         // Try reading local thumbnail from WinRT stream (reuse already-fetched props!)
-        if let Some(stream_cover) = read_stream_thumbnail_from_props(&props) {
+        if let Some(stream_cover) = read_stream_thumbnail_from_props(props) {
             let mut cache_guard = LAST_COVER_CACHE.lock().unwrap();
             *cache_guard = Some((key.clone(), stream_cover.clone()));
             cover_url = Some(stream_cover);
@@ -734,7 +899,7 @@ fn read_current_media_from_manager(
             "updatedAt": now,
             "sources": sources_count
         })),
-        Some(session),
+        Some(app_id),
         true,
     )
 }
@@ -767,7 +932,25 @@ pub fn get_media_sources() -> Vec<Value> {
         }
     }
     let mut gsmtc_apps = Vec::new();
-    if let Some(mgr) = get_manager() {
+    if MEDIA_LOOP_RUNNING.load(Ordering::Acquire) {
+        let sources = CACHED_GSMTC_SOURCES
+            .lock()
+            .map(|g| g.clone())
+            .unwrap_or_default();
+        for src in sources {
+            if !src.title.is_empty() {
+                gsmtc_apps.push(src.id.clone());
+            }
+            result.push(json!({
+                "id": src.id,
+                "name": src.name,
+                "title": src.title,
+                "playing": src.playing,
+                "hidden": is_hidden(&src.id),
+                "active": shown_id.as_deref() == Some(src.id.as_str())
+            }));
+        }
+    } else if let Some(mgr) = get_manager() {
         if let Ok(sessions) = mgr.GetSessions() {
             for session in sessions {
                 let id = session.SourceAppUserModelId().unwrap_or_default().to_string();
@@ -778,12 +961,7 @@ pub fn get_media_sources() -> Vec<Value> {
                         title = props.Title().unwrap_or_default().to_string();
                     }
                 }
-                let mut is_playing = false;
-                if let Ok(playback) = session.GetPlaybackInfo() {
-                    if let Ok(status) = playback.PlaybackStatus() {
-                        is_playing = status == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
-                    }
-                }
+                let is_playing = read_playback_info(&session).map(|(p, _)| p).unwrap_or(false);
                 if !title.is_empty() {
                     gsmtc_apps.push(id.clone());
                 }
@@ -831,6 +1009,55 @@ pub fn media_seek(ms: u64) -> bool {
     media_seek_ms(ms)
 }
 
+fn dispatch_media_action(action: MediaAction, rx: mpsc::Receiver<bool>) -> Option<bool> {
+    if !MEDIA_LOOP_RUNNING.load(Ordering::Acquire) {
+        return None;
+    }
+    if let Ok(mut queue) = PENDING_ACTIONS.lock() {
+        queue.push(action);
+    } else {
+        return None;
+    }
+    notify_wake();
+    rx.recv_timeout(Duration::from_millis(1200)).ok()
+}
+
+fn dispatch_gsmtc_control(action: &str) -> Option<bool> {
+    let (tx, rx) = mpsc::sync_channel(1);
+    dispatch_media_action(
+        MediaAction::Control {
+            action: action.to_owned(),
+            reply: tx,
+        },
+        rx,
+    )
+}
+
+fn dispatch_gsmtc_seek(ms: u64) -> Option<bool> {
+    let (tx, rx) = mpsc::sync_channel(1);
+    dispatch_media_action(MediaAction::Seek { ms, reply: tx }, rx)
+}
+
+fn execute_session_control(session: &GlobalSystemMediaTransportControlsSession, action: &str) -> bool {
+    let operation = match action {
+        "play" => session.TryPlayAsync(),
+        "pause" => session.TryPauseAsync(),
+        "toggle" => session.TryTogglePlayPauseAsync(),
+        "next" => session.TrySkipNextAsync(),
+        "prev" => session.TrySkipPreviousAsync(),
+        _ => return false,
+    };
+    operation.and_then(|op| op.get()).unwrap_or(false)
+}
+
+fn execute_session_seek(session: &GlobalSystemMediaTransportControlsSession, ms: u64) -> bool {
+    let duration_ticks = ms.min((i64::MAX / 10000) as u64) as i64 * 10000;
+    session
+        .TryChangePlaybackPositionAsync(duration_ticks)
+        .and_then(|op| op.get())
+        .unwrap_or(false)
+}
+
 pub fn media_control(action: &str) -> bool {
     if let Some(current) = get_current_media() {
         if let Some(app_id) = current["app"].as_str() {
@@ -856,18 +1083,19 @@ pub fn media_control(action: &str) -> bool {
             }
         }
     }
-    let _com = crate::audio::ComApartment::new().ok();
-    if let Some(mgr) = get_manager() {
-        if let Some(session) = get_active_session(&mgr) {
-            let operation = match action {
-                "play" => session.TryPlayAsync(),
-                "pause" => session.TryPauseAsync(),
-                "toggle" => session.TryTogglePlayPauseAsync(),
-                "next" => session.TrySkipNextAsync(),
-                "prev" => session.TrySkipPreviousAsync(),
-                _ => return false,
-            };
-            if operation.and_then(|op|op.get()).unwrap_or(false) { notify_wake(); return true; }
+    if let Some(handled) = dispatch_gsmtc_control(action) {
+        if handled {
+            return true;
+        }
+    } else {
+        let _com = crate::audio::ComApartment::new().ok();
+        if let Some(mgr) = get_manager() {
+            if let Some(session) = get_active_session(&mgr) {
+                if execute_session_control(&session, action) {
+                    notify_wake();
+                    return true;
+                }
+            }
         }
     }
     match action {
@@ -901,30 +1129,54 @@ pub fn send_media_key(vk: u8) {
 }
 
 pub fn media_play_pause() {
-    let _com = crate::audio::ComApartment::new().ok();
-    if let Some(mgr) = get_manager() {
-        if let Some(session) = get_active_session(&mgr) {
-            if session.TryTogglePlayPauseAsync().and_then(|op|op.get()).unwrap_or(false) {return;}
+    if let Some(handled) = dispatch_gsmtc_control("toggle") {
+        if handled {
+            return;
+        }
+    } else {
+        let _com = crate::audio::ComApartment::new().ok();
+        if let Some(mgr) = get_manager() {
+            if let Some(session) = get_active_session(&mgr) {
+                if execute_session_control(&session, "toggle") {
+                    return;
+                }
+            }
         }
     }
     send_media_key(VK_MEDIA_PLAY_PAUSE.0 as u8);
 }
 
 pub fn media_next() {
-    let _com = crate::audio::ComApartment::new().ok();
-    if let Some(mgr) = get_manager() {
-        if let Some(session) = get_active_session(&mgr) {
-            if session.TrySkipNextAsync().and_then(|op|op.get()).unwrap_or(false) {return;}
+    if let Some(handled) = dispatch_gsmtc_control("next") {
+        if handled {
+            return;
+        }
+    } else {
+        let _com = crate::audio::ComApartment::new().ok();
+        if let Some(mgr) = get_manager() {
+            if let Some(session) = get_active_session(&mgr) {
+                if execute_session_control(&session, "next") {
+                    return;
+                }
+            }
         }
     }
     send_media_key(VK_MEDIA_NEXT_TRACK.0 as u8);
 }
 
 pub fn media_prev() {
-    let _com = crate::audio::ComApartment::new().ok();
-    if let Some(mgr) = get_manager() {
-        if let Some(session) = get_active_session(&mgr) {
-            if session.TrySkipPreviousAsync().and_then(|op|op.get()).unwrap_or(false) {return;}
+    if let Some(handled) = dispatch_gsmtc_control("prev") {
+        if handled {
+            return;
+        }
+    } else {
+        let _com = crate::audio::ComApartment::new().ok();
+        if let Some(mgr) = get_manager() {
+            if let Some(session) = get_active_session(&mgr) {
+                if execute_session_control(&session, "prev") {
+                    return;
+                }
+            }
         }
     }
     send_media_key(VK_MEDIA_PREV_TRACK.0 as u8);
@@ -941,14 +1193,20 @@ pub fn media_seek_ms(ms: u64) -> bool {
             }
         }
     }
-    let _com = crate::audio::ComApartment::new().ok();
-    let mut changed = false;
-    if let Some(mgr) = get_manager() {
-        if let Some(session) = get_active_session(&mgr) {
-            let duration_ticks = ms.min((i64::MAX / 10000) as u64) as i64 * 10000;
-            changed = session.TryChangePlaybackPositionAsync(duration_ticks).and_then(|op|op.get()).unwrap_or(false);
+    let changed = if let Some(handled) = dispatch_gsmtc_seek(ms) {
+        handled
+    } else {
+        let _com = crate::audio::ComApartment::new().ok();
+        if let Some(mgr) = get_manager() {
+            if let Some(session) = get_active_session(&mgr) {
+                execute_session_seek(&session, ms)
+            } else {
+                false
+            }
+        } else {
+            false
         }
-    }
+    };
     if !changed { return false; }
     if let Ok(mut tracker) = PLAYBACK_TRACKER.lock() {
         if let Some(ref mut trk) = *tracker {
@@ -1030,38 +1288,83 @@ impl Drop for ManagerBinding {
 
 struct SessionBinding {
     session: GlobalSystemMediaTransportControlsSession,
-    app_id: String,
-    raw_ptr: usize,
+    snapshot: Arc<Mutex<SessionSnapshot>>,
     media_token: Option<windows::Foundation::EventRegistrationToken>,
     playback_token: Option<windows::Foundation::EventRegistrationToken>,
     timeline_token: Option<windows::Foundation::EventRegistrationToken>,
 }
 
 impl SessionBinding {
-    fn bind(session: GlobalSystemMediaTransportControlsSession, app_id: String) -> Self {
-        let raw_ptr = session.as_raw() as usize;
+    fn bind(session: GlobalSystemMediaTransportControlsSession) -> Self {
+        let snapshot = Arc::new(Mutex::new(SessionSnapshot::default()));
         let media_token = session
             .MediaPropertiesChanged(&TypedEventHandler::new(|_, _| {
                 notify_wake();
                 Ok(())
             }))
             .ok();
+        let snap_pb = Arc::clone(&snapshot);
         let playback_token = session
-            .PlaybackInfoChanged(&TypedEventHandler::new(|_, _| {
-                notify_wake();
-                Ok(())
-            }))
+            .PlaybackInfoChanged(&TypedEventHandler::new(
+                move |sender: &Option<GlobalSystemMediaTransportControlsSession>, _| {
+                    if let Some(s) = sender {
+                        if let Some((is_playing, can_seek)) = read_playback_info(s) {
+                            if let Ok(mut guard) = snap_pb.lock() {
+                                guard.apply_playback(is_playing, can_seek, true);
+                            }
+                        }
+                    }
+                    notify_wake();
+                    Ok(())
+                },
+            ))
             .ok();
+        let snap_tl = Arc::clone(&snapshot);
         let timeline_token = session
-            .TimelinePropertiesChanged(&TypedEventHandler::new(|_, _| {
-                notify_wake();
-                Ok(())
-            }))
+            .TimelinePropertiesChanged(&TypedEventHandler::new(
+                move |sender: &Option<GlobalSystemMediaTransportControlsSession>, _| {
+                    if let Some(s) = sender {
+                        if let Some((raw_pos_ms, duration_ms, timeline_at)) = read_timeline_info(s) {
+                            if let Ok(mut guard) = snap_tl.lock() {
+                                guard.apply_timeline(raw_pos_ms, duration_ms, timeline_at, true);
+                            }
+                        }
+                    }
+                    notify_wake();
+                    Ok(())
+                },
+            ))
             .ok();
+
+        // Seed once upon first discovery (if the serialized callback hasn't populated it yet).
+        // After this, `GetPlaybackInfo()` and `GetTimelineProperties()` are NEVER called off-callback
+        // on this `CSmtcSession`, preventing Windows 11's `smtcsession.cpp:84/94` double-free race.
+        let need_pb = snapshot
+            .lock()
+            .map(|g| !g.playback_loaded)
+            .unwrap_or(false);
+        if need_pb {
+            if let Some((is_playing, can_seek)) = read_playback_info(&session) {
+                if let Ok(mut guard) = snapshot.lock() {
+                    guard.apply_playback(is_playing, can_seek, false);
+                }
+            }
+        }
+        let need_tl = snapshot
+            .lock()
+            .map(|g| !g.timeline_loaded)
+            .unwrap_or(false);
+        if need_tl {
+            if let Some((raw_pos_ms, duration_ms, timeline_at)) = read_timeline_info(&session) {
+                if let Ok(mut guard) = snapshot.lock() {
+                    guard.apply_timeline(raw_pos_ms, duration_ms, timeline_at, false);
+                }
+            }
+        }
+
         Self {
             session,
-            app_id,
-            raw_ptr,
+            snapshot,
             media_token,
             playback_token,
             timeline_token,
@@ -1083,12 +1386,104 @@ impl Drop for SessionBinding {
     }
 }
 
+#[derive(Default)]
+struct SessionRegistry {
+    bindings: HashMap<usize, SessionBinding>,
+}
+
+impl SessionRegistry {
+    fn sync(&mut self, sessions: &[GlobalSystemMediaTransportControlsSession]) {
+        let live: HashSet<usize> = sessions.iter().map(|s| s.as_raw() as usize).collect();
+        self.bindings.retain(|ptr, _| live.contains(ptr));
+        for session in sessions {
+            let ptr = session.as_raw() as usize;
+            self.bindings
+                .entry(ptr)
+                .or_insert_with(|| SessionBinding::bind(session.clone()));
+        }
+    }
+
+    fn snapshot_for(&self, session: &GlobalSystemMediaTransportControlsSession) -> SessionSnapshot {
+        self.bindings
+            .get(&(session.as_raw() as usize))
+            .and_then(|b| b.snapshot.lock().ok().map(|g| g.clone()))
+            .unwrap_or_default()
+    }
+
+    fn clear(&mut self) {
+        self.bindings.clear();
+    }
+}
+
+fn select_session_for_action(
+    mgr: &GlobalSystemMediaTransportControlsSessionManager,
+    registry: &mut SessionRegistry,
+) -> Option<GlobalSystemMediaTransportControlsSession> {
+    let sessions: Vec<_> = mgr.GetSessions().ok()?.into_iter().collect();
+    registry.sync(&sessions);
+    let current_ptr = mgr
+        .GetCurrentSession()
+        .ok()
+        .filter(session_visible)
+        .map(|s| s.as_raw() as usize);
+    let picked = PICKED_APP_ID.lock().ok().and_then(|p| p.clone());
+    let candidates: Vec<_> = sessions
+        .iter()
+        .map(|s| {
+            let app_id = s.SourceAppUserModelId().unwrap_or_default().to_string();
+            let visible = !is_hidden(&app_id);
+            let snap = registry.snapshot_for(s);
+            let has_title = if visible { session_has_title(s) } else { false };
+            SessionCandidate {
+                app_id,
+                raw_ptr: s.as_raw() as usize,
+                visible,
+                playing: snap.is_playing,
+                has_title,
+            }
+        })
+        .collect();
+    pick_session_index(&candidates, picked.as_deref(), current_ptr).map(|idx| sessions[idx].clone())
+}
+
+fn drain_pending_actions(
+    mgr: Option<&GlobalSystemMediaTransportControlsSessionManager>,
+    registry: &mut SessionRegistry,
+) -> bool {
+    let actions: Vec<MediaAction> = PENDING_ACTIONS
+        .lock()
+        .map(|mut q| std::mem::take(&mut *q))
+        .unwrap_or_default();
+    if actions.is_empty() {
+        return false;
+    }
+    let session = mgr.and_then(|m| select_session_for_action(m, registry));
+    for action in actions {
+        match action {
+            MediaAction::Control { action, reply } => {
+                let ok = session
+                    .as_ref()
+                    .is_some_and(|s| execute_session_control(s, &action));
+                let _ = reply.send(ok);
+            }
+            MediaAction::Seek { ms, reply } => {
+                let ok = session
+                    .as_ref()
+                    .is_some_and(|s| execute_session_seek(s, ms));
+                let _ = reply.send(ok);
+            }
+        }
+    }
+    true
+}
+
 pub fn start_media_loop(app: tauri::AppHandle) {
     crate::music_bridge::start();
     crate::audio::start_loopback(app.clone());
     let app_clone = app.clone();
 
-    // 1. Event-driven GSMTC Media and Position Loop (zero 350ms RequestAsync polling!)
+    // 1. Event-driven GSMTC Media and Position Loop (zero 350ms RequestAsync polling,
+    //    and zero cross-thread GetPlaybackInfo/GetTimelineProperties polling on live sessions!)
     let _ = std::thread::Builder::new()
         .name("woods-media-loop".into())
         .spawn(move || {
@@ -1096,7 +1491,7 @@ pub fn start_media_loop(app: tauri::AppHandle) {
             MEDIA_LOOP_RUNNING.store(true, Ordering::Release);
 
             let mut manager_binding: Option<ManagerBinding> = None;
-            let mut session_binding: Option<SessionBinding> = None;
+            let mut session_registry = SessionRegistry::default();
             let mut next_manager_retry = Instant::now();
             let mut last_full_poll = Instant::now() - Duration::from_secs(60);
 
@@ -1104,6 +1499,7 @@ pub fn start_media_loop(app: tauri::AppHandle) {
             let mut last_playing = false;
             let mut last_cover = None;
             let mut last_payload = Value::Null;
+            let mut last_active_app_id: Option<String> = None;
             let mut cover_retry = cover_retry::CoverRetry::default();
 
             loop {
@@ -1132,6 +1528,25 @@ pub fn start_media_loop(app: tauri::AppHandle) {
                     }
                 };
 
+                // Handle interactive user control/seek commands immediately (0ms debounce)
+                let had_actions = drain_pending_actions(
+                    manager_binding.as_ref().map(|b| &b.mgr),
+                    &mut session_registry,
+                );
+
+                // Coalesce rapid YouTube/browser GSMTC event bursts (e.g. Media + Playback + Timeline
+                // arriving within a few milliseconds) into one clean poll.
+                if woken_by_event && !had_actions {
+                    std::thread::sleep(Duration::from_millis(50));
+                    if let Ok(mut dirty) = lock.lock() {
+                        *dirty = false;
+                    }
+                    let _ = drain_pending_actions(
+                        manager_binding.as_ref().map(|b| &b.mgr),
+                        &mut session_registry,
+                    );
+                }
+
                 let low_power = crate::is_low_power();
                 let safety_interval = if low_power {
                     Duration::from_secs(10)
@@ -1141,6 +1556,7 @@ pub fn start_media_loop(app: tauri::AppHandle) {
                     Duration::from_secs(6)
                 };
                 let need_full_poll = woken_by_event
+                    || had_actions
                     || cover_retry.take_due(Instant::now())
                     || last_full_poll.elapsed() >= safety_interval
                     || (manager_binding.is_none() && Instant::now() >= next_manager_retry);
@@ -1153,34 +1569,20 @@ pub fn start_media_loop(app: tauri::AppHandle) {
                         }
                     }
 
-                    let (polled, active_session, rpc_ok) = poll_current_media_with_manager(
+                    let (polled, app_id, rpc_ok) = poll_current_media_with_manager(
                         manager_binding.as_ref().map(|b| &b.mgr),
-                        woken_by_event,
+                        &mut session_registry,
+                        woken_by_event || had_actions,
                     );
                     last_full_poll = Instant::now();
 
                     if !rpc_ok && manager_binding.is_some() {
-                        session_binding = None;
+                        session_registry.clear();
                         manager_binding = None;
+                        last_active_app_id = None;
                         next_manager_retry = Instant::now() + Duration::from_secs(5);
                     } else {
-                        match active_session {
-                            Some(sess) => {
-                                let app_id = sess.SourceAppUserModelId().unwrap_or_default().to_string();
-                                let raw_ptr = sess.as_raw() as usize;
-                                // Browsers (especially Yandex Browser / Chromium) replace the GSMTC
-                                // COM session object under the same AUMID when switching tabs.
-                                let same = session_binding
-                                    .as_ref()
-                                    .is_some_and(|b| b.app_id == app_id && b.raw_ptr == raw_ptr);
-                                if !same {
-                                    session_binding = Some(SessionBinding::bind(sess, app_id));
-                                }
-                            }
-                            None => {
-                                session_binding = None;
-                            }
-                        }
+                        last_active_app_id = app_id;
                     }
 
                     if let Ok(mut guard) = CACHED_MEDIA.lock() {
@@ -1210,8 +1612,11 @@ pub fn start_media_loop(app: tauri::AppHandle) {
                 let key_changed = key != last_key;
                 let play_changed = is_playing != last_playing;
                 let missing_native_cover = current.as_ref().is_some_and(|media| {
-                    media["cover"].as_str().is_none() && (media["app"]==crate::music_bridge::APP_ID || session_binding.as_ref().is_some_and(|binding|
-                        media["app"].as_str() == Some(binding.app_id.as_str())))
+                    media["cover"].as_str().is_none()
+                        && (media["app"] == crate::music_bridge::APP_ID
+                            || last_active_app_id
+                                .as_deref()
+                                .is_some_and(|id| media["app"].as_str() == Some(id)))
                 });
                 cover_retry.observe(&key, missing_native_cover, Instant::now());
                 let cover = current
@@ -1325,5 +1730,37 @@ mod tests {
         let mut b=a.clone();b.as_mut().unwrap()["updatedAt"]=json!(2);assert_eq!(media_event_snapshot(&a),media_event_snapshot(&b));
         for (key,value) in [("positionMs",json!(0)),("title",json!("Corrected")),("playing",json!(true)),("cover",json!("new"))] {let mut changed=b.clone();changed.as_mut().unwrap()[key]=value;assert_ne!(media_event_snapshot(&a),media_event_snapshot(&changed));}
         assert_ne!(media_event_snapshot(&a),media_event_snapshot(&None));
+    }
+    #[test] fn session_snapshot_callback_overrides_seed_and_seed_never_clobbers_callback() {
+        let mut snap = SessionSnapshot::default();
+        // Callback arrives before initial seed finishes: seed must NOT overwrite it.
+        snap.apply_playback(true, true, true);
+        snap.apply_playback(false, false, false);
+        assert!(snap.playback_loaded);
+        assert!(snap.is_playing);
+        assert!(snap.can_seek);
+        // Subsequent callback updates normally.
+        snap.apply_playback(false, true, true);
+        assert!(!snap.is_playing);
+        assert!(snap.can_seek);
+
+        snap.apply_timeline(12_000, 180_000, 42, true);
+        snap.apply_timeline(0, 180_000, 1, false);
+        assert_eq!(snap.raw_pos_ms, 12_000);
+        assert_eq!(snap.timeline_at, 42);
+    }
+    #[test] fn pick_session_index_prefers_playing_titled_and_skips_hidden_or_ghost_sessions() {
+        let candidates = vec![
+            SessionCandidate { app_id: "chrome.exe".into(), raw_ptr: 1, visible: true, playing: true, has_title: false },
+            SessionCandidate { app_id: "chrome.exe".into(), raw_ptr: 2, visible: true, playing: false, has_title: true },
+            SessionCandidate { app_id: "spotify.exe".into(), raw_ptr: 3, visible: true, playing: true, has_title: true },
+            SessionCandidate { app_id: "hidden.exe".into(), raw_ptr: 4, visible: false, playing: true, has_title: true },
+        ];
+        // Ghost playing session (ptr 1) without title is skipped in favor of playing+titled Spotify (ptr 3).
+        assert_eq!(pick_session_index(&candidates, None, Some(1)), Some(2));
+        // Hidden app is never picked even when requested.
+        assert_eq!(pick_session_index(&candidates, Some("hidden.exe"), Some(4)), Some(2));
+        // Explicit pick of chrome chooses titled tab (ptr 2) over ghost tab (ptr 1).
+        assert_eq!(pick_session_index(&candidates, Some("chrome.exe"), Some(3)), Some(1));
     }
 }
