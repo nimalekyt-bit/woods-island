@@ -78,7 +78,10 @@ if(args[0]!=='--publish')process.exit(0);
 assert(process.env.GITHUB_ACTIONS==='true'&&process.env.RUNNER_ENVIRONMENT==='github-hosted'&&process.env.GITHUB_REPOSITORY===repository,'Publication runs only in the manually requested hosted workflow');
 if(!release){
   gh('release','create',tag,'--repo',repository,'--draft','--target',run.head_sha,'--title',`Woods Island ${version}`,'--notes-file',join(directory,'github-notes.md'));
-  release=await findRelease(tag);
+  for(let attempt=0;attempt<6&&!release;attempt++){
+    if(attempt>0)await new Promise(resolve=>setTimeout(resolve,1500));
+    release=await findRelease(tag);
+  }
   assert(release,'Draft release was not found after creation');
 }
 validateExisting(release);
