@@ -4317,7 +4317,7 @@ function Launcher() {
                             zIndex: 15,
                             width: 3,
                             borderRadius: 999,
-                            background: `var(--color-accent)`,
+                            background: `var(--color-ink)`,
                           },
                         }),
                       s?.over === `item:${e.item.id}:after` &&
@@ -4332,7 +4332,7 @@ function Launcher() {
                             zIndex: 15,
                             width: 3,
                             borderRadius: 999,
-                            background: `var(--color-accent)`,
+                            background: `var(--color-ink)`,
                           },
                         }),
                       (0, jsxRuntime.jsx)(`button`, {

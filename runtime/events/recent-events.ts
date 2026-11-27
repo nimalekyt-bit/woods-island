@@ -5,6 +5,7 @@ export interface RecentEventEntry {
   title: string;
   sub?: string;
   path?: string;
+  thumb?: string;
   copyText?: string;
   url?: string;
   tab?: string;
@@ -50,6 +51,7 @@ export function summarizePeekEvent(
         title: t("Скриншот сохранён", "Screenshot saved"),
         sub: peek.width && peek.height ? `${peek.width}×${peek.height}` : undefined,
         path: typeof peek.path === "string" ? peek.path : undefined,
+        thumb: typeof peek.thumb === "string" ? peek.thumb : undefined,
       };
     case "ocr":
       return {

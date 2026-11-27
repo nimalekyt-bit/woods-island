@@ -8,45 +8,16 @@ function formatAge(at: number, now: number): string {
   const sec = Math.max(0, Math.floor((now - at) / 1000));
   if (sec < 45) return t("только что", "just now");
   const min = Math.floor(sec / 60);
-  if (min < 60) return t(`${min} мин назад`, `${min}m ago`);
+  if (min < 60) return t(`${min} мин`, `${min}m`);
   const hr = Math.floor(min / 60);
-  return t(`${hr} ч назад`, `${hr}h ago`);
+  return t(`${hr} ч`, `${hr}h`);
 }
 
-function eventTone(kind: string): "ok" | "warn" | "danger" | "ai" | "info" {
+function eventTone(kind: string): "ok" | "warn" | "danger" | "neutral" {
   if (kind === "error") return "danger";
   if (kind === "timer" || kind === "reminder" || kind === "battery") return "warn";
-  if (kind === "chat" || kind === "agent" || kind === "agentAsk") return "ai";
-  if (kind === "done" || kind === "download" || kind === "screenshot" || kind === "phone" || kind === "shelf") return "ok";
-  return "info";
-}
-
-function eventCategory(kind: string): string {
-  switch (kind) {
-    case "download":
-    case "shelf":
-      return t("Файлы", "Files");
-    case "screenshot":
-    case "ocr":
-    case "qr":
-    case "color":
-      return t("Захват", "Capture");
-    case "phone":
-      return t("Телефон", "Phone");
-    case "timer":
-    case "reminder":
-      return t("Время", "Time");
-    case "chat":
-    case "agent":
-    case "agentAsk":
-      return t("ИИ", "AI");
-    case "vpn":
-      return "VPN";
-    case "error":
-      return t("Внимание", "Alert");
-    default:
-      return t("Система", "System");
-  }
+  if (kind === "done" || kind === "download" || kind === "screenshot" || kind === "phone" || kind === "shelf" || kind === "vpn") return "ok";
+  return "neutral";
 }
 
 function isFileKind(kind: string): boolean {
@@ -56,7 +27,7 @@ function isFileKind(kind: string): boolean {
 function EventGlyph({ kind }: { kind: string }) {
   if (kind === "timer" || kind === "reminder") {
     return (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <circle cx="12" cy="13" r="8" />
         <path d="M12 9v4l2.5 1.5" />
         <path d="M9 2h6" />
@@ -65,7 +36,7 @@ function EventGlyph({ kind }: { kind: string }) {
   }
   if (kind === "screenshot") {
     return (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z" />
         <circle cx="12" cy="13" r="3" />
       </svg>
@@ -73,7 +44,7 @@ function EventGlyph({ kind }: { kind: string }) {
   }
   if (kind === "phone") {
     return (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <rect x="6" y="2" width="12" height="20" rx="2" />
         <line x1="12" y1="18" x2="12.01" y2="18" />
       </svg>
@@ -81,7 +52,7 @@ function EventGlyph({ kind }: { kind: string }) {
   }
   if (kind === "download" || kind === "shelf") {
     return (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
         <polyline points="7 10 12 15 17 10" />
         <line x1="12" y1="15" x2="12" y2="3" />
@@ -90,14 +61,37 @@ function EventGlyph({ kind }: { kind: string }) {
   }
   if (kind === "chat" || kind === "agent" || kind === "agentAsk") {
     return (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z" />
+      </svg>
+    );
+  }
+  if (kind === "ocr") {
+    return (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M3 7V5a2 2 0 0 1 2-2h2" />
+        <path d="M17 3h2a2 2 0 0 1 2 2v2" />
+        <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+        <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+        <path d="M7 9h10" />
+        <path d="M7 13h10" />
+        <path d="M7 17h6" />
+      </svg>
+    );
+  }
+  if (kind === "qr") {
+    return (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <rect x="3" y="3" width="7" height="7" rx="1" />
+        <rect x="14" y="3" width="7" height="7" rx="1" />
+        <rect x="3" y="14" width="7" height="7" rx="1" />
+        <path d="M14 14h3v3h-3zM20 14v3h-3M14 20h6" />
       </svg>
     );
   }
   if (kind === "error") {
     return (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <circle cx="12" cy="12" r="9" />
         <line x1="12" y1="8" x2="12" y2="12" />
         <line x1="12" y1="16" x2="12.01" y2="16" />
@@ -105,7 +99,7 @@ function EventGlyph({ kind }: { kind: string }) {
     );
   }
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M20 6 9 17l-5-5" />
     </svg>
   );
@@ -122,18 +116,19 @@ export function RecentEventsButton() {
       type="button"
       data-recent-events-toggle
       data-open={open ? "true" : "false"}
+      data-has-count={count > 0 ? "true" : "false"}
       aria-expanded={open}
       title={t("Уведомления и события", "Notifications & events")}
       onClick={() => toggle?.("events")}
       className="press wi-events-btn"
     >
       <svg
-        width="15"
-        height="15"
+        width="14"
+        height="14"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
-        strokeWidth="1.9"
+        strokeWidth="1.95"
         strokeLinecap="round"
         strokeLinejoin="round"
         aria-hidden="true"
@@ -146,7 +141,7 @@ export function RecentEventsButton() {
   );
 }
 
-/** Full in-pill Notifications center rendered directly inside the expanded island body. */
+/** Full in-pill Notifications center styled identically to native Woods Island peek cards. */
 export function RecentEventsView() {
   const events: RecentEventEntry[] = useIslandStore((s: any) => s.recentEvents ?? []);
   const clear = useIslandStore((s: any) => s.clearRecentEvents);
@@ -175,6 +170,21 @@ export function RecentEventsView() {
       : filter === "files"
         ? events.filter((e) => isFileKind(e.kind))
         : events.filter((e) => !isFileKind(e.kind));
+
+  const openPrimary = (item: RecentEventEntry) => {
+    if (item.path) {
+      closeOverlay?.();
+      closeIsland?.();
+      void api.openPath(item.path);
+    } else if (item.url) {
+      closeOverlay?.();
+      closeIsland?.();
+      void api.openPath(item.url);
+    } else if (item.tab) {
+      closeOverlay?.();
+      setTab?.(item.tab);
+    }
+  };
 
   return (
     <div data-recent-events-panel className="wi-events-view">
@@ -220,7 +230,7 @@ export function RecentEventsView() {
               onClick={() => clear?.()}
               className="press wi-events-clear"
             >
-              {t("Очистить всё", "Clear all")}
+              {t("Очистить", "Clear")}
             </button>
           )}
         </div>
@@ -239,8 +249,8 @@ export function RecentEventsView() {
           </span>
           <span className="wi-events-empty-sub">
             {t(
-              "Здесь собираются последние скриншоты, загрузки, файлы с телефона, таймеры, ответы ИИ и уведомления.",
-              "Recent screenshots, downloads, phone transfers, timers, AI replies and alerts appear here.",
+              "Скриншоты, загрузки, файлы с телефона, таймеры и системные события появляются здесь.",
+              "Screenshots, downloads, phone transfers, timers and system notices appear here.",
             )}
           </span>
         </div>
@@ -250,100 +260,197 @@ export function RecentEventsView() {
           data-single={visible.length === 1 ? "true" : "false"}
         >
           {visible.map((item) => {
-            const hasActions = Boolean(item.path || item.url || item.copyText || item.tab);
             const tone = eventTone(item.kind);
+            const clickable = Boolean(item.path || item.url || item.tab);
+            const isShot = item.kind === "screenshot" && Boolean(item.path);
             return (
-              <div key={item.id} className="wi-events-item" data-tone={tone}>
-                <span className="wi-events-dot">
-                  <EventGlyph kind={item.kind} />
-                </span>
+              <div
+                key={item.id}
+                className={`wi-events-item${clickable ? " clickable" : ""}`}
+                data-tone={tone}
+                onClick={clickable ? () => openPrimary(item) : undefined}
+              >
+                {item.thumb ? (
+                  <img
+                    src={item.thumb}
+                    alt=""
+                    draggable={false}
+                    className="wi-events-thumb"
+                  />
+                ) : (
+                  <span className="wi-events-dot" aria-hidden="true">
+                    <EventGlyph kind={item.kind} />
+                  </span>
+                )}
+
                 <div className="wi-events-body">
-                  <div className="wi-events-meta">
-                    <span className="wi-events-cat">{eventCategory(item.kind)}</span>
-                    <span className="wi-events-age">· {formatAge(item.at, now)}</span>
-                    {remove && (
-                      <button
-                        type="button"
-                        onClick={() => remove(item.id)}
-                        title={t("Скрыть событие", "Dismiss")}
-                        aria-label={t("Скрыть событие", "Dismiss")}
-                        className="wi-events-dismiss"
-                      >
-                        ×
-                      </button>
-                    )}
+                  <div className="wi-events-item-title" title={item.title}>
+                    {item.title}
                   </div>
-                  <div className="wi-events-item-title">{item.title}</div>
-                  {item.sub && <div className="wi-events-sub">{item.sub}</div>}
-                  {hasActions && (
-                    <div className="wi-events-actions">
-                      {item.path && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              closeOverlay?.();
-                              closeIsland?.();
-                              void api.openPath(item.path!);
-                            }}
-                            className="press wi-events-act accent"
-                          >
-                            {t("Открыть", "Open")}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              closeOverlay?.();
-                              closeIsland?.();
-                              void api.openPath(item.path!, true);
-                            }}
-                            className="press wi-events-act"
-                          >
-                            {t("В папке", "Folder")}
-                          </button>
-                        </>
-                      )}
-                      {item.url && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            closeOverlay?.();
-                            closeIsland?.();
-                            void api.openPath(item.url!);
-                          }}
-                          className="press wi-events-act accent"
-                        >
-                          {t("Открыть ссылку", "Open link")}
-                        </button>
-                      )}
-                      {item.copyText && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            void navigator.clipboard?.writeText(item.copyText!).catch(() => {});
-                            setCopiedId(item.id);
-                            setTimeout(() => setCopiedId((cur) => (cur === item.id ? null : cur)), 1400);
-                          }}
-                          className="press wi-events-act"
-                        >
-                          {copiedId === item.id ? t("Скопировано ✓", "Copied ✓") : t("Копировать", "Copy")}
-                        </button>
-                      )}
-                      {item.tab && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            closeOverlay?.();
-                            setTab?.(item.tab);
-                          }}
-                          className="press wi-events-act accent"
-                        >
-                          {t("Перейти →", "Go →")}
-                        </button>
-                      )}
+                  {item.sub && (
+                    <div className="wi-events-sub" title={item.sub}>
+                      {item.sub}
                     </div>
                   )}
+                  <div className="wi-events-age">{formatAge(item.at, now)}</div>
                 </div>
+
+                <div
+                  className="wi-events-icon-actions"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {isShot && item.path && (
+                    <>
+                      <button
+                        type="button"
+                        title={t("Разметить: стрелки, текст", "Mark up: arrows, text")}
+                        aria-label={t("Разметить скриншот", "Mark up screenshot")}
+                        onClick={() => {
+                          closeOverlay?.();
+                          closeIsland?.();
+                          void api.editorOpen(item.path!);
+                        }}
+                        className="press wi-events-icon-btn primary"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        title={t("Показать в папке", "Show in folder")}
+                        aria-label={t("Показать в папке", "Show in folder")}
+                        onClick={() => {
+                          closeOverlay?.();
+                          closeIsland?.();
+                          void api.openPath(item.path!, true);
+                        }}
+                        className="press wi-events-icon-btn"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+                        </svg>
+                      </button>
+                    </>
+                  )}
+
+                  {!isShot && item.path && (
+                    <>
+                      <button
+                        type="button"
+                        title={t("Открыть файл", "Open file")}
+                        aria-label={t("Открыть файл", "Open file")}
+                        onClick={() => {
+                          closeOverlay?.();
+                          closeIsland?.();
+                          void api.openPath(item.path!);
+                        }}
+                        className="press wi-events-icon-btn primary"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M15 3h6v6" />
+                          <path d="M10 14 21 3" />
+                          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        title={t("Показать в папке", "Show in folder")}
+                        aria-label={t("Показать в папке", "Show in folder")}
+                        onClick={() => {
+                          closeOverlay?.();
+                          closeIsland?.();
+                          void api.openPath(item.path!, true);
+                        }}
+                        className="press wi-events-icon-btn"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+                        </svg>
+                      </button>
+                    </>
+                  )}
+
+                  {item.url && (
+                    <button
+                      type="button"
+                      title={t("Открыть ссылку", "Open link")}
+                      aria-label={t("Открыть ссылку", "Open link")}
+                      onClick={() => {
+                        closeOverlay?.();
+                        closeIsland?.();
+                        void api.openPath(item.url!);
+                      }}
+                      className="press wi-events-icon-btn primary"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M7 17 17 7" />
+                        <path d="M7 7h10v10" />
+                      </svg>
+                    </button>
+                  )}
+
+                  {item.copyText && (
+                    <button
+                      type="button"
+                      title={copiedId === item.id ? t("Скопировано", "Copied") : t("Скопировать", "Copy")}
+                      aria-label={t("Скопировать", "Copy")}
+                      onClick={() => {
+                        void navigator.clipboard?.writeText(item.copyText!).catch(() => {});
+                        setCopiedId(item.id);
+                        setTimeout(() => setCopiedId((cur) => (cur === item.id ? null : cur)), 1400);
+                      }}
+                      className={`press wi-events-icon-btn${copiedId === item.id ? " copied" : ""}`}
+                    >
+                      {copiedId === item.id ? (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      ) : (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                        </svg>
+                      )}
+                    </button>
+                  )}
+
+                  {!item.path && !item.url && item.tab && (
+                    <button
+                      type="button"
+                      title={t("Открыть раздел", "Open section")}
+                      aria-label={t("Открыть раздел", "Open section")}
+                      onClick={() => {
+                        closeOverlay?.();
+                        setTab?.(item.tab);
+                      }}
+                      className="press wi-events-icon-btn"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M5 12h14" />
+                        <path d="m12 5 7 7-7 7" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+
+                {remove && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      remove(item.id);
+                    }}
+                    title={t("Скрыть", "Dismiss")}
+                    aria-label={t("Скрыть", "Dismiss")}
+                    className="press wi-events-dismiss"
+                  >
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                )}
               </div>
             );
           })}

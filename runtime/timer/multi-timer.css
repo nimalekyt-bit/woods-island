@@ -38,6 +38,12 @@
   color: var(--color-ink);
 }
 
+.wi-mt-chip[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--color-ink) 16%, transparent);
+  color: var(--color-ink);
+  font-weight: 600;
+}
+
 .wi-mt-chip.focus {
   background: color-mix(in srgb, var(--color-timer) 15%, transparent);
   color: var(--color-timer);

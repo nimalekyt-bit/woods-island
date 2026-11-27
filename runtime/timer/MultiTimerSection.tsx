@@ -76,7 +76,16 @@ export function MultiTimerSection() {
             title={pomodoro.endsAt !== null ? t("Пауза", "Pause") : t("Продолжить", "Resume")}
             className="press wi-mt-mini-btn"
           >
-            {pomodoro.endsAt !== null ? "⏸" : "▶"}
+            {pomodoro.endsAt !== null ? (
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <rect x="6" y="4" width="4" height="16" rx="1" />
+                <rect x="14" y="4" width="4" height="16" rx="1" />
+              </svg>
+            ) : (
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <polygon points="6 4 20 12 6 20 6 4" />
+              </svg>
+            )}
           </button>
           <button
             type="button"
@@ -84,7 +93,10 @@ export function MultiTimerSection() {
             onClick={skipPomodoroPhase}
             className="press wi-mt-mini-btn"
           >
-            ⏭
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <polygon points="5 4 15 12 5 20 5 4" />
+              <rect x="17" y="5" width="2.5" height="14" rx="1" />
+            </svg>
           </button>
           <button
             type="button"
@@ -110,11 +122,12 @@ export function MultiTimerSection() {
             </svg>
             <span>{t("Фокус 25/5", "Focus 25/5")}</span>
           </button>
-          {extras.length < 4 && !adding && (
+          {extras.length < 4 && (
             <button
               type="button"
               data-add-extra-timer
-              onClick={() => setAdding(true)}
+              aria-pressed={adding}
+              onClick={() => setAdding((v) => !v)}
               title={t("Добавить параллельный таймер", "Add a parallel timer")}
               className="press wi-mt-chip"
             >
@@ -124,11 +137,12 @@ export function MultiTimerSection() {
         </div>
       )}
 
-      {pomodoro.active && extras.length < 4 && !adding && (
+      {pomodoro.active && extras.length < 4 && (
         <button
           type="button"
           data-add-extra-timer
-          onClick={() => setAdding(true)}
+          aria-pressed={adding}
+          onClick={() => setAdding((v) => !v)}
           className="press wi-mt-chip"
         >
           + {t("Ещё таймер", "Add timer")} ({extras.length + 1}/5)
@@ -193,7 +207,16 @@ export function MultiTimerSection() {
                       onClick={() => (running ? pauseExtra(item.id) : resumeExtra(item.id))}
                       className="press wi-mt-mini-btn"
                     >
-                      {running ? "⏸" : "▶"}
+                      {running ? (
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                          <rect x="6" y="4" width="4" height="16" rx="1" />
+                          <rect x="14" y="4" width="4" height="16" rx="1" />
+                        </svg>
+                      ) : (
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                          <polygon points="6 4 20 12 6 20 6 4" />
+                        </svg>
+                      )}
                     </button>
                     <button
                       type="button"

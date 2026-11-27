@@ -123,23 +123,25 @@ function MixerRow({ app, refresh }: { app: AudioApp; refresh: () => void }) {
     pct = Math.round(volume * 100),
     peakPct = Math.round(Math.min(volume, app.peak) * 100),
     displayName = formatAppName(app),
-    isSystem = app.id === "system" || app.name === "System Sounds" || app.name.startsWith("@%"),
-    isAudible = !mute && app.peak > 0.02;
+    isSystem = app.id === "system" || app.name === "System Sounds" || app.name.startsWith("@%");
 
   return (
     <div data-mixer-app={app.id} data-muted={mute ? "true" : "false"}>
-      <span className={`wi-mixer-icon-wrap${isSystem ? " system" : ""}`} aria-hidden="true">
+      <span
+        className={`wi-mixer-icon-wrap${app.icon ? " has-icon" : isSystem ? " system" : ""}`}
+        aria-hidden="true"
+      >
         {app.icon ? (
-          <img src={app.icon} alt="" />
+          <img src={app.icon} alt="" className="wi-mixer-app-logo" />
         ) : isSystem ? (
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
             <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
             <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
           </svg>
         ) : (
           displayName[0]
         )}
-        {isAudible && <span className="wi-mixer-live-dot" />}
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
@@ -282,6 +284,7 @@ export function AudioMixer() {
 /** Full in-pill Audio Mixer & Output/Mic Switcher rendered directly inside the expanded island. */
 export function AudioMixerView() {
   const closeOverlay = useIslandStore((s: any) => s.closeOverlayView);
+  const audio = useIslandStore((s: any) => s.audio);
   const active = useVisibleControls();
   const [mode, setMode] = React.useState<"apps" | "outputs" | "inputs">("apps");
   const [apps, setApps] = React.useState<AudioApp[] | null>(null);
@@ -477,36 +480,58 @@ export function AudioMixerView() {
             {t("Устройства не найдены.", "No devices found.")}
           </div>
         ) : (
-          activeList.map((dev) => (
-            <button
-              key={dev.id}
-              type="button"
-              data-audio-endpoint={dev.id}
-              aria-pressed={dev.default}
-              disabled={switchingId === dev.id}
-              onClick={() => void pickDevice(dev.id)}
-              className="press wi-mixer-endpoint"
-            >
-              <span className="wi-mixer-dev-ico">
-                <DeviceGlyph name={dev.name} input={mode === "inputs"} />
-              </span>
-              <span className="wi-mixer-dev-copy">
-                <span className="wi-mixer-dev-name">{dev.name}</span>
-                {dev.default && (
+          activeList.map((dev) => {
+            const isSwitching = switchingId === dev.id;
+            const activeSub =
+              mode === "outputs"
+                ? audio?.muted
+                  ? t("По умолчанию · Без звука", "Default · Muted")
+                  : typeof audio?.level === "number"
+                    ? t(
+                        `По умолчанию · ${Math.round(audio.level * 100)}%`,
+                        `Default · ${Math.round(audio.level * 100)}%`,
+                      )
+                    : t("Устройство по умолчанию", "Default device")
+                : audio?.micMuted
+                  ? t("По умолчанию · Выключен", "Default · Muted")
+                  : t("По умолчанию · Активен", "Default · Active");
+            return (
+              <button
+                key={dev.id}
+                type="button"
+                data-audio-endpoint={dev.id}
+                aria-pressed={dev.default}
+                disabled={isSwitching}
+                onClick={() => void pickDevice(dev.id)}
+                className="press wi-mixer-endpoint"
+              >
+                <span className="wi-mixer-dev-ico">
+                  <DeviceGlyph name={dev.name} input={mode === "inputs"} />
+                </span>
+                <span className="wi-mixer-dev-copy">
+                  <span className="wi-mixer-dev-name">{dev.name}</span>
                   <span className="wi-mixer-dev-sub">
-                    {t("Устройство по умолчанию", "Default device")}
+                    {dev.default
+                      ? activeSub
+                      : isSwitching
+                        ? t("Переключаю…", "Switching…")
+                        : t("Нажми, чтобы выбрать", "Click to switch")}
+                  </span>
+                </span>
+                {dev.default ? (
+                  <span className="wi-mixer-check" aria-hidden="true">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  </span>
+                ) : (
+                  <span className="wi-mixer-pick-hint" aria-hidden="true">
+                    {t("Выбрать", "Select")}
                   </span>
                 )}
-              </span>
-              {dev.default && (
-                <span className="wi-mixer-check" aria-hidden="true">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                </span>
-              )}
-            </button>
-          ))
+              </button>
+            );
+          })
         )}
       </div>
 
