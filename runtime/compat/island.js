@@ -4623,7 +4623,7 @@ function rk() {
     h = Mt(e, m),
     g = t === `idle` ? 1 : e.total > 0 ? Math.min(1, h / e.total) : 0,
     _ = Fn(t === `idle` ? e.base : bt(e, m)),
-    v = 2 * Math.PI * 37,
+    v = 2 * Math.PI * 33,
     y = e.endsAt === null ? null : new Date(e.endsAt),
     b = () => {
       let e = Ht(n ?? ``);
@@ -4666,16 +4666,17 @@ function rk() {
   return (0, jsxRuntime.jsxs)(`div`, {
     "data-timer": !0,
     "data-timer-phase": t,
-    className: `flex shrink-0 flex-col gap-2`,
+    className: `flex shrink-0 flex-col gap-1.5`,
     children: [
-      t === `idle` && n === null && (0,jsxRuntime.jsx)(`input`,{ "data-timer-label":true,value:e.label??"",maxLength:40,placeholder:o(`На что таймер?`,`What is the timer for?`),onChange:event=>wt.getState().setLabel(event.target.value),onMouseDown:()=>u.takeFocus(),className:`h-8 min-w-0 rounded-xl bg-tile px-3 text-[12px] text-ink outline-none placeholder:text-ink-3` }),
+      t === `idle` && n === null && (0,jsxRuntime.jsx)(`input`,{ "data-timer-label":true,value:e.label??"",maxLength:40,placeholder:o(`На что таймер?`,`What is the timer for?`),onChange:event=>wt.getState().setLabel(event.target.value),onMouseDown:()=>u.takeFocus(),className:`h-7 min-w-0 rounded-xl bg-tile px-3 text-[12px] text-ink outline-none placeholder:text-ink-3` }),
       e.label?.trim() && t !== `idle` && (0,jsxRuntime.jsx)(`div`,{"data-timer-note-label":true,className:`truncate text-[12px] font-medium text-ink-2`,children:e.label}),
       (0, jsxRuntime.jsxs)(`div`, {
-        className: `flex items-center gap-3`,
+        className: `flex items-center gap-2.5`,
         children: [
           (0, jsxRuntime.jsxs)(`div`, {
             "data-timer-ring": !0,
-            className: `relative size-[84px] shrink-0`,
+            className: `relative shrink-0`,
+            style: { width: 76, height: 76 },
             onWheel: (e) => {
               if (t !== `idle` || n !== null) return;
               w.current += e.deltaY;
@@ -4689,32 +4690,32 @@ function rk() {
             },
             children: [
               (0, jsxRuntime.jsxs)(`svg`, {
-                width: `84`,
-                height: `84`,
-                viewBox: `0 0 84 84`,
+                width: `76`,
+                height: `76`,
+                viewBox: `0 0 76 76`,
                 className: t === `done` ? `animate-pulse` : ``,
                 "aria-hidden": !0,
                 children: [
                   (0, jsxRuntime.jsx)(`circle`, {
-                    cx: `42`,
-                    cy: `42`,
-                    r: `37`,
+                    cx: `38`,
+                    cy: `38`,
+                    r: `33`,
                     fill: `none`,
                     stroke: `color-mix(in srgb, var(--color-ink) 10%, transparent)`,
-                    strokeWidth: `6`,
+                    strokeWidth: `5.5`,
                   }),
                   (0, jsxRuntime.jsx)(`circle`, {
-                    cx: `42`,
-                    cy: `42`,
-                    r: `37`,
+                    cx: `38`,
+                    cy: `38`,
+                    r: `33`,
                     fill: `none`,
                     stroke: `var(--color-timer)`,
                     strokeOpacity: t === `idle` ? 0.4 : t === `paused` ? 0.6 : 1,
-                    strokeWidth: `6`,
+                    strokeWidth: `5.5`,
                     strokeLinecap: `round`,
                     strokeDasharray: v,
                     strokeDashoffset: t === `done` ? 0 : v * (1 - g),
-                    transform: `rotate(-90 42 42)`,
+                    transform: `rotate(-90 38 38)`,
                     style: {
                       transition:
                         t === `running`
@@ -4748,7 +4749,7 @@ function rk() {
               (0, jsxRuntime.jsxs)(`button`, {
                 "data-timer-main": !0,
                 onClick: S.run,
-                className: `press flex h-9 items-center justify-center gap-1.5 rounded-full text-[12.5px] font-semibold ${S.tone}`,
+                className: `press flex h-8 items-center justify-center gap-1.5 rounded-full text-[12px] font-semibold ${S.tone}`,
                 children: [S.icon, S.label],
               }),
               (0, jsxRuntime.jsxs)(`div`, {
@@ -4950,7 +4951,8 @@ function ik({ seed: e }) {
       }),
       t.length > 0
         ? (0, jsxRuntime.jsx)(`div`, {
-            className: `scroll-thin flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto`,
+            className: `scroll-none flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto`,
+            style: f ? { maxHeight: 74 } : undefined,
             children: t.map((e) => {
               let t = e.at <= v;
               return (0, jsxRuntime.jsxs)(
@@ -5011,7 +5013,8 @@ function ik({ seed: e }) {
               );
             }),
           })
-        : (0, jsxRuntime.jsx)(`div`, {
+        : !n &&
+          (0, jsxRuntime.jsx)(`div`, {
             "data-reminders-empty": !0,
             className: `flex min-h-0 flex-1 items-center justify-center overflow-hidden px-1.5 py-0.5 text-center text-[10.5px] leading-snug text-ink-3`,
             children: (0, jsxRuntime.jsx)(`span`, {
@@ -5094,7 +5097,7 @@ function ak({ seed: e }) {
     (0, ReactRuntime.useEffect)(() => () => useIslandStore.setState({ holdOpen: !1 }), []),
     (0, jsxRuntime.jsxs)(`div`, {
       "data-time-side": !0,
-      className: `scroll-thin flex min-h-0 w-[232px] shrink-0 flex-col gap-2 overflow-y-auto rounded-2xl bg-tile p-2.5`,
+      className: `scroll-none flex min-h-0 w-[232px] shrink-0 flex-col gap-1.5 overflow-y-auto rounded-2xl bg-tile p-2`,
       children: [
         (0, jsxRuntime.jsx)(rk, {}),
         (0, jsxRuntime.jsx)(`div`, { className: `h-px shrink-0 bg-line` }),

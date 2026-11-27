@@ -80,7 +80,7 @@ fn ensure_aux_window(app: &AppHandle, label: &str) -> Result<tauri::WebviewWindo
     let config = app.config().app.windows.iter().find(|config| config.label == label).ok_or("Window configuration unavailable")?;
     let window = tauri::WebviewWindowBuilder::from_config(app, config).map_err(|e|e.to_string())?.build().map_err(|e|e.to_string())?;
     if win::WindowManager::passive_qa() { window.set_focusable(false).map_err(|e|e.to_string())?; }
-    watchdog::attach_process_failed(&window);
+    if let Some(webview) = app.get_webview(label) { watchdog::attach_process_failed(&webview); }
     if label == "settings" {
         // On high-DPI screens (e.g. 4K @ 250-300%), clamp settings window cleanly inside the monitor work area.
         if let Ok(Some(monitor)) = window.current_monitor().or_else(|_| app.primary_monitor()) {
@@ -1014,14 +1014,19 @@ async fn rates()->Result<Value,String>{weather::rates().await}
 
 fn focus_main_window_now(app: &AppHandle) {
     if win::WindowManager::passive_qa() { return; }
-    if let Some(window) = app.get_webview_window("main") {
+    // Use get_window + get_webview separately: Tauri's get_webview_window("main") returns
+    // None once an embedded Web AI child webview is attached to the main window.
+    if let Some(window) = app.get_window("main") {
         let _ = window.unminimize();
         let _ = window.show();
         if let Ok(hwnd) = window.hwnd() {
             win::WindowManager::keyboard_focus(HWND(hwnd.0 as _), true);
         }
         let _ = window.set_focus();
-        let _ = window.with_webview(|platform| unsafe {
+    }
+    if let Some(webview) = app.get_webview("main") {
+        let _ = webview.set_focus();
+        let _ = webview.with_webview(|platform| unsafe {
             let _ = platform.controller().MoveFocus(
                 webview2_com::Microsoft::Web::WebView2::Win32::COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC,
             );
@@ -1033,7 +1038,7 @@ fn focus_main_window_now(app: &AppHandle) {
 fn take_focus(app: AppHandle) {
     if win::WindowManager::passive_qa() { return; }
     let on_main_thread = app
-        .get_webview_window("main")
+        .get_window("main")
         .and_then(|w| w.hwnd().ok())
         .map(|hwnd| unsafe {
             let owner_tid = windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId(
@@ -1061,7 +1066,7 @@ fn take_focus(app: AppHandle) {
 fn release_focus(app: AppHandle) {
     let app_clone = app.clone();
     let _ = app.run_on_main_thread(move || {
-        if let Some(window) = app_clone.get_webview_window("main") {
+        if let Some(window) = app_clone.get_window("main") {
             if let Ok(hwnd) = window.hwnd() {
                 win::WindowManager::keyboard_focus(HWND(hwnd.0 as _), false);
             }
@@ -2106,7 +2111,7 @@ pub fn run() {
                     app_log("setup_island_window completed");
                     window.set_content_protected(!state_clone.settings.lock().unwrap()["captureVisible"].as_bool().unwrap_or(false))?;
                     apply_island_geometry(app.handle(), &state_clone).map_err(std::io::Error::other)?;
-                    if let Some(main_webview) = app.get_webview_window("main") {
+                    if let Some(main_webview) = app.get_webview("main") {
                         watchdog::attach_process_failed(&main_webview);
                     }
                     watchdog::start(app.handle().clone(), hwnd_val);

@@ -2392,6 +2392,12 @@ function gm({ count: e }) {
   );
 }
 var _m = 2;
+function isLauncherItemId(id) {
+  return Number.isInteger(id) || (typeof id === `string` && id.trim().length > 0);
+}
+function sameLauncherId(a, b) {
+  return String(a) === String(b);
+}
 function vm(e) {
   if (!e) return [];
   try {
@@ -2401,9 +2407,16 @@ function vm(e) {
       r = [];
     for (let e of t) {
       if (!e || typeof e.id != `string` || !Array.isArray(e.items)) continue;
-      let t = e.items.filter((e) => Number.isInteger(e) && !n.has(e));
-      (t.forEach((e) => n.add(e)),
-        t.length >= _m && r.push({ id: e.id, name: bm(typeof e.name == `string` ? e.name : ``), items: t }));
+      let items = [];
+      for (let rawId of e.items) {
+        if (!isLauncherItemId(rawId)) continue;
+        let key = String(rawId);
+        if (n.has(key)) continue;
+        n.add(key);
+        items.push(rawId);
+      }
+      items.length >= _m &&
+        r.push({ id: e.id, name: bm(typeof e.name == `string` ? e.name : ``), items });
     }
     return r;
   } catch {
@@ -2417,30 +2430,36 @@ function bm(e) {
   return e.replace(/\s+/g, ` `).trim().slice(0, 24);
 }
 function xm(e, t) {
-  let n = new Set(t.map((e) => e.id));
-  return e.map((e) => ({ ...e, items: e.items.filter((e) => n.has(e)) })).filter((e) => e.items.length >= _m);
+  let n = new Set(t.map((e) => String(e.id)));
+  return e
+    .map((e) => ({ ...e, items: e.items.filter((id) => n.has(String(id))) }))
+    .filter((e) => e.items.length >= _m);
 }
 function Sm(e, t) {
   let n = xm(t, e),
-    r = new Map(e.map((e) => [e.id, e])),
+    r = new Map(e.map((e) => [String(e.id), e])),
     i = new Map();
-  n.forEach((e) => e.items.forEach((t) => i.set(t, e)));
+  n.forEach((e) => e.items.forEach((t) => i.set(String(t), e)));
   let a = new Set(),
     o = [];
   for (let t of e) {
-    let e = i.get(t.id);
+    let e = i.get(String(t.id));
     e
-      ? a.has(e.id) || (a.add(e.id), o.push({ kind: `group`, group: e, items: e.items.map((e) => r.get(e)) }))
+      ? a.has(e.id) || (a.add(e.id), o.push({ kind: `group`, group: e, items: e.items.map((id) => r.get(String(id))).filter(Boolean) }))
       : o.push({ kind: `item`, item: t });
   }
   return o;
 }
 function Cm(e, t) {
-  return e.map((e) => (e.items.includes(t) ? { ...e, items: e.items.filter((e) => e !== t) } : e));
+  return e.map((e) =>
+    e.items.some((id) => sameLauncherId(id, t))
+      ? { ...e, items: e.items.filter((id) => !sameLauncherId(id, t)) }
+      : e,
+  );
 }
 function wm(e, t, n, r, i) {
-  if (t === n) return e;
-  let a = e.find((e) => e.items.includes(n));
+  if (sameLauncherId(t, n)) return e;
+  let a = e.find((e) => e.items.some((id) => sameLauncherId(id, n)));
   return a
     ? Tm(e, a.id, t)
     : [...Cm(e, t), { id: i, name: bm(r), items: [n, t] }].filter((e) => e.items.length >= _m);
@@ -3579,7 +3598,7 @@ function oh({
     style: l > 1 ? { gridColumn: `span ${l}` } : void 0,
     onClick: r,
     title: n ? `${t} · ${n}` : t,
-    className: `press group relative flex min-h-0 rounded-xl bg-tile hover:bg-tile-hover ${s ? `flex-col items-center justify-center gap-2 px-2 text-center` : `items-center gap-2 px-2.5 text-left`}`,
+    className: `press group relative flex min-h-0 rounded-xl bg-tile hover:bg-tile-hover ${s ? `flex-col items-center justify-center gap-2 px-2.5 py-2 text-center` : `items-center gap-2 px-3 py-1.5 text-left`}`,
     children: [
       o &&
         !u &&
@@ -3597,7 +3616,8 @@ function oh({
         children: e,
       }),
       (0, jsxRuntime.jsx)(`span`, {
-        className: `line-clamp-2 leading-tight font-medium text-ink ${s ? `text-[12.5px]` : `text-[11.5px]`}`,
+        "data-home-tile-label": !0,
+        className: `line-clamp-2 min-w-0 leading-tight font-medium text-ink ${s ? `text-[12.5px]` : `flex-1 text-[11.5px]`}`,
         children: t,
       }),
       u &&
@@ -3633,7 +3653,7 @@ function sh({ tall: e = !1, span: t = 1 }) {
     },
     title: n ? `${o} · ${n}` : o,
     style: t > 1 ? { gridColumn: `span ${t}` } : void 0,
-    className: `press relative flex min-h-0 items-center gap-2 rounded-xl bg-[#ff453a]/20 px-2.5 text-left hover:bg-[#ff453a]/30 ${e ? `justify-center` : ``}`,
+    className: `press relative flex min-h-0 items-center gap-2 rounded-xl bg-[#ff453a]/20 px-3 py-1.5 text-left hover:bg-[#ff453a]/30 ${e ? `justify-center` : ``}`,
     children: [
       (0, jsxRuntime.jsx)(`span`, {
         className: `shrink-0 text-[#ff453a]`,
@@ -3809,10 +3829,10 @@ function Launcher() {
               items.push({ slot, box });
             }
           }
-          // Check strict center drop onto another item first (creates a group)
+          // Check center drop onto another item first (creates a group)
           for (let it of items) {
             let ratio = it.box.width > 0 ? (clientX - it.box.left) / it.box.width : 0.5;
-            if (ratio >= 0.34 && ratio <= 0.66 && clientY >= it.box.top - 6 && clientY <= it.box.bottom + 6) {
+            if (ratio >= 0.24 && ratio <= 0.76 && clientY >= it.box.top - 12 && clientY <= it.box.bottom + 12) {
               return it.slot;
             }
           }
@@ -3897,7 +3917,11 @@ function Launcher() {
       a === `group`
         ? C(Tm(t, o, n.item.id))
         : a === `item`
-          ? C(wm(t, n.item.id, Number(o), r(`Группа`, `Group`), `g${Date.now().toString(36)}`))
+          ? (() => {
+              let targetItem = useIslandStore.getState().launcher.find((x) => sameLauncherId(x.id, o));
+              targetItem &&
+                C(wm(t, n.item.id, targetItem.id, r(`Группа`, `Group`), `g${Date.now().toString(36)}`));
+            })()
           : a === `row` && C(Em(t, n.item.id));
     },
     oe = () => {
@@ -4065,7 +4089,7 @@ function Launcher() {
                       l === e.id &&
                         (0, jsxRuntime.jsx)(`button`, {
                           title: r(`Вынуть из группы`, `Take out of the group`),
-                          className: `press absolute -top-1 -right-1 grid size-4 place-items-center rounded-full bg-neutral-700 text-[#fff] hover:bg-accent`,
+                          className: `press absolute -top-1 -right-1 grid size-4 place-items-center rounded-full bg-neutral-700 text-[#fff] hover:bg-danger`,
                           onClick: () => C(Em(t, e.id)),
                           children: (0, jsxRuntime.jsx)(Zf, { size: 9, strokeWidth: 3 }),
                         }),

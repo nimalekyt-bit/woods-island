@@ -114,7 +114,16 @@ static ATTACHMENT_INSETS: Mutex<(f64, f64)> = Mutex::new((0.0, 0.0));
 static CLICK_THROUGH: AtomicBool = AtomicBool::new(false);
 static HOVER_PASSTHROUGH: AtomicBool = AtomicBool::new(false);
 static APPLIED_TRANSPARENT: AtomicBool = AtomicBool::new(false);
+static KEYBOARD_FOCUS_GUARD_UNTIL_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 static ISLAND_HWND: Mutex<isize> = Mutex::new(0);
+
+fn now_epoch_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .min(u64::MAX as u128) as u64
+}
 static PREVIOUS_FOCUS: Mutex<isize> = Mutex::new(0);
 static ISLAND_ZOOM: Mutex<f64> = Mutex::new(1.0);
 static PAGE_FACTOR: Mutex<Option<f64>> = Mutex::new(None);
@@ -342,8 +351,9 @@ impl WindowManager {
                 );
             }
             if active {
-                // Temporarily lift hover passthrough so the window can receive focus immediately
-                // even when activated by keyboard shortcut (e.g. Alt+Space) while cursor is elsewhere.
+                // Temporarily lift hover passthrough and prevent the 25ms cursor loop from
+                // flipping WS_EX_TRANSPARENT / calling SWP_FRAMECHANGED during activation.
+                KEYBOARD_FOCUS_GUARD_UNTIL_MS.store(now_epoch_ms().saturating_add(400), Ordering::Relaxed);
                 HOVER_PASSTHROUGH.store(false, Ordering::Relaxed);
                 Self::apply_input_transparent();
                 let fg = GetForegroundWindow();
@@ -361,6 +371,7 @@ impl WindowManager {
                     let _ = AttachThreadInput(fg_tid, cur_tid, false);
                 }
             } else if !keep_activatable {
+                KEYBOARD_FOCUS_GUARD_UNTIL_MS.store(0, Ordering::Relaxed);
                 let previous=std::mem::take(&mut *PREVIOUS_FOCUS.lock().unwrap());
                 if previous!=0 && GetForegroundWindow()==hwnd { let _=windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow(HWND(previous as _)); }
             }
@@ -635,8 +646,11 @@ impl WindowManager {
     }
 
     fn apply_input_transparent() {
-        let effective = CLICK_THROUGH.load(Ordering::Relaxed)
-            || HOVER_PASSTHROUGH.load(Ordering::Relaxed)
+        let click_through = CLICK_THROUGH.load(Ordering::Relaxed);
+        let focus_guard_active = !click_through
+            && now_epoch_ms() < KEYBOARD_FOCUS_GUARD_UNTIL_MS.load(Ordering::Relaxed);
+        let effective = click_through
+            || (!focus_guard_active && HOVER_PASSTHROUGH.load(Ordering::Relaxed))
             || Self::qa_input_disabled();
         if APPLIED_TRANSPARENT.swap(effective, Ordering::Relaxed) == effective { return; }
         let value = *ISLAND_HWND.lock().unwrap();

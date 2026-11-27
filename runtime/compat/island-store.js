@@ -1265,7 +1265,7 @@ var Q = {
   card: 150,
   wide: 680,
   aside1: 112,
-  aside2: 226,
+  aside2: 244,
 };
 function Kn(e, t) {
   let n = Math.max(t.header, 0);

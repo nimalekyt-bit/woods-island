@@ -80,11 +80,11 @@ fn process_failed_kind_name(code: i32) -> &'static str {
 /// Attaches a native WebView2 `ProcessFailed` listener so renderer crashes (OOM /
 /// breakpoint / hang) log exact diagnostics and immediately trigger `Reload()` instead
 /// of silently stalling until the 90-second full process restart.
-pub fn attach_process_failed(window: &tauri::WebviewWindow) {
+pub fn attach_process_failed(webview: &tauri::Webview) {
     use webview2_com::ProcessFailedEventHandler;
-    let label = window.label().to_owned();
-    let app = window.app_handle().clone();
-    let _ = window.with_webview(move |platform| unsafe {
+    let label = webview.label().to_owned();
+    let app = webview.app_handle().clone();
+    let _ = webview.with_webview(move |platform| unsafe {
         let Ok(core) = platform.controller().CoreWebView2() else {
             return;
         };
@@ -371,40 +371,49 @@ fn limit(app: &AppHandle, service: &Service, reason: Reason, recovery: Recovery,
     *service.notice.lock().unwrap_or_else(|e| e.into_inner()) = Some(Notice::Limited);
     crate::storage::warn(notice_text(app, Notice::Limited));
 }
-fn main_url(app: &AppHandle, cache_bust: Option<u64>) -> Result<tauri::Url, String> {
-    let suffix = match cache_bust {
-        Some(ts) => format!("index.html?recover={ts}"),
-        None => "index.html".to_owned(),
-    };
+fn main_url(app: &AppHandle) -> Result<tauri::Url, String> {
     if tauri::is_dev() {
         if let Some(url) = &app.config().build.dev_url {
-            return url.join(&suffix).map_err(|e| e.to_string());
+            return url.join("index.html").map_err(|e| e.to_string());
         }
     }
     // The main window is always our local entry. The AI service lives in another
-    // webview. Cache-busting forces WebView2 to recreate a dead/stalled document.
-    tauri::Url::parse(&format!("http://tauri.localhost/{suffix}")).map_err(|e| e.to_string())
+    // webview. Navigating back repairs an initial or stray renderer stuck on about:blank.
+    tauri::Url::parse("http://tauri.localhost/index.html").map_err(|e| e.to_string())
 }
 
-fn recover_main_webview(app: &AppHandle, window: &tauri::WebviewWindow) -> Result<&'static str, String> {
-    let (tx, rx) = mpsc::channel::<bool>();
-    let dispatched = window
-        .with_webview(move |platform| unsafe {
-            let ok = platform
-                .controller()
-                .CoreWebView2()
-                .and_then(|core| core.Reload())
-                .is_ok();
-            let _ = tx.send(ok);
-        })
-        .is_ok();
-    if dispatched {
-        if let Ok(true) = rx.recv_timeout(Duration::from_secs(3)) {
-            return Ok("reload");
+fn should_reload_current_url(current: Option<&tauri::Url>, target: &tauri::Url) -> bool {
+    current.is_some_and(|url| {
+        url.scheme() == target.scheme()
+            && url.host_str() == target.host_str()
+            && url.port_or_known_default() == target.port_or_known_default()
+            && (url.path() == "/" || url.path() == target.path())
+            && url.query().is_none()
+    })
+}
+
+fn recover_main_webview(app: &AppHandle, webview: &tauri::Webview) -> Result<&'static str, String> {
+    let target = main_url(app)?;
+    let current = webview.url().ok();
+    if should_reload_current_url(current.as_ref(), &target) {
+        let (tx, rx) = mpsc::channel::<bool>();
+        let dispatched = webview
+            .with_webview(move |platform| unsafe {
+                let ok = platform
+                    .controller()
+                    .CoreWebView2()
+                    .and_then(|core| core.Reload())
+                    .is_ok();
+                let _ = tx.send(ok);
+            })
+            .is_ok();
+        if dispatched {
+            if let Ok(true) = rx.recv_timeout(Duration::from_secs(3)) {
+                return Ok("reload");
+            }
         }
     }
-    let url = main_url(app, Some(wall_ms()))?;
-    window.navigate(url).map_err(|e| e.to_string())?;
+    webview.navigate(target).map_err(|e| e.to_string())?;
     Ok("navigate")
 }
 
@@ -434,15 +443,34 @@ pub fn start(app: AppHandle, hwnd: isize) -> bool {
     let (sender, receiver) = mpsc::sync_channel::<Work>(1);
     let worker_app = app.clone();
     let worker_service = service.clone();
-    let worker=std::thread::Builder::new().name("woods-page-probe".into()).spawn(move||{
-        while let Ok(work)=receiver.recv(){
-            if worker_service.stopped.load(Ordering::SeqCst){break;}
-            worker_service.worker_busy.store(true,Ordering::SeqCst);
-            if let Some(window)=worker_app.get_webview_window("main"){
-                match work{
-                    Work::Probe(sequence)=>{let _=window.eval(format!("(()=>{{const api=window.__TAURI_INTERNALS__;if(api)void api.invoke('page_pong',{{sequence:{sequence},ready:!!document.querySelector('[data-island]')}}).catch(()=>{{}});}})()"));},
-                    Work::Navigate=>{
-                        let result = recover_main_webview(&worker_app, &window);
+    let worker = std::thread::Builder::new().name("woods-page-probe".into()).spawn(move || {
+        let mut logged_missing = false;
+        let mut logged_eval_err = false;
+        while let Ok(work) = receiver.recv() {
+            if worker_service.stopped.load(Ordering::SeqCst) {
+                break;
+            }
+            worker_service.worker_busy.store(true, Ordering::SeqCst);
+            // Always use get_webview("main"), NOT get_webview_window("main"), because
+            // get_webview_window returns None once Web AI adds child webviews to "main".
+            if let Some(webview) = worker_app.get_webview("main") {
+                logged_missing = false;
+                match work {
+                    Work::Probe(sequence) => {
+                        let script = format!(
+                            "(()=>{{const api=window.__TAURI_INTERNALS__;if(api)void api.invoke('page_pong',{{sequence:{sequence},ready:!!document.querySelector('[data-island]')}}).catch(()=>{{}});}})()"
+                        );
+                        match webview.eval(script) {
+                            Ok(()) => logged_eval_err = false,
+                            Err(err) if !logged_eval_err => {
+                                logged_eval_err = true;
+                                crate::app_log(&format!("Watchdog probe eval failed: {err}"));
+                            }
+                            Err(_) => {}
+                        }
+                    }
+                    Work::Navigate => {
+                        let result = recover_main_webview(&worker_app, &webview);
                         match &result {
                             Ok(method) => crate::app_log(&format!("Watchdog main recovery triggered via {method}")),
                             Err(err) => {
@@ -452,8 +480,16 @@ pub fn start(app: AppHandle, hwnd: isize) -> bool {
                         }
                     }
                 }
+            } else {
+                if matches!(work, Work::Navigate) {
+                    crate::app_log("Watchdog main recovery skipped: main webview handle unavailable");
+                    release_recovery();
+                } else if !logged_missing {
+                    logged_missing = true;
+                    crate::app_log("Watchdog probe paused: main webview handle unavailable");
+                }
             }
-            worker_service.worker_busy.store(false,Ordering::SeqCst);
+            worker_service.worker_busy.store(false, Ordering::SeqCst);
         }
     });
     if worker.is_err() {
@@ -946,5 +982,19 @@ mod tests {
         assert_eq!(fs::read(&path).unwrap(), b"invalid retained bytes");
         fs::remove_file(path).unwrap();
         fs::remove_dir(dir).unwrap();
+    }
+    #[test]
+    fn reload_is_only_used_when_already_on_canonical_main_entry() {
+        let target = tauri::Url::parse("http://tauri.localhost/index.html").unwrap();
+        let root = tauri::Url::parse("http://tauri.localhost/").unwrap();
+        let blank = tauri::Url::parse("about:blank").unwrap();
+        let chrome_err = tauri::Url::parse("chrome-error://chromewebdata/").unwrap();
+        let stale_query = tauri::Url::parse("http://tauri.localhost/index.html?recover=1").unwrap();
+        assert!(should_reload_current_url(Some(&target), &target));
+        assert!(should_reload_current_url(Some(&root), &target));
+        assert!(!should_reload_current_url(Some(&blank), &target));
+        assert!(!should_reload_current_url(Some(&chrome_err), &target));
+        assert!(!should_reload_current_url(Some(&stale_query), &target));
+        assert!(!should_reload_current_url(None, &target));
     }
 }

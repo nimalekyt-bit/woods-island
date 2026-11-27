@@ -14,3 +14,15 @@
 [data-home].home-scroll::-webkit-scrollbar-button {
   display: none;
 }
+
+[data-home-tile]:not(.flex-col),
+[data-record-stop]:not(.justify-center) {
+  padding: 6px 11px;
+  gap: 8px;
+}
+
+[data-home-tile]:not(.flex-col) [data-home-tile-label] {
+  min-width: 0;
+  flex: 1 1 0%;
+  line-height: 1.24;
+}
