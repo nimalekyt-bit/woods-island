@@ -6,8 +6,8 @@ import { AnimatedWeatherValue, useWeatherTween } from '../weather/AnimatedWeathe
 import { WEATHER_GAUGE_TWEEN } from '../weather/animation';
 import { webChatProviders } from '../web-ai/providers';
 import { freeLicense } from '../free';
-import { normalizeVoiceCommand, canRunVoiceResult } from '../keyboard/voice-command';
-import { qrCommand, brightnessCommand, keepPlayingMusic } from '../keyboard/quick-commands';
+import { normalizeVoiceCommand, canRunVoiceResult, scoreVoiceSearch, scoreActionKeywords, replaceSpokenNumbers } from '../keyboard/voice-command';
+import { qrCommand, brightnessCommand, volumeCommand, keepPlayingMusic } from '../keyboard/quick-commands';
 import { BrightnessControls } from '../controls/BrightnessControls';
 import { SystemLoadPanel } from '../controls/SystemLoad';
 import { compactIndicatorWidth } from '../controls/indicator-model';
@@ -1176,7 +1176,8 @@ function Ki(e, t = new Date()) {
   const calendar = calendarDate(n, t);
   if (calendar !== undefined) return calendar;
   let r = /^(через|in)\s+/.test(n);
-  if (((n = n.replace(/^(через|in)\s+/, ``)), /^(полчаса|half an hour)$/.test(n)))
+  if (((n = n.replace(/^(через|in)\s+/, ``)), r && typeof replaceSpokenNumbers === `function`)) n = replaceSpokenNumbers(n);
+  if (/^(полчаса|half an hour)$/.test(n))
     return new Date(t.getTime() + 30 * Ri);
   if (/^(час|an hour|hour)$/.test(n)) return new Date(t.getTime() + zi);
   if (/^(минуту|a minute)$/.test(n)) return new Date(t.getTime() + Ri);
@@ -1326,7 +1327,7 @@ function $i(e, t = new Date()) {
   return null;
 }
 function ea(e, t = new Date()) {
-  let n = /^(?:напомни(?:ть)?|remind)(?:\s+(?:мне|me))?\s+(?:(?:о том,? что|что|to|that)\s+)?(.+)$/i.exec(
+  let n = /^(?:напомни(?:ть)?|напоминани[ея]|remind(?:er)?)(?:\s+(?:мне|me))?\s+(?:(?:о том,? что|что|на|to|that)\s+)?(.+)$/i.exec(
     e.trim(),
   );
   return n ? $i(n[1], t) : null;
@@ -8657,7 +8658,7 @@ var ej = (e) => !e.startsWith(`shell:`),
   tj = new Map();
 
 function rj(e, t) {
-  return Math.max(qA(e, t), qA(e, Yk(t)) - 5);
+  return Math.max(qA(e, t), qA(e, Yk(t)) - 5, scoreVoiceSearch(e, t));
 }
 function ij({ onResize: e }) {
   let [n, r] = (0, ReactRuntime.useState)(``),
@@ -8671,6 +8672,7 @@ function ij({ onResize: e }) {
     b = (0, ReactRuntime.useRef)(null),
     x = (0, ReactRuntime.useRef)(null),
     woodsVoiceSeed = useIslandStore((state) => state.paletteSeed),
+    woodsLauncher = useIslandStore((state) => state.launcher),
     woodsVoicePending = (0, ReactRuntime.useRef)(null),
     [woodsAppsReady, setWoodsAppsReady] = (0, ReactRuntime.useState)(false),
     S = useIslandStore((e) => e.settings),
@@ -8852,7 +8854,7 @@ function ij({ onResize: e }) {
         },
         {
           t: o(`История буфера`, `Clipboard history`),
-          k: `буфер история clipboard history`,
+          k: `буфер обмена история clipboard history`,
           i: (0, jsxRuntime.jsx)(Kn, { size: 17 }),
           run: () => ne(`clipboard`),
         },
@@ -8944,8 +8946,40 @@ function ij({ onResize: e }) {
           },
         },
         {
+          t: o(`Звук: выключить или включить`, `Audio: mute or unmute`),
+          k: `звук без звука громкость мут mute unmute sound audio`,
+          i: (0, jsxRuntime.jsx)(cs, { size: 17 }),
+          run: () => {
+            (O(), u.volumeMuteToggle());
+          },
+        },
+        {
+          t: o(`Музыка: пауза или воспроизведение`, `Music: play or pause`),
+          k: `музыка пауза паузу плей воспроизведение продолжить играть play pause resume media`,
+          i: (0, jsxRuntime.jsx)(fr, { size: 17 }),
+          run: () => {
+            (O(), void u.mediaControl(`toggle`));
+          },
+        },
+        {
+          t: o(`Следующий трек`, `Next track`),
+          k: `следующий трек песня дальше скип пропустить next track song skip`,
+          i: (0, jsxRuntime.jsx)(fr, { size: 17 }),
+          run: () => {
+            (O(), void u.mediaControl(`next`));
+          },
+        },
+        {
+          t: o(`Предыдущий трек`, `Previous track`),
+          k: `предыдущий трек песня назад верни previous prev track song back`,
+          i: (0, jsxRuntime.jsx)(fr, { size: 17 }),
+          run: () => {
+            (O(), void u.mediaControl(`prev`));
+          },
+        },
+        {
           t: o(`Настройки Woods Island`, `Woods Island settings`),
-          k: `настройки settings preferences options`,
+          k: `настройки настройку параметры settings preferences options`,
           i: (0, jsxRuntime.jsx)(rs, { size: 17 }),
           run: () => {
             (O(), u.openSettings());
@@ -9000,6 +9034,7 @@ function ij({ onResize: e }) {
               {
                 t: o(`Заблокировать компьютер`, `Lock the computer`),
                 k: `блокировка заблокировать экран lock screen`,
+                unsafeVoice: !0,
                 i: (0, jsxRuntime.jsx)(No, { size: 17 }),
                 run: () => {
                   (O(), u.powerAction(`lock`));
@@ -9008,18 +9043,21 @@ function ij({ onResize: e }) {
               {
                 t: o(`Спящий режим…`, `Sleep…`),
                 k: `сон спящий режим усыпить sleep suspend`,
+                unsafeVoice: !0,
                 i: (0, jsxRuntime.jsx)(zo, { size: 17 }),
                 run: () => ne(`controls`),
               },
               {
                 t: o(`Перезагрузить компьютер…`, `Restart the computer…`),
                 k: `перезагрузка перезагрузить рестарт restart reboot`,
+                unsafeVoice: !0,
                 i: (0, jsxRuntime.jsx)(ts, { size: 17 }),
                 run: () => ne(`controls`),
               },
               {
                 t: o(`Выключить компьютер…`, `Shut down the computer…`),
                 k: `выключить выключение завершение работы shutdown shut down power off`,
+                unsafeVoice: !0,
                 i: (0, jsxRuntime.jsx)(yn, { size: 17 }),
                 run: () => ne(`controls`),
               },
@@ -9087,6 +9125,8 @@ function ij({ onResize: e }) {
       if (quickQr !== null) r.push({key:'qr-text',icon:(0,jsxRuntime.jsx)(En,{size:17}),title:o(`QR-код: «${quickQr.slice(0,60)}»`,`QR code: “${quickQr.slice(0,60)}”`),sub:o(`Enter — показать код`,`Enter to show the code`),score:995,run:()=>showQuickQr(quickQr)});
       const brightness = brightnessCommand(e);
       if(brightness!==null)r.push({key:'brightness',icon:(0,jsxRuntime.jsx)(`span`,{children:'☀'}),title:o(`Яркость мониторов: ${brightness}%`,`Monitor brightness: ${brightness}%`),sub:o(`Enter — применить`,`Enter to apply`),score:995,run:()=>{O();peripheralInvoke('brightness_set',{id:'all',level:brightness}).then(()=>useIslandStore.getState().pushPeek({kind:'done',label:o(`Яркость: ${brightness}%`,`Brightness: ${brightness}%`)})).catch(()=>useIslandStore.getState().pushPeek({kind:'error',message:o(`Не удалось изменить яркость. Проверь DDC/CI в меню монитора.`,`Could not change brightness. Check DDC/CI in the monitor menu.`)}));}});
+      const volume = volumeCommand(e);
+      if(volume!==null)r.push({key:'volume',icon:(0,jsxRuntime.jsx)(cs,{size:17}),title:o(`Громкость звука: ${volume}%`,`Sound volume: ${volume}%`),sub:o(`Enter — применить`,`Enter to apply`),score:995,run:()=>{O();u.volumeSet(volume/100).then(()=>useIslandStore.getState().pushPeek({kind:'done',label:o(`Громкость: ${volume}%`,`Volume: ${volume}%`)})).catch((err)=>useIslandStore.getState().pushPeek({kind:'error',message:String(err)}));}});
       let i = FA(e);
       if (i !== null) {
         let e = IA(i);
@@ -9214,10 +9254,12 @@ function ij({ onResize: e }) {
         });
       }
       for (let t of ae) {
-        let n = Math.max(rj(t.t, e), ...t.k.split(` `).map((t) => rj(t, e) - 2));
-        n > 0 && r.push({ key: `a` + t.t, icon: t.i, title: t.t, sub: `Woods Island`, score: n + 3, run: t.run });
+        let n = Math.max(rj(t.t, e), scoreActionKeywords(t.t, t.k, e), ...t.k.split(` `).map((t) => rj(t, e) - 2));
+        n > 0 && r.push({ key: `a` + t.t, icon: t.i, title: t.t, sub: `Woods Island`, score: n + 3, voiceKeywords: t.unsafeVoice ? void 0 : `${t.t} ${t.k}`, run: t.run });
       }
+      const seenAppPaths = new Set();
       for (let t of s) {
+        seenAppPaths.add(t.path.toLowerCase());
         let n = rj(t.name, e);
         n > 0 &&
           r.push({
@@ -9240,6 +9282,23 @@ function ij({ onResize: e }) {
                   (O(), u.openPath(t.path, !0));
                 }
               : void 0,
+          });
+      }
+      for (let t of woodsLauncher ?? []) {
+        if (!t?.name || !t?.path || seenAppPaths.has(t.path.toLowerCase())) continue;
+        seenAppPaths.add(t.path.toLowerCase());
+        let n = rj(t.name, e);
+        n > 0 &&
+          r.push({
+            key: `p` + t.path,
+            icon: (0, jsxRuntime.jsx)(ma, { size: 17 }),
+            iconPath: t.path,
+            title: t.name,
+            sub: o(`Ярлык лаунчера`, `Launcher shortcut`),
+            score: n + 2,
+            run: () => {
+              (O(), u.launcherLaunch(t.id));
+            },
           });
       }
       for (let t of l) {
@@ -9306,14 +9365,14 @@ function ij({ onResize: e }) {
         }),
         _.slice(0, 7)
       );
-    }, [n, s, l, m, f, g, ae, S?.aiModel, S?.searchEngine, S?.searchUrl]);
+    }, [n, s, l, m, f, g, ae, woodsLauncher, S?.aiModel, S?.searchEngine, S?.searchUrl]);
   return (
     (0, ReactRuntime.useEffect)(() => a(0), [n]),
     (0, ReactRuntime.useEffect)(() => {
       const seed = woodsVoicePending.current;
       if (!seed || !woodsAppsReady || n.trim() !== seed.text.trim()) return;
       const result = oe[0];
-      if (!seed.autoRun || !result || !canRunVoiceResult(result.key, result.title, n)) {
+      if (!seed.autoRun || !result || !canRunVoiceResult(result.key, result.title, n, result.voiceKeywords)) {
         woodsVoicePending.current = null;
         return;
       }

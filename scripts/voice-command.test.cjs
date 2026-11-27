@@ -1,19 +1,34 @@
 const {test}=require('node:test'),assert=require('node:assert/strict');
 const {loadTypeScript:load}=require('./load-runtime-typescript.cjs');
-const {normalizeVoiceCommand,canRunVoiceResult}=load('runtime/keyboard/voice-command.ts');
+const {normalizeVoiceCommand,canRunVoiceResult,replaceSpokenNumbers,scoreVoiceSearch,scoreActionKeywords}=load('runtime/keyboard/voice-command.ts');
+const {parseTimerCommand}=load('runtime/timer/model.ts');
 test('Spoken opening words and trailing punctuation preserve the intended command',()=>{
   assert.equal(normalizeVoiceCommand('Пожалуйста, открой Telegram!'),'Telegram');
   assert.equal(normalizeVoiceCommand('Open, please, Visual Studio Code, please.'),'Visual Studio Code');
   assert.equal(normalizeVoiceCommand('таймер 10 минут.'),'таймер 10 минут');
+  assert.equal(normalizeVoiceCommand('Поставь таймер на 5 минут.'),'таймер на 5 минут');
+  assert.equal(normalizeVoiceCommand('Сделай скриншот области.'),'скриншот области');
+  assert.equal(normalizeVoiceCommand('Выключи микрофон.'),'микрофон');
+  assert.equal(normalizeVoiceCommand('Отключи ВПН!'),'ВПН');
+  assert.equal(normalizeVoiceCommand('Выключи компьютер через 10 минут.'),'Выключи компьютер через 10 минут');
   assert.equal(normalizeVoiceCommand('please'),'please');
 });
 test('Voice runs recognized tools and matching app/actions, while ambiguous results remain reviewable',()=>{
   assert(canRunVoiceResult('timer','Timer: 10 min','таймер 10 минут'));
+  assert(canRunVoiceResult('brightness','Яркость мониторов: 50%','яркость 50'));
+  assert(canRunVoiceResult('volume','Громкость звука: 50%','громкость 50'));
   assert(canRunVoiceResult('p:telegram','Telegram Desktop','Telegram'));
+  assert(canRunVoiceResult('p:telegram','Telegram Desktop','Телеграм'));
+  assert(canRunVoiceResult('p:discord','Discord','Дискорд'));
+  assert(canRunVoiceResult('p:steam','Steam','Стим'));
   assert(canRunVoiceResult('aSettings','Настройки Woods Island','Настройки'));
+  assert(canRunVoiceResult('aMic','Микрофон: выключить или включить','микрофон'));
+  assert(canRunVoiceResult('aVPN','VPN: включить или выключить','ВПН','vpn впн туннель прокси'));
+  assert(canRunVoiceResult('aClip','История буфера','буфер обмена','буфер обмена история clipboard history'));
   assert(!canRunVoiceResult('p:telegram','Telegram','Tele'));
   assert(!canRunVoiceResult('aSettings','Настройки Woods Island','погода'));
-  for(const key of ['web','ai','f:report','shell','shutdown'])assert(!canRunVoiceResult(key,'Open command','Open command'));
+  assert(!canRunVoiceResult('aLock','Заблокировать компьютер','заблокировать компьютер','блокировка заблокировать'));
+  for(const key of ['web','ai','f:report','shell','sh-cmd','sh-ps','shutdown'])assert(!canRunVoiceResult(key,'Open command','Open command'));
   assert(!canRunVoiceResult('p:app','A','A'));
 });
 test('Application filler is removed around spoken app names without changing ordinary queries',()=>{
@@ -23,4 +38,15 @@ test('Application filler is removed around spoken app names without changing ord
   assert.equal(normalizeVoiceCommand('Open Game Bar'),'Game Bar');
   assert.equal(normalizeVoiceCommand('Game Bar'),'Game Bar');
   assert.equal(normalizeVoiceCommand('таймер 30 мин игра'),'таймер 30 мин игра');
+});
+test('Spoken number words and phonetic Cyrillic app search match real voice commands',()=>{
+  assert.equal(replaceSpokenNumbers('пять минут'),'5 минут');
+  assert.equal(replaceSpokenNumbers('двадцать пять минут'),'25 минут');
+  assert.equal(replaceSpokenNumbers('полминуты'),'30 секунд');
+  assert.equal(replaceSpokenNumbers('полтора часа'),'90 минут');
+  const parseDuration=(input)=>{const s=replaceSpokenNumbers(input).trim();const m=/^(\d+)\s*(?:мин|min)/iu.exec(s);return m?Number(m[1])*60000:null;};
+  assert.deepEqual(parseTimerCommand(normalizeVoiceCommand('Поставь таймер на пять минут.'),60000,parseDuration),{length:300000,label:''});
+  assert(scoreVoiceSearch('Discord','Дискорд')>=80);
+  assert(scoreVoiceSearch('Telegram Desktop','Телеграм')>=80);
+  assert(scoreActionKeywords('История буфера','буфер обмена история clipboard history','буфер обмена')>=80);
 });

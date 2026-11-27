@@ -14,6 +14,7 @@ import { weatherDate } from '../weather/date';
 import { placePatch } from '../weather/places';
 import { NormalMediaPill } from '../components/NormalMediaPill';
 import { LyricsMediaPill } from '../components/LyricsMediaPill';
+import { replaceSpokenNumbers } from '../keyboard/voice-command';
 // Compatibility application source; migrate components incrementally.
 import {
   O as ReactRuntime,
@@ -192,12 +193,13 @@ var Ad = [
   [/^(ч|час|часа|часов|h|hr|hrs|hours?)$/, hd],
 ];
 function jd(e) {
-  let t = e.toLowerCase().replace(/ё/g, `е`).replace(/\s+/g, ` `).trim();
+  let t = replaceSpokenNumbers(e.toLowerCase().replace(/ё/g, `е`).replace(/\s+/g, ` `).trim());
   if (!t) return null;
   let n = (e) => (e >= Z && e <= 864e5 ? Math.round(e) : null);
   if (/^(полчаса|half an hour)$/.test(t)) return 30 * md;
   if (/^(час|an hour|hour)$/.test(t)) return hd;
   if (/^(минута|минуту|a minute|minute)$/.test(t)) return md;
+  if (/^(секунда|секунду|a second|second)$/.test(t)) return Z;
   let r = /^(\d{1,3}):(\d{2})(?::(\d{2}))?$/.exec(t);
   if (r) {
     let [e, t, i] = [Number(r[1]), Number(r[2]), r[3] === void 0 ? null : Number(r[3])];

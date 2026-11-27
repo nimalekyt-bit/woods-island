@@ -3594,12 +3594,33 @@ function zt() {
                         id: `voice-service`,
                         title: n(`Сервис распознавания и ключ`, `Recognition service & key`),
                         children: [
-                      (0, U.jsx)(`div`, {
-                        className: `px-4 py-3 text-[12px] leading-snug text-white/45`,
-                        children: n(
-                          `Нажми ${e.hotkeyDictate || `сочетание клавиш`}, скажи и нажми ещё раз: текст окажется в буфере. В чате для этого есть кнопка с микрофоном. Запись отправляется в выбранный сервис распознавания.`,
-                          `Press ${e.hotkeyDictate || `the hotkey`}, speak and press again: the text lands on the clipboard. The chat has a microphone button for the same. The recording is sent to the recognition service you choose.`,
-                        ),
+                      (0, U.jsxs)(`div`, {
+                        className: `flex flex-col gap-1.5 px-4 py-3 text-[12px] leading-snug text-white/45`,
+                        children: [
+                          (0, U.jsx)(`div`, {
+                            children: n(
+                              `Голос в текст (${e.hotkeyDictate || `без клавиши`}): скажи фразу и нажми снова — текст попадёт в буфер обмена. В чате есть кнопка с микрофоном.`,
+                              `Voice to text (${e.hotkeyDictate || `no shortcut`}): speak and press again — the text lands on the clipboard. The chat also has a mic button.`,
+                            ),
+                          }),
+                          (0, U.jsxs)(`div`, {
+                            className: `flex flex-wrap items-center gap-x-2 gap-y-1`,
+                            children: [
+                              (0, U.jsx)(`span`, {
+                                children: n(
+                                  `Голосовая команда (${e.hotkeyVoiceCommand || `не назначено`}): выполнить команду — открыть программу, поставить таймер, переключить микрофон/VPN или настроить звук.`,
+                                  `Voice command (${e.hotkeyVoiceCommand || `not set`}): run actions by voice — launch an app, set a timer, toggle mic/VPN or change volume.`,
+                                ),
+                              }),
+                              (0, U.jsx)(`button`, {
+                                type: `button`,
+                                onClick: () => b(`hotkeys`),
+                                className: `text-[#a9b8ff] underline-offset-2 hover:underline`,
+                                children: n(`Назначить клавиши →`, `Configure hotkeys →`),
+                              }),
+                            ],
+                          }),
+                        ],
                       }),
                       (0, U.jsx)(Mt, {
                         list: Je,
