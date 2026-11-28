@@ -334,14 +334,12 @@ pnpm build
 cargo +1.98.1 build --release --locked --manifest-path src-tauri/Cargo.toml --bin woods-island
 ```
 
-## Проект и сайт
+## Лицензия / License
 
-Автор: Никита Кузнецов / Woods.
-Лицензия и компоненты: [LICENSE](LICENSE) · [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-Официальный сайт: [island.woodslab.top](https://island.woodslab.top/).
+Исходный код Woods Island распространяется на условиях [LICENSE](LICENSE). Сторонние компоненты и источники данных перечислены в [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 <div align="center">
 <br>
 <b>Woods Personal Corp</b><br>
-Никита Кузнецов · <a href="https://t.me/woodskilla">@woodskilla</a> · <a href="https://github.com/nimalekyt-bit">GitHub</a>
+<a href="https://island.woodslab.top/">island.woodslab.top</a> · <a href="https://t.me/woodskilla">Telegram</a> · <a href="https://github.com/nimalekyt-bit">GitHub</a>
 </div>

@@ -153,8 +153,8 @@ export const ExpandedPanel: React.FC<ExpandedPanelProps> = ({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="truncate font-semibold text-white">Woods Corp Anthem</h3>
-                      <p className="truncate text-xs text-white/60">Nikita Kuznetsov • Hi-Fi Audio</p>
+                      <h3 className="truncate font-semibold text-white">Woods Island Demo</h3>
+                      <p className="truncate text-xs text-white/60">Woods • Hi-Fi Audio</p>
                     </div>
                     <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400 border border-emerald-500/20">
                       Яндекс Музыка
@@ -214,7 +214,7 @@ export const ExpandedPanel: React.FC<ExpandedPanelProps> = ({
                 <div className="grid grid-cols-4 gap-2.5">
                   {[
                     { name: 'OBS Studio', desc: 'Стрим & Запись', color: 'from-blue-600 to-indigo-800' },
-                    { name: 'Obsidian', desc: 'База знаний HQ', color: 'from-purple-600 to-indigo-900' },
+                    { name: 'Obsidian', desc: 'Заметки Markdown', color: 'from-purple-600 to-indigo-900' },
                     { name: 'VS Code', desc: 'Разработка', color: 'from-sky-500 to-blue-700' },
                     { name: 'Terminal', desc: 'PowerShell 7', color: 'from-zinc-700 to-zinc-900' }
                   ].map((app, i) => (
@@ -422,7 +422,7 @@ export const ExpandedPanel: React.FC<ExpandedPanelProps> = ({
             >
               <Sparkles className="mb-2 h-8 w-8 text-white/20" />
               <p className="text-sm font-medium">Модуль готов к работе</p>
-              <p className="text-xs text-white/30">Подключен к локальному ядру Woods OS</p>
+              <p className="text-xs text-white/30">Подключен к локальному ядру Woods Island</p>
             </motion.div>
           )}
         </AnimatePresence>

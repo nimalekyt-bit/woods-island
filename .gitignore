@@ -2,8 +2,6 @@ node_modules/
 /.qa-temp/
 /docs/*
 !/docs/peripheral-support.md
-!/docs/peripheral-release-checklist.md
-!/docs/feature-progress.md
 dist/
 dist-prototype/
 dist-portable/
